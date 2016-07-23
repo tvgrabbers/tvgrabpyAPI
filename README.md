@@ -1,5 +1,7 @@
 # tvgrabpyAPI
 
+[Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
+
 ###Summary
 
 tv_grab_py_API is an API for creating xmltv compatible tv grabbers. It is the succesor of [tv_grab_nl_py version 2.2](https://github.com/tvgrabbers/tvgrabnlpy) making all of its functionallity available to the rest of the world.
