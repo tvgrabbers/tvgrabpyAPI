@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+Usage:
+1. Set USERNAME to the user who is running this script
+2. Set /PATH/TO/update_eyetv_guide.sh to the location of update_eyetv_guide.sh
+3. Set HOUR to 4 or 5 (to run this script somewhere beteen 4:00 and 5:59)
+3. Set MINUTE to a random integer between 0 and 59
+4. Copy this file to ~/Library/LaunchAgents/com.google.code.tvgrabnlpy.update_eyetv_guide.plist
+5. Run launchctl load ~/Library/LaunchAgents/com.google.code.tvgrabnlpy.update_eyetv_guide.plist
+6. Run launchctl start com.google.code.tvgrabnlpy.update_eyetv_guide
+It will automatically get loaded after a reboot.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.google.code.tvgrabnlpy.update_eyetv_guide</string>
+  <key>UserName</key>
+  <string>USERNAME</string>
+  <key>Program</key>
+  <string>/PATH/TO/update_eyetv_guide.sh</string>
+  <key>StartCalendarInterval</key>
+  <!-- to run multiple times per day, use an array of dict -->
+  <dict>
+    <key>Hour</key>
+    <integer>HOUR</integer>
+    <key>Minute</key>
+    <integer>MINUTE</integer>
+  </dict>
+</dict>
+</plist>
