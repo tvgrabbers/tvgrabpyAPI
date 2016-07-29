@@ -12,9 +12,9 @@ import pickle, io, os, sys
 #       - if there is an EOL '\n' at the end, leave it also in place, but also do not add your own
 #       - however in some situations you can spread the text over multiple lines
 #       - keep any indentations at the start
-# - run this new created script to create the langage file for your own use
+# - run this new created script to create the language file for your own use
 # - send us this new created script and we probably include it with the language file in the package.
-# - check regularily if you need to update the script, update the version and send us the updated version.
+# - check regularly if you need to update the script, update the version and send us the updated version.
 
 # There are a few special categories:
 # -  In texts[u'config][u'help'] you should check that the output on the --help option does not excede a width of 80

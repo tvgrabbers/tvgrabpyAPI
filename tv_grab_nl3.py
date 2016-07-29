@@ -145,7 +145,7 @@ class Configure(tvgrabpyAPI.Configure):
         self.opt_dict['output_tz'] = 'Europe/Amsterdam'
         # Where to get the json datafile and updates (if different from the API location)
         self.source_url = 'https://raw.githubusercontent.com/tvgrabbers/sourcematching/master'
-        self.update_url = 'https://github.com/tvgrabbers/tvgrabnlpy/releases/latest'
+        self.update_url = 'https://github.com/tvgrabbers/tvgrabpyAPI/releases/latest'
         self.compat_text = '.tvgids.nl'
 
 # end Configure()

@@ -515,9 +515,10 @@ class Configure:
                 disable_source(sid)
                 return
 
+            #~ dversion = v['version'] if ('version' in v and isinstance(v["version"], int)) else 0
+            #~ jurl = v["json_url"] if ("json_url" in v and isinstance(v["json_url"], (str, unicode))) else self.source_url
             dversion = data_value('version', v, int, 0)
-            dversion = v['version'] if ('version' in v and isinstance(v["version"], int)) else 0
-            jurl = v["json_url"] if ("json_url" in v and isinstance(v["json_url"], (str, unicode))) else self.source_url
+            jurl = data_value("json_url", v, str, self.source_url)
             sdata = self.fetch_func.get_json_data(v['json file'], dversion, sid, jurl, self.opt_dict['sources'])
             if sdata == None:
                 disable_source(sid)
@@ -532,7 +533,8 @@ class Configure:
                     fle.write(raw_json)
                     fle.close()
 
-            ctype = v["cattrans type"] if ("cattrans type" in v and isinstance(v["cattrans type"], int)) else None
+            #~ ctype = v["cattrans type"] if ("cattrans type" in v and isinstance(v["cattrans type"], int)) else None
+            ctype = data_value('cattrans type', v, int, None)
             self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, sdata, ctype)
             if ctype == None:
                 return self.channelsource[sid]
@@ -540,7 +542,8 @@ class Configure:
             if not ctype in self.cattranstype.keys():
                 self.cattranstype[ctype] = {}
 
-            if "cattransid" in v and isinstance(v["cattransid"], int):
+            #~ if "cattransid" in v and isinstance(v["cattransid"], int):
+            if is_data_value("cattransid", v, int):
                 self.__DEFAULT_SECTIONS__[10 + v["cattransid"]] = u'%s genres' % (self.channelsource[sid].source)
                 self.cattranstype[ctype][10 + v["cattransid"]] = sid
                 if ctype == 1:
@@ -2112,7 +2115,7 @@ class Configure:
             if newch == "--description--":
                 continue
 
-            newpresent = bool(newch in self.channels)
+            newpresent = bool(newch in self.channels.keys())
             newactive = newpresent and self.channels[newch].active
             oldpresent = bool(oldch['chanid'] in self.channels)
             oldactive = oldpresent and self.channels[oldch['chanid']].active
@@ -2179,9 +2182,15 @@ class Configure:
 
         self.unknown_program_title = gitdata_value("unknown_program_title", str)
         self.groupslot_names.append(re.sub('[-,. ]', '', self.fetch_func.remove_accents(self.unknown_program_title).lower().strip()))
-        self.compat_text = gitdata_value("compat_text", str)
+        self.compat_text = gitdata_value("compat_text", str, self.compat_text)
         self.channelprogram_rename = gitdata_dict("channelprogram_rename")
         self.language_texts = gitdata_dict("language_texts")
+        if not 'and' in self.language_texts.keys():
+            self.language_texts['and'] = 'and'
+
+        if not 'and others' in self.language_texts.keys():
+            self.language_texts['and others'] = 'and others'
+
         self.language_texts['and'] = ' %s ' % (self.language_texts['and'].strip().lower())
         roletrans = gitdata_dict("roletrans")
         self.roletrans = {}
@@ -2190,6 +2199,14 @@ class Configure:
             for item in v:
                 self.roletrans[item] = k
                 self.credit_keys.append(item)
+
+        for item in self.key_values["credits"]:
+            if not item in self.roletrans.keys():
+                self.roletrans[item] = item
+
+            if not item in self.credit_keys:
+                self.credit_keys.append(item)
+
         self.rating = gitdata_dict("rating")
         self.titlerename = gitdata_dict("titlerename")
         self.groupnameremove = gitdata_value("groupnameremove", list)

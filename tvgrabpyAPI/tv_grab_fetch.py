@@ -659,7 +659,7 @@ class DataTree(DataTreeShell):
                 return [data[0][:data[1]], data[0][data[1]:]]
 
             # Return unlisted values to infofiles in a fid 11 dict
-            if fid == 107:
+            if fid in (107, 201):
                 if len(data) < 2 or not isinstance(data[0], (list, tuple)):
                     return default
 
@@ -681,7 +681,7 @@ class DataTree(DataTreeShell):
                             self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' % (self.source.source, k, v))
 
             # Return unlisted values to infofiles in a fid 10 list set
-            if fid == 108:
+            if fid in (108, 202):
                 if not self.config.write_info_files:
                     return
 
@@ -1300,10 +1300,11 @@ class FetchData(Thread):
             self.source_data = source_data
             self.source = self.data_value('name', str)
             self.name = self.source
+            self.language = self.data_value('language', str, 'en')
             self.is_virtual = self.data_value('is_virtual', bool, default = False)
             self.config.sourceid_by_name[self.source] = self.proc_id
             self.detail_processor = self.data_value('detail_processor', bool, default = False)
-            self.detail_check = self.data_value('detail_check', str)
+            #~ self.detail_check = self.data_value('detail_check', str)
             self.without_full_timings = self.data_value('without-full-timings', bool, default = False)
             self.no_genric_matching = self.data_value('no_genric_matching', list)
             self.empty_channels = self.data_value('empty_channels', list)
@@ -1499,7 +1500,7 @@ class FetchData(Thread):
                         continue
 
                     # Success
-                    detailed_program[self.config.channelsource[self.proc_id].detail_check] = True
+                    #~ detailed_program[self.config.channelsource[self.proc_id].detail_check] = True
                     self.config.log(self.config.text('fetch', 32, (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
                     detailed_program['sourceid'] = self.proc_id
                     detailed_program['channelid'] = detail_ids[self.proc_id]['channelid']
