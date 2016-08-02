@@ -1092,7 +1092,8 @@ class ProgramCache(Thread):
         pcursor.execute("PRAGMA main.index_list(%s)" % (table,))
         ilist = {}
         for r in pcursor.fetchall():
-            if r[3].lower() == 'pk':
+            if (len(r) > 3 and r[3].lower() == 'pk') \
+              or r[1][:17] == 'sqlite_autoindex_':
                 ilist['%s_primary' % table.lower()] = r
 
             else:
@@ -2355,10 +2356,10 @@ class InfoFiles():
             self.config.opt_dict['mail_info_address'] = self.config.opt_dict['mail_log_address']
 
         if self.config.opt_dict['mail_log'] and len(self.lineup_changes) > 0:
-            self.config.logging.send_mail(self.lineup_changes, self.config.opt_dict['mail_info_address'], 'Tv_grab_nl_py lineup changes')
+            self.config.logging.send_mail(self.lineup_changes, self.config.opt_dict['mail_info_address'], '%s lineup changes' % self.config.name)
 
         if self.config.opt_dict['mail_log'] and len(self.url_failure) > 0:
-            self.config.logging.send_mail(self.url_failure, self.config.opt_dict['mail_info_address'], 'Tv_grab_nl_py url failures')
+            self.config.logging.send_mail(self.url_failure, self.config.opt_dict['mail_info_address'], '%s url failures' % self.config.name)
 
         if self.fetch_list != None:
             chan_list = []

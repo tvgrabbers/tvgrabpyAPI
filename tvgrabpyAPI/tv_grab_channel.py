@@ -257,7 +257,11 @@ class Channel_Config(Thread):
                             return
 
                         if data_value(['last_one'], fetched_detail, bool, False):
-                            self.config.ttvdb.detail_request.put({'task':'last_one', 'parent': self})
+                            if self.config.opt_dict['disable_ttvdb']:
+                                self.detail_data.set()
+
+                            else:
+                                self.config.ttvdb.detail_request.put({'task':'last_one', 'parent': self})
 
                         if not is_data_value('data', fetched_detail, dict):
                             continue
@@ -389,7 +393,7 @@ class Channel_Config(Thread):
             return
 
         if self.opt_dict['fast']:
-            self.config.log(['\n', self.config.text('fetch', 41 \
+            self.config.log(['\n', self.config.text('fetch', 41, \
                 (self.channel_node.program_count(), self.chan_name, self.xmltvid, (self.opt_dict['compat'] and self.config.compat_text or '')), type = 'report'), \
                 self.config.text('fetch', 43, (self.counter, self.config.chan_count, self.config.opt_dict['days']), type = 'report')], 2)
 
@@ -920,7 +924,11 @@ class ChannelNode():
                 else:
                     # Unmatched
                     unmatched.append(pp)
-                    self.config.infofiles.write_raw_string('%s, %s: %s - %s' % (source, self.chanid, self.config.in_output_tz(pp['start-time']).strftime('%d %b %H:%M'), self.config.in_output_tz(pp['stop-time']).strftime('%d %b %H:%M')))
+                    if self.config.write_info_files:
+                        self.config.infofiles.write_raw_string('%s, %s: %s - %s' % \
+                            (source, self.chanid,
+                            self.config.in_output_tz(pp['start-time']).strftime('%d %b %H:%M'),
+                            self.config.in_output_tz(pp['stop-time']).strftime('%d %b %H:%M')))
 
         #Is it a valid source or does It look like a a channel merge
         if isinstance(programs, ChannelNode):

@@ -142,7 +142,7 @@ sI13
 V# in this configuration file. If you do not have set any of those yourself\u000a
 p52
 sI14
-V# leave the value to True to profite from all updates.\u000a
+V# leave the value to True to profit from all updates.\u000a
 p53
 sI15
 g34
@@ -176,19 +176,19 @@ sI29
 V#    can try raising the first or lowering the second.\u000a
 p62
 sI30
-V#    This won't significantly alter the total runtime as this is mostley determined\u000a
+V#    This won't significantly alter the total runtime as this is mostly determined\u000a
 p63
 sI31
 V#    by the highest number of fetches from a single source and the mandatory.\u000a
 p64
 sI32
-V#    waittime in between those fetches to not overload their resources.\u000a
+V#    wait-time in between those fetches to not overload their resources.\u000a
 p65
 sI33
 V#    However all basepage fetches are retried on failure and a detailpagefailure\u000a
 p66
 sI34
-V#    can triger a retry on one of the other detailsources. So a lot of failures\u000a
+V#    can trigger a retry on one of the other detailsources. So a lot of failures\u000a
 p67
 sI35
 V#    especially on detail source can increase the total runtime.\u000a
@@ -257,10 +257,10 @@ p85
 sI67
 g34
 sI71
-V# Set "mail_log" to True to send the log to the mailaddress below\u000a
+V# Set "mail_log" to True to send the log to the mail-address below\u000a
 p86
 sI72
-V# Also set the mailserver and port apropriate\u000a
+V# Also set the mailserver and port appropriate\u000a
 p87
 sI73
 V# SSL/startTLS is NOT supported at present. Neither is authentication\u000a

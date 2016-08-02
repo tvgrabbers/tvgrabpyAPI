@@ -122,24 +122,22 @@ if sys.version_info[:2] >= (3,0):
 
 locale.setlocale(locale.LC_ALL, '')
 
-if tvgrabpyAPI.version()[1:4] < (1,0,0):
+if tvgrabpyAPI.version()[1:4] < (1,0,1):
     sys.stderr.write("tv_grab_nl3_py requires tv_grab_py_API 1.0.0 or higher\n")
     sys.exit(2)
 
 class Configure(tvgrabpyAPI.Configure):
     def __init__(self):
-        # We need these in __init__ to determin log names etc. If not set here prior to running __init__ we use defaults
-        self.name ='tv_grab_nl3_py'
-        self.datafile = 'tv_grab_nl'
-        tvgrabpyAPI.Configure.__init__(self)
+        # We need these in __init__ to determin log names etc. If not set here we use defaults
+        tvgrabpyAPI.Configure.__init__(self, name = 'tv_grab_nl3_py', datafile = 'tv_grab_nl')
         # Version info and description from the frontend as returned by the version function
         self.country = 'The Netherlands'
         self.description = 'Dutch/Flemish grabber combining multiple sources.'
         self.major = 3
         self.minor = 0
-        self.patch = 0
+        self.patch = 1
         self.patchdate = u'20160619'
-        self.alfa = True
+        self.alfa = False
         self.beta = True
         # The default timezone to use in the xmltv output file. Can be overruled in the users configuration.
         self.opt_dict['output_tz'] = 'Europe/Amsterdam'

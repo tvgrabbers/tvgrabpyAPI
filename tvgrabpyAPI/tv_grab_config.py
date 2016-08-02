@@ -123,7 +123,7 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 0
+api_patch = 1
 api_patchdate = u'20160723'
 api_alfa = False
 api_beta = True
@@ -194,7 +194,8 @@ def grabber_main(config):
 
 class Configure:
 
-    def __init__(self):
+    def __init__(self, name="", datafile=""):
+        log_array = []
         # Version info as returned by the version function
         self.api_name = api_name
         self.api_major = api_major
@@ -203,13 +204,14 @@ class Configure:
         self.api_patchdate = api_patchdate
         self.api_alfa = api_alfa
         self.api_beta = api_beta
-        try:
-            x = self.name
-
-        except AttributeError:
+        self.datafile = datafile
+        if name == "":
             # No name was set in the frontend
             self.name ='tv_grab_configure.py'
-            self.log(u'No valid Frontend Name set! Setting it to "%s"\n' % (self.name, ))
+            log_array.append(u'No valid Frontend Name set! Setting it to "%s"\n' % (self.name, ))
+
+        else:
+            self.name = name
 
         self.major = self.api_major
         self.minor = self.api_minor
@@ -331,6 +333,7 @@ class Configure:
         self.threads = []
         self.queues = {}
         self.logging = tv_grab_IO.Logging(self)
+        self.log(log_array)
         self.IO_func = tv_grab_IO.Functions(self)
         self.fetch_func = tv_grab_fetch.Functions(self)
         self.xml_output = tv_grab_channel.XMLoutput(self)
@@ -368,7 +371,7 @@ class Configure:
         return tuple or string with version info
         """
         if API:
-            if as_string and self.alfa:
+            if as_string and self.api_alfa:
                 return u'%s (%s: %s.%s.%s-p%s-alpha)' % (self.api_name, self.text('config', 6, type = 'other'), self.api_major, self.api_minor, '{:0>2}'.format(self.api_patch), self.api_patchdate)
 
             if as_string and self.api_beta:
@@ -588,7 +591,7 @@ class Configure:
             return(x)
 
         self.only_local_sourcefiles = self.args.only_cache
-        x = self.get_json_datafiles(self.args.configure)
+        x = self.get_json_datafiles(self.datafile, self.args.configure, True)
         if x != None:
             return(x)
 
@@ -790,7 +793,7 @@ class Configure:
 
                 return tdict
         elif option == 'show_logo_sources':
-            self.get_json_datafiles(show_info=False)
+            self.get_json_datafiles(self.datafile)
             if stdoutput:
                 print(self.text('config', 3, type='other'))
                 for k, v in self.xml_output.logo_provider.items():
@@ -1824,7 +1827,7 @@ class Configure:
 
     #end read_defaults_list()
 
-    def get_json_datafiles(self, configuring = False, show_info = True):
+    def get_json_datafiles(self, grabber_file=None, configuring = False, show_info = False):
         # This gets grabed after reading the config
         def is_gitdata_value(searchpath, dtype = None):
             return is_data_value(searchpath, githubdata, dtype, True)
@@ -1878,8 +1881,15 @@ class Configure:
                     fle.close()
 
             # Check on program updates
-            nv = gitdata_value("program_version", str, '1.0.0')
-            pv = u'%s.%s.%s' % (self.api_major, self.api_minor, self.api_patch)
+            if is_gitdata_value("program_version", str):
+                nv = gitdata_value("program_version", str, '1.0.0').split('.')
+                for index in range(len(nv)):
+                    nv[index] = int(nv[index])
+
+            else:
+                nv = gitdata_value("program_version", list, [1,0,0])
+
+            pv = [self.api_major, self.api_minor, self.api_patch]
             if not "data_version" in self.opt_dict:
                 self.opt_dict["data_version"] = 0
 
@@ -1914,22 +1924,32 @@ class Configure:
             if k not in self.xml_output.logo_source_preference:
                 self.xml_output.logo_source_preference.append(k)
 
+        if grabber_file in (None, ''):
+            return 2
+
         try:
-            githubdata = self.fetch_func.get_json_data(self.datafile, url = self.source_url, fpath = self.opt_dict['sources'])
+            githubdata = self.fetch_func.get_json_data(grabber_file, url = self.source_url, fpath = self.opt_dict['sources'])
             if not isinstance(githubdata, dict):
                 log_failure()
                 return 2
 
-            raw_json = self.fetch_func.raw_json[self.datafile]
+            raw_json = self.fetch_func.raw_json[grabber_file]
             if raw_json != '':
-                fle = self.IO_func.open_file('%s/%s.json' % (self.opt_dict['sources'], self.datafile), 'w', 'utf-8')
+                fle = self.IO_func.open_file('%s/%s.json' % (self.opt_dict['sources'], grabber_file), 'w', 'utf-8')
                 if fle != None:
                     fle.write(raw_json)
                     fle.close()
 
             # Check on data updates
-            nv = gitdata_value("program_version", str, '1.0.0')
-            pv = u'%s.%s.%s' % (self.major, self.minor, self.patch)
+            if is_gitdata_value("program_version", str):
+                nv = gitdata_value("program_version", str, '1.0.0').split('.')
+                for index in range(len(nv)):
+                    nv[index] = int(nv[index])
+
+            else:
+                nv = gitdata_value("program_version", list, [1,0,0])
+
+            pv = [self.major, self.minor, self.patch]
             dv = gitdata_value("data_version", int, 0)
             if not "data_version" in self.opt_dict:
                 self.opt_dict["data_version"] = 0
@@ -1968,7 +1988,7 @@ class Configure:
             #~ traceback.print_exc()
             return 2
 
-        source_url = gitdata_value("source-url", str, self.source_url)
+        source_url = gitdata_value("source-url", str)
         if source_url in (None, ''):
             self.source_url = u'%s/sources' % self.source_url
 
@@ -1997,8 +2017,8 @@ class Configure:
             if not s in self.sources.keys():
                 self.prime_source_order.remove(s)
 
-        self.fetch_tz = gitdata_value("fetch-timezone", str, 'UTC')
         self.xml_language = gitdata_value("language", str, 'en').lower()
+        self.fetch_tz = gitdata_value("fetch-timezone", str, 'UTC')
         try:
             self.fetch_tz = pytz.timezone(self.fetch_tz)
         except:
@@ -2047,7 +2067,7 @@ class Configure:
         logo_names = gitdata_dict("logo_names")
         self.xml_output.logo_names = {}
         for k, icon in logo_names.items():
-            if k == "--description--":
+            if k in ("--description--", "--example--"):
                 continue
 
             if len(icon[1].split('.')) == 1:
@@ -2065,7 +2085,7 @@ class Configure:
         combined_channels = gitdata_dict("combined_channels")
         self.combined_channels = {}
         for chanid, chanlist in combined_channels.items():
-            if chanid == "--description--":
+            if chanid in ("--description--", "--example--"):
                 continue
 
             with_timings = False
@@ -2112,7 +2132,7 @@ class Configure:
         logarray = []
         self.merge_into = gitdata_dict("merge_into")
         for newch, oldch  in self.merge_into.items():
-            if newch == "--description--":
+            if newch in ("--description--", "--example--"):
                 continue
 
             newpresent = bool(newch in self.channels.keys())

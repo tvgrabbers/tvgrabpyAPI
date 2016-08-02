@@ -1,7 +1,7 @@
 {"description":[
 	"This is generic data used by the tv_grab_API and gets downloaded on every run"],
-	"data_version":"0",
-	"program_version":"0.9.9",
+	"data_version":0,
+	"program_version":[1,0,0],
 	"version_message":["\n",
 		"\n",
 		"\n"],

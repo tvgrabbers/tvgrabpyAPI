@@ -180,7 +180,7 @@ class Functions():
                     url = self.config.api_source_url
 
                 url = '%s/%s.json' % (url, name)
-                self.config.log(self.config.text('fetch', 1,(name, ), 'other'), 2)
+                self.config.log(self.config.text('fetch', 1,(name, ), 'other'), 1)
                 fu = FetchURL(self.config, url, None, txtheaders, 'utf-8', True)
                 self.max_fetches.acquire()
                 self.update_counter('jsondata', source)
@@ -562,7 +562,7 @@ class DataTree(DataTreeShell):
             if fid == 104:
                 rlist = []
                 if is_data_value(0, data, str):
-                    # We treat a string as a list of items with a maximaum length
+                    # We treat a string as a list of items with a maximum length
                     if data_value(1, data, str) == 'as_list':
                         item_length = data_value(2, data, int, 1)
                         unique_added = False
