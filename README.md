@@ -8,7 +8,7 @@ tv_grab_py_API is an API for creating xmltv compatible tv grabbers. It is the su
 
 ###Requirements
 
- * Python 2.7.9 or higher
+ * Python 2.7.9 or higher (currently not python 3.x)
  * The [pytz module](http://pypi.python.org/pypi/pytz)
  * The [requests module](https://pypi.python.org/pypi/requests)
  * The [DataTreeGrab module](https://github.com/tvgrabbers/DataTree/)
@@ -16,11 +16,18 @@ tv_grab_py_API is an API for creating xmltv compatible tv grabbers. It is the su
 
 ###Installation
 
- * Make sure the above mentioned Python 2 packages are installed on your system
- * Download the latest release and unpack it into a directory
- * Run `sudo ./setup.py install` from that directory
- * Run the frontend (presently only tv_grab_nl3.py) with --configure
- * Check the created configuration file ~/.xmltv/tv_grab_nl3.conf and activate the desired channels.
+* Especially under Windows, make sure Python 2.7.9 or higher is installed 
+* Make sure the above mentioned Python 2 packages are installed on your system
+* Download the latest release and unpack it into a directory
+* Run:
+  * under Linux: `sudo ./setup.py install` from that directory
+  * under Windows depending on how you installed Python:
+    * `setup.py install` from that directory
+    * Or: `Python setup.py install` from that directory
+
+    (the frontend script(s) will install into `C:\Program Files\Python27\Scripts`)
+* Run the frontend (presently only tv_grab_nl3.py) with --configure
+* Check the created configuration file ~/.xmltv/tv_grab_nl3.conf and activate the desired channels.
 
 ###Some features
 
