@@ -534,12 +534,7 @@ if fle == None:
     sys.exit(-1)
 
 j_file = json.load(fle)
-#~ t_file = self.fetch_func.get_json_data('tv_grab_keys', fpath = self.opt_dict['sources'])
-fle = config.IO_func.open_file('../sourcematching/tv_grab_keys.json', 'r', 'utf-8')
-if fle == None:
-    sys.exit(-1)
-
-t_file = json.load(fle)
+t_file = config.fetch_func.get_json_data('tv_grab_keys', fpath = config.opt_dict['sources'])
 for v in t_file.values():
     test_type_key(v)
 
