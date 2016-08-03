@@ -29,7 +29,7 @@ setup(
     description = 'xlmtv API based on JSON datafiles',
     packages = ['tvgrabpyAPI'],
     package_data={'tvgrabpyAPI': ['texts/tv_grab_text.*']},
-    scripts=['tv_grab_nl3.py'],
+    scripts=['tv_grab_nl3.py', 'tv_grab_test_json.py'],
     data_files=[(source_dir, ['sources/tv_grab_API.json',
                             'sources/tv_grab_nl.json'])],
     requires = ['pytz', 'requests', 'DataTreeGrab'],

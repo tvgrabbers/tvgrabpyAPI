@@ -123,7 +123,7 @@ if sys.version_info[:2] >= (3,0):
 locale.setlocale(locale.LC_ALL, '')
 
 if tvgrabpyAPI.version()[1:4] < (1,0,1):
-    sys.stderr.write("tv_grab_nl3_py requires tv_grab_py_API 1.0.0 or higher\n")
+    sys.stderr.write("tv_grab_nl3_py requires tv_grab_py_API 1.0.1 or higher\n")
     sys.exit(2)
 
 class Configure(tvgrabpyAPI.Configure):
@@ -136,7 +136,7 @@ class Configure(tvgrabpyAPI.Configure):
         self.major = 3
         self.minor = 0
         self.patch = 1
-        self.patchdate = u'20160619'
+        self.patchdate = u'20160802'
         self.alfa = False
         self.beta = True
         # The default timezone to use in the xmltv output file. Can be overruled in the users configuration.

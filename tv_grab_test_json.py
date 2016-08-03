@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import json, io, sys, os, tvgrabpyAPI, pytz, datetime
+if tvgrabpyAPI.version()[1:4] != (1,0,1):
+    sys.stderr.write("This instance of tv_grab_test_json_py requires tv_grab_py_API 1.0.1\n")
+    sys.exit(2)
+
 from DataTreeGrab import is_data_value, data_value
 
 def load_data_lists():
@@ -70,38 +74,50 @@ def test_type_key(tval):
             else:
                 test_type_key(v)
 
-def test_type(dkey, dtypes, val, skey = None):
-    def set_error(err, testkey = None):
-        if skey == None and testkey == None:
+def test_type(dkey, dtypes, val, vpath = None):
+    def importance():
+        if importancenlevel == 1:
+            return 'required '
+
+        elif importancenlevel == 2:
+            return 'sugested '
+
+        elif importancenlevel == 3:
+            return 'optional '
+
+        return ''
+
+    def set_error(err, testkey = None, default = None):
+        if vpath == None and testkey == None:
             return None
 
         if not is_data_value(dkey, dkey_errors, list):
             dkey_errors[dkey] = []
 
         if testkey == None:
-            dkey_errors[dkey].append({'path': skey,
+            dkey_errors[dkey].append({'path': vpath,
                                                         'error': err,
                                                         'type': dtype,
                                                         'value': val,
                                                         'length':data_value("length", dtypes, int, 0),
                                                         'not-in':data_value("in", dtypes, list),
-                                                        'default':data_value("default", dtypes, default: None),
-                                                        'importance': importance})
+                                                        'default':default,
+                                                        'importance': importance()})
             return 0
 
         else:
-            dkey_errors[dkey].append({'path': skey,
+            dkey_errors[dkey].append({'path': lpath,
                                                         'error': err,
                                                         'type': ktype,
                                                         'value': testkey,
                                                         'length':data_value("length", dtypes, int, 0),
                                                         'not-in':data_value("in", dtypes, list),
-                                                        'default':data_value("default", dtypes, default: None),
-                                                        'importance': importance})
+                                                        'default':default,
+                                                        'importance': importance()})
             return 0
 
     dtype = data_value("type", dtypes)
-    importance = 0
+    importancenlevel = 0
     if isinstance(dtype, list):
         if len(dtype) < 1:
             return True
@@ -111,231 +127,223 @@ def test_type(dkey, dtypes, val, skey = None):
             for dt in dtype:
                 dts = dtypes.copy()
                 dts['type'] = dt
-                vt = test_type(dkey, dts, val, skey)
-                if vt != None:
-                    return vt
+                if test_type(dkey, dts, val) not in (None, 0):
+                    return test_type(dkey, dts, val, vpath)
 
+            set_error(3)
             return
 
     if dtype == 'list':
         if not isinstance(val, list):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
+
+        if  vpath == None:
+            return dtype
 
         if is_data_value("length", dtypes, int) and len(val) != dtypes["length"]:
+            # wrong length
             return set_error(6)
 
         if is_data_value("items", dtypes, list):
             for index in range(len(dtypes["items"])):
                 ltype = dtypes["items"][index]
                 if index < len(val) and ltype not in (None, ''):
-                    lkey = str(index) if skey in (dkey, None) else '%s:%s' % (skey, index)
-                    test_type(dkey, {'type': ltype}, val[index], lkey)
-                    #~ if test_type(dkey, {'type': ltype}, val[index]) == None:
-                        #~ if skey == None:
-                            #~ config.log("list item %s in %s is not of type %s!\n" % (index, val, ltype))
+                    lpath = [] if vpath in (dkey, None) else vpath[:]
+                    lpath.append(index)
+                    # Test the sub-type
+                    test_type(dkey, {'type': ltype}, val[index], lpath)
 
-                        #~ else:
-                            #~ config.log('list item %s in %s from "%s" is not of type %s!\n' % (index, val, skey, ltype))
-
-    elif dtype == 'dict':
+    elif dtype in ('dict', 'numbered dict'):
         if not isinstance(val, dict):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
+        ktype = data_value("keys", dtypes, str)
+        lpath = None if vpath in (dkey, None) else vpath[:]
         if is_data_value("keys", dtypes, str, True):
-            ktype = data_value("keys", dtypes, str)
             for k in val.keys():
                 if k in ("--description--", "--example--"):
                     continue
 
-                if test_type(dkey, {'type': ktype}, k) == None:
+                if dtype == 'numbered dict':
+                    try:
+                        k = int(k)
+
+                    except:
+                        ktype = 'numeric (integer enclosed in double quotes)'
+                        set_error(5, k)
+                        ktype = data_value("keys", dtypes, str)
+
+                if ktype != '' and test_type(dkey, {'type': ktype}, k) == None:
+                    # Wrong key-type
                     set_error(5, k)
-                    #~ if skey == None:
-                        #~ config.log('Key value "%s" in "%s" is not of type %s!\n' % (k, dkey, ktype))
 
-                    #~ else:
-                        #~ config.log('Key value "%s" in "%s" from %s is not of type %s!\n' % \
-                            #~ (k, skey, dkey, ktype))
+        if  vpath == None:
+            return dtype
 
+        test_unknown = False
+        test_keys = []
         for sdset in ("required", "sugested", "optional"):
-            importance += 1
+            # Are there further sub-key/value restraints
+            importancenlevel += 1
             knames = data_value(sdset, dtypes, list)
             for kn in knames:
+                test_unknown = True
                 if is_data_value('name', kn, str):
+                    test_keys.append(kn['name'])
+                    ktype = data_value("keys", kn, str)
+                    vtype = data_value("types", kn, str)
                     if not kn['name'] in val.keys():
-                        set_error(1, kn['name'])
-                        #~ if skey == None:
-                            #~ config.log('%s key value "%s" in %s is not set!\n' % \
-                                #~ (sdset.capitalize(), kn['name'], dkey))
-
-                        #~ else:
-                            #~ config.log('%s key value "%s" in the "%s" item from %s is not set!\n' % \
-                                #~ (sdset.capitalize(), kn['name'], skey, dkey))
+                        # The sub-key is missing
+                        set_error(1, kn['name'], data_value("default", kn))
 
                     else:
+                        # Is there a value restrained
+                        spath = [] if vpath in (dkey, None) else vpath[:]
+                        spath.append(kn['name'])
                         if is_data_value('type', kn, str) or is_data_value('in', kn, list):
-                            lkey = kn['name'] if skey in (dkey, None) else '%s:%s' % (skey, kn['name'])
-                            test_type(dkey, kn , val[kn['name']], lkey)
-                            #~ if skey == None:
-                                #~ config.log('The %s "%s" value: "%s" from %s is not of type %s!\n' % \
-                                    #~ (sdset, kn['name'], val[kn['name']], dkey, kn['type']))
+                            # Test the value
+                            test_type(dkey, kn , val[kn['name']], spath)
 
-                            #~ else:
-                                #~ config.log('The %s "%s" value: "%s" in the "%s" item from %s is not of type %s!\n' % \
-                                    #~ (sdset, kn['name'], val[kn['name']], skey, dkey, kn['type']))
-
-                        #~ elif is_data_value('in', kn, list) and val[kn['name']] not in kn['in']:
-                            #~ if skey == None:
-                                #~ config.log('The %s "%s" value: "%s" from %s is not of in %s!\n' % \
-                                    #~ (sdset, kn['name'], val[kn['name']], dkey, kn['in']))
-
-                            #~ else:
-                                #~ config.log('The %s "%s" value: "%s" in the "%s" item from %s is not in %s!\n' % \
-                                    #~ (sdset, kn['name'], val[kn['name']], skey, dkey, kn['in']))
-
-                        if isinstance(val[kn['name']], dict) and is_data_value("keys", kn, str, True):
-                            ktype = data_value("keys", kn, str)
-                            for k in val[kn['name']].keys():
+                        if isinstance(val[kn['name']], dict):
+                            # If the sub-value is a dict
+                            for k, v in val[kn['name']].items():
                                 if k in ("--description--", "--example--"):
                                     continue
 
-                                if test_type(dkey, {'type': ktype}, k) == None:
-                                    if skey == None:
-                                        config.log('Key value "%s" in "%s" is not of type %s!\n' % (k, dkey, ktype))
+                                lpath = spath[:]
+                                if is_data_value("keys", kn, str, True) and test_type(dkey, {'type': ktype}, k) == None:
+                                    # Wrong key-type in the dict
+                                    set_error(5, k)
 
-                                    else:
-                                        config.log('Key value "%s" in "%s" from %s is not of type %s!\n' % \
-                                            (k, skey, dkey, ktype))
+                                if is_data_value("types", kn, str, True):
+                                    # Test the sub-dict values
+                                    lpath.append(k)
+                                    test_type(dkey, {'type': vtype}, v, lpath)
 
-                        if isinstance(val[kn['name']], (dict, list)) and is_data_value("types", kn, str, True):
-                            vtype = data_value("types", kn, str)
-                            for k, v in val[kn['name']].values():
-                                if k in ("--description--", "--example--"):
-                                    continue
+                        if isinstance(val[kn['name']], list):
+                            # If the sub-value is a list
+                            if is_data_value("types", kn, str, True):
+                                for index in range(len(val[kn['name']])):
+                                    # Test the sub-list values
+                                    lpath = spath[:]
+                                    lpath.append(k)
+                                    test_type(dkey, {'type': vtype}, v, lpath)
 
-                                if test_type(dkey, {'type': vtype}, v) == None:
-                                    if skey == None:
-                                        config.log('"%s" value "%s" in "%s" is not of type %s!\n' % (k, v, dkey, vtype))
-
-                                    else:
-                                        config.log('"%s" value "%s" in "%s" from %s is not of type %s!\n' % \
-                                            (k, v, skey, dkey, vtype))
-
-    elif dtype == 'numbered dict':
-        if not isinstance(val, dict):
-            return set_error(2)
-
-        ktype = data_value("keys", dtypes, str, None)
-        for k in val.keys():
-            if k in ("--description--", "--example--"):
-                continue
-
-            try:
-                k = int(k)
-                if ktype not in (None, '') and test_type(dkey, {'type': ktype}, k) == None:
-                    if skey == None:
-                        config.log('Key value "%s" in the "%s" dict is not of type %s!\n' % (k, dkey, ktype))
-
-                    else:
-                        config.log('Key value "%s" in the "%s" dict from %s is not of type %s!\n' % \
-                            (k, skey, dkey, ktype))
-
-            except:
-                if skey == None:
-                    config.log('Key value "%s" in the "%s" dict is not numeric!\n' % (k, dkey))
-
-                else:
-                    config.log('Key value "%s" in the "%s" dict from %s is not numeric!\n' % \
-                        (k, skey, dkey))
+        if test_unknown and data_value("allowed", dtypes, str) != 'all':
+            ktype = data_value("keys", dtypes, str)
+            lpath = None if vpath in (dkey, None) else vpath[:]
+            for k in  val.keys():
+                if not k in test_keys:
+                    # Unknown key
+                    set_error(2, k)
 
     elif dtype == 'integer':
         if not isinstance(val, int):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'sourceid':
         if not isinstance(val, int):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
         if not val in sources:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'groupid':
         if not isinstance(val, int):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
         if not val in channel_groups:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'logoid':
         try:
             val = int(val)
 
         except:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
         if not val in logo_sources:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'string':
         if not isinstance(val, (str, unicode)):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
         if is_data_value("length", dtypes, int) and len(val) != dtypes["length"]:
+            # wrong length
             return set_error(6)
 
     elif dtype == 'tz-string':
         if not isinstance(val, (str, unicode)):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
         try:
             tz = pytz.timezone(val)
 
         except:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'chanid':
         if not val in chanids:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'url':
         if not isinstance(val, (str, unicode)):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'boolean':
         if not isinstance(val, bool):
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'time':
         try:
             st = val.split(':')
             st = datetime.time(int(st[0]), int(st[1]))
         except:
-            return set_error(2)
+            # Wrong type
+            return set_error(3)
 
     elif dtype == 'date':
         pass
 
     elif dtype == 'none':
         if val != None:
-            return set_error(2)
-
-    elif is_data_value("in", dtypes, list:):
-        if not val in dtypes['in']:
+            # Wrong type
             return set_error(3)
+
+    elif is_data_value("in", dtypes, list):
+        if not val in dtypes['in']:
+            return set_error(4)
 
     else:
         #~ config.log('unknown dtype: %s\n' % dtype)
         pass
-        #~ return set_error(2)
 
     return dtype
 
 def test_file(data, f_type):
-    def test_sub(dkey, sdata, level, otype, skey = None):
+    def test_sub(dkey, sdata, level, otype, vpath = None):
         nlist = []
         if otype == 'list':
             for item in range(len(sdata)):
-                pkey = str(item) if skey in (dkey, None) else '%s:%s' % (skey, item)
-                vt = test_type(dkey, tlist[level], sdata[item], pkey )
+                pkey = [] if vpath in (dkey, None) else vpath[:]
+                pkey.append(item)
+                vt = test_type(dkey, tlist[level], sdata[item], pkey)
                 if vt == None:
                     config.log('The value: %s in the %s list is not of type %s.\n' % \
                         (sdata[item], dkey, tlist[level]['type']))
@@ -352,12 +360,8 @@ def test_file(data, f_type):
                 if k in ("--description--", "--example--"):
                     continue
 
-                if skey in (dkey, None):
-                    pkey = k
-
-                else:
-                    pkey = '%s:%s' % (skey, k)
-
+                pkey = [] if vpath in (dkey, None) else vpath[:]
+                pkey.append(k)
                 vt = test_type(dkey, tlist[level], v, pkey)
                 if vt == None:
                     config.log('The value: %s in the %s dict is not of type %s.\n' % \
@@ -368,16 +372,14 @@ def test_file(data, f_type):
                     nlist.extend(test_sub(dkey, v, level + 1, vt, pkey))
 
                 else:
-                #~ elif vt in ('list', 'dict', 'numbered dict'):
                     nlist.append(v)
 
         return nlist
 
     known_keys = ["--description--", "--example--"]
     testdict = t_file[f_type]
-    # First see what known keys are present and if they are of the right type
     for dset in ("required", "sugested", "optional"):
-        dkey_errors = {}
+        # First see what known keys are present and if they are of the right type
         dkey_errors['missing'] = []
         dkey_errors['wrong_type'] = {}
         if is_data_value([dset], testdict, dict):
@@ -389,13 +391,11 @@ def test_file(data, f_type):
 
                 tlist = data_value([dset, dkey,"types"], testdict, list)
                 if len(tlist) == 0:
-                    #~ config.log('No type set for %s' % dkey)
                     continue
 
                 vt = test_type(dkey, tlist[0], data[dkey])
                 if vt == None:
-                    #~ dkey_errors['wrong_type'][dkey] = tlist[0]['type']
-                    config.log('The data under key %s is not of type %s.\n' % (dkey, tlist[0]['type']))
+                    dkey_errors['wrong_type'][dkey] = tlist[0]['type']
                     continue
 
                 if len(tlist) > 1:
@@ -405,18 +405,86 @@ def test_file(data, f_type):
                 else:
                     end_node_list = [data[dkey]]
 
-        # Report on unset main keys
+        # Report on found inconsistancies
         if len(dkey_errors['missing']) > 0:
             config.log('The following %s main-keys are not set:\n' % dset)
             for dkey in dkey_errors['missing']:
                 if is_data_value([dset, dkey,"default"], testdict):
-                    config.log('  %s: It will default to: %s\n' % (dkey.ljust(25), data_value([dset, dkey,"default"], testdict)))
+                    config.log('  "%s": It will default to: %s\n' % \
+                        (dkey.ljust(25), data_value([dset, dkey,"default"], testdict)))
 
                 else:
-                    config.log('  %s: Without default\n' % dkey.ljust(25))
+                    config.log('  "%s": Without default\n' % dkey.ljust(25))
 
         else:
-            config.log('All %s keys are present\n' % dset)
+            config.log('All %s keys are present.\n' % dset)
+
+        if len(dkey_errors['wrong_type']) > 0:
+            config.log('The following %s main-keys have a wrong value type:\n' % dset)
+            for dkey, dtype in dkey_errors['wrong_type'].items():
+                config.log('  "%s": Must be of type: %s\n' % (dkey.ljust(25), dtype))
+
+        else:
+            config.log('All set %s keys are of the right type.\n' % dset)
+
+        del(dkey_errors['missing'])
+        del(dkey_errors['wrong_type'])
+
+        if len(dkey_errors) > 0:
+            config.log('The following (potential) errors were found in %s main-keys:\n' % dset)
+            for key, v in dkey_errors.items()[:]:
+                del(dkey_errors[key])
+                v.sort(key=lambda err: (err['error'], err['path']))
+                act_err = 0
+                for err in v:
+                    if err['error'] > act_err:
+                        act_err = err['error']
+                        if act_err == 1:
+                            config.log('  Missing sub-keys in main-key "%s":\n' % (key))
+
+                        elif act_err == 2:
+                            config.log('  Unrecognized sub-keys in main-key "%s":\n' % (key))
+
+                        elif act_err == 3:
+                            config.log('  Wrong value-types in main-key "%s":\n' % (key))
+
+                        elif act_err == 4:
+                            config.log('  Wrong value in main-key "%s":\n' % (key))
+
+                        elif act_err == 5:
+                            config.log('  Wrong sub-key-types in main-key "%s":\n' % (key))
+
+                        elif act_err == 6:
+                            config.log('  Wrong string or list length in main-key "%s":\n' % (key))
+
+                        else:
+                            break
+
+                    if act_err == 1:
+                        config.log('    %s"%s" is not set in "%s". It will default to "%s"\n' % \
+                            (err['importance'].capitalize(), err['value'], err['path'], err['default']))
+
+                    elif act_err == 2:
+                        config.log('    key-value "%s" in %s is not recognized.\n' % (err['value'], err['path']))
+
+                    elif act_err == 3:
+                        config.log('    %svalue in %s should be of type: "%s".\n' % \
+                            (err['importance'].capitalize(), err['path'], err['type']))
+
+                    elif act_err == 4:
+                        config.log('    value "%s" in %s should be one of %s.\n' % \
+                            (err['importance'].capitalize(), err['value'], err['path'], err['not-in']))
+
+                    elif act_err == 5:
+                        config.log('    %ssub-key in %s should be of type: "%s".\n' % \
+                            (err['importance'].capitalize(), err['path'], err['type']))
+
+                    elif act_err == 6:
+                        config.log('    %sList/String in %s should have length: %s.\n' % \
+                        (err['importance'].capitalize(), err['path'], err['length']))
+
+                    else:
+                        break
 
     # Report on found data_defs
     if is_data_value(["data_defs"], testdict, list):
@@ -427,7 +495,7 @@ def test_file(data, f_type):
                 ddefs.append(dkey)
 
         if len(ddefs) > 0:
-            config.log('The following data_defs were found:\n')
+            config.log('The following data_defs were found (we can not jet test them):\n')
             for dkey in ddefs:
                 config.log('  %s\n' % dkey)
 
@@ -448,6 +516,7 @@ def test_file(data, f_type):
 
     config.log('\n')
 
+dkey_errors = {}
 config = tvgrabpyAPI.Configure('tv_grab_test_json')
 cmd = sys.argv
 if len(cmd) < 2:

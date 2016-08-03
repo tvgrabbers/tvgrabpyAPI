@@ -1314,23 +1314,23 @@
 			{"chanid": "0-21", "start": "6:00", "end": "21:00"}],
 		"11-disneyxdsat": [
 			{"chanid": "0-311", "start": "4:00", "end": "18:00"}],
+		"11-omroepbrabantsat": [
+			{"chanid": "0-114", "start": "6:00", "end": "0:00"}],
 		"11-kzoomkanaalz": [
 			{"chanid": "1-vtmkzoom", "start": "6:00", "end": "20:00"},
 			{"chanid": "1-kanaalz", "start": "20:00", "end": "0:00"}],
 		"11-npopolitiekbest": [
 			{"chanid": "1-politiek-24", "start": "6:00", "end": "18:00"}, 
 			{"chanid": "0-316", "start": "18:00", "end": "6:00"}],
-		"11-omroepbrabantsat": [
-			{"chanid": "0-114", "start": "6:00", "end": "0:00"}],
 		"11-veronicadxd": [
 			{"chanid": "0-34", "start": "18:00", "end": "4:00"},
 			{"chanid": "0-311", "start": "4:00", "end": "18:00"}],
-		"5-24443943080": ["0-301", "1-cbeebies"],
 		"1-veronica": [
 			{"chanid": "0-34", "start": "18:00", "end": "4:00"}, 
 			{"chanid": "0-311", "start": "4:00", "end": "18:00", "slots": ["disney xd"]}],
 		"1-ketnet-canvas-2": ["8-ketnet", "8-eenplus"],
-		"1-nickelodeon": ["0-467"]},
+		"1-nickelodeon": ["0-467"],
+		"5-24443943080": ["0-301", "1-cbeebies"]},
 	"merge_into":{
 		"--description--":["This should be a dict with the new chanid as key (in stead of --example--)",
 			"inside you have the old chanid from which is merging into the new one, a set of sourceid/channel combinations",
