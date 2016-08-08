@@ -233,6 +233,7 @@ class Configure:
                'Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0']
 
         # Some debug Flags
+        self.test_modus = False
         self.write_info_files = False
         self.only_local_sourcefiles = False
         self.infofiles = None
@@ -1019,6 +1020,9 @@ class Configure:
                 if not self.read_config():
                     return(1)
 
+            if self.write_info_files :
+                self.infofiles = tv_grab_IO.InfoFiles(self)
+
         elif option == 'cache_file':
             if self.args.cache_file != self.opt_dict['cache_file']:
                 self.opt_dict['cache_file'] = self.args.cache_file
@@ -1675,8 +1679,6 @@ class Configure:
         # an extra option for gathering extra info to better the code
         if 'write_info_files' in self.opt_dict.keys():
             self.write_info_files = self.opt_dict['write_info_files']
-            if self.write_info_files :
-                self.infofiles = tv_grab_IO.InfoFiles(self)
 
         if 'output_tz' in self.opt_dict.keys():
             try:
@@ -2037,11 +2039,6 @@ class Configure:
             if s not in self.sources.keys():
                 del self.prime_source_groups[g]
         logo_provider = gitdata_dict("logo_provider", 1)
-        for k, v in logo_provider.items():
-            if k > 100:
-                self.xml_output.logo_provider[k] = v
-                self.xml_output.logo_source_preference.append(k)
-
         ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
         for k, v in ttvdb_aliasses.items():
             self.ttvdb_aliasses[k] = v
@@ -2076,6 +2073,22 @@ class Configure:
             else:
                 self.xml_output.logo_names[k] = [int(icon[0]), icon[1]]
 
+        logo_source_preference = gitdata_value("logo_source_preference", list)
+        logo_provider = gitdata_dict("logo_provider", 1)
+        if not 99 in logo_source_preference:
+            logo_source_preference.insert(0, 99)
+
+        for item in self.xml_output.logo_source_preference:
+            if not item in logo_source_preference:
+                logo_source_preference.append(item)
+
+        for k, v in logo_provider.items():
+            if k > 100:
+                self.xml_output.logo_provider[k] = v
+                if not k in logo_source_preference:
+                    logo_source_preference.append(k)
+
+        self.xml_output.logo_source_preference = logo_source_preference
         self.combined_channels_tz = gitdata_value("combined-channels-tz", str, 'UTC')
         try:
             self.combined_channels_tz = pytz.timezone(self.combined_channels_tz)

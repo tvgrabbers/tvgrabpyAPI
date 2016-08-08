@@ -1588,7 +1588,7 @@ class FetchData(Thread):
             # For the url we use the fetch timezone and not the site timezone
             self.datatrees[ptype].set_timezone(self.config.fetch_tz)
             self.datatrees[ptype].set_current_date(self.current_ordinal + data_value('offset', pdata, int, default=0))
-            # Set the counter for the statistics
+            # Set the counter for the statistics and some other defaults
             if ptype in ('channels', 'base-channels'):
                 pdata['start'] = 0
                 pdata['end'] = 0
@@ -2659,7 +2659,12 @@ class FetchData(Thread):
         if tdict['detail_url'] in (None, ''):
             return
 
-        ddata = {'channel': tdict['chanid'], 'detailid': tdict['detail_url']}
+        if self.config.test_modus:
+            ddata = {'channel': 'testchannel', 'detailid': tdict['detail_url']}
+
+        else:
+            ddata = {'channel': tdict['chanid'], 'detailid': tdict['detail_url']}
+
         strdata = self.get_page_data(ptype, ddata)
         if not isinstance(strdata, (list,tuple)) or len(strdata) == 0:
             #~ self.functions.update_counter('fail', self.proc_id, tdict['chanid'])

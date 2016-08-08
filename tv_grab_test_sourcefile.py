@@ -32,9 +32,7 @@ if tvgrabpyAPI.version()[1:4] < (1,0,0):
 
 class Configure(tvgrabpyAPI.Configure):
     def __init__(self):
-        self.name ='tv_grab_nl3_py'
-        self.datafile = 'tv_grab_nl'
-        tvgrabpyAPI.Configure.__init__(self)
+        tvgrabpyAPI.Configure.__init__(self, name ='tv_grab_nl3_py', datafile = 'tv_grab_nl')
         # Version info from the frontend as returned by the version function
         self.country = 'The Netherlands'
         self.description = 'Dutch/Flemish grabber combining multiple sources.'
@@ -69,9 +67,12 @@ def read_commandline(self):
 def main():
     # We want to handle unexpected errors nicely. With a message to the log
     try:
+        config.test_modus = True
+        config.write_info_files = True
+        config.only_local_sourcefiles = True
         config.validate_option('config_file')
         config.opt_dict['log_level'] = config.opt_dict['log_level'] | 98304
-        config.get_json_datafiles()
+        config.get_json_datafiles(config.datafile, False, True)
 
         channel ='een'
         channel = 'npo1'
@@ -109,12 +110,12 @@ def main():
         #~ source = config.init_sources(8)
 
         # tvgids.nl
-        #~ channel = '5'
-        #~ source = config.init_sources(3)
+        channel = '5'
+        source = config.init_sources(3)
 
         # tvgids.tv
-        channel ='nederland-1'
-        source = config.init_sources(1)
+        #~ channel ='nederland-1'
+        #~ source = config.init_sources(1)
 
         # primo.eu
         #~ channel ='een'
@@ -131,33 +132,32 @@ def main():
         sid = source.proc_id
         config.channelsource[sid] = source
         source.init_channel_source_ids()
+
         tdict = {}
-        tdict['detail_url'] = {}
-        tdict['chanid'] = source.chanids[channel]
+        tdict['detail_url'] = '21126784'
+        modus = 3
 
-        #~ source.get_channels()
+        if modus == 1:
+            source.get_channels()
 
-        offset = 1
-        first_day = 0
-        max_days = 4
-        last_day = 1
-        data = source.get_page_data('base',{'channels': source.channels,
-                                                                'channel': channel,
-                                                                'channelgrp': 'main',
-                                                                'offset': offset,
-                                                                'start': first_day,
-                                                                'end': min(max_days, last_day),
-                                                                'back':-first_day,
-                                                                'ahead':min(max_days, last_day)-1})
-        source.parse_basepage(data, {'offset': 1, 'channel': channel, 'channelgrp': 'main'})
+        elif modus == 2:
+            tdict['chanid'] = source.chanids[channel]
+            offset = 1
+            first_day = 0
+            max_days = 4
+            last_day = 1
+            data = source.get_page_data('base',{'channels': source.channels,
+                                                                    'channel': channel,
+                                                                    'channelgrp': 'main',
+                                                                    'offset': offset,
+                                                                    'start': first_day,
+                                                                    'end': min(max_days, last_day),
+                                                                    'back':-first_day,
+                                                                    'ahead':min(max_days, last_day)-1})
+            source.parse_basepage(data, {'offset': 1, 'channel': channel, 'channelgrp': 'main'})
 
-        #~ tdict['detail_url'] = '20741005'
-        #~ tdict['detail_url'][sid] = '20629464'
-        #~ tdict['detail_url'][sid] = 'death-in-paradise/15885235'
-        #~ tdict['detail_url'][sid] = "7892935" #'7875065'
-        #~ tdict['detail_url'][sid] = "7897702" #'7879295'
-        #~ tdict['detail_url'][sid] = "20822296" #'7875063'
-        #~ source.load_detailpage('detail', tdict)
+        elif modus == 3:
+            source.load_detailpage('detail', tdict)
 
     except:
         traceback.print_exc()

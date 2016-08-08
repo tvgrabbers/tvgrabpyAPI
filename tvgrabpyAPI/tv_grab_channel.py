@@ -2908,11 +2908,11 @@ class XMLoutput():
             if program.is_set('season') and program.is_set('episode') and cat.lower() not in self.config.episode_exclude_genres:
                 se = program.get_value('season') -1
                 ep = program.get_value('episode') -1
-                if se >= 0 and ep >= 0:
+                if ep >= 0:
                     if program.is_set("episodecount") and program.get_value('episodecount') != 0:
                         ep = '%s/%s' % (ep, program.get_value('episodecount'))
 
-                    if se == 0:
+                    if se == -1:
                         text = ' . %s . '  % (ep)
 
                     else:
