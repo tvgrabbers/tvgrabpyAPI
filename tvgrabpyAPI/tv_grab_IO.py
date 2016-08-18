@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 import codecs, locale, re, os, sys, io, shutil, difflib
 import traceback, smtplib, sqlite3
 import datetime, time, calendar, pytz
-import tv_grab_channel
+import tv_grab_channel, tv_grab_config, test_json_struct
 from threading import Thread, Lock, RLock
 from Queue import Queue, Empty
 from copy import deepcopy, copy
@@ -2412,3 +2412,34 @@ class InfoFiles():
 
 # end InfoFiles
 
+class test_JSON(test_json_struct.test_JSON):
+    def __init__(self):
+        self.config = tv_grab_config.Configure('tv_grab_test_json')
+        self.config.get_json_datafiles()
+        test_json_struct.test_JSON.__init__(self)
+
+        self.check_on_grabber_datafile = False
+
+    def log(self, text):
+        self.config.log(text)
+
+    def add_extra_lookup_lists(self, struct_name):
+        if struct_name == 'struct-grabberfile':
+            ll = []
+            for li in self.config.xml_output.logo_source_preference:
+                ll.append(unicode(li))
+
+            ll.extend(self.config.xml_output.logo_source_preference)
+            if 'lst-logoid' in self.lookup_lists.keys():
+                self.lookup_lists['lst-logoid'].extend(ll)
+
+            else:
+                 self.lookup_lists['lst-logoid'] = ll
+
+            if 'int-lst-logoid' in self.lookup_lists.keys():
+                self.lookup_lists['int-lst-logoid'].extend(self.config.xml_output.logo_source_preference)
+
+            else:
+                 self.lookup_lists['int-lst-logoid'] = self.config.xml_output.logo_source_preference
+
+# end test_JSON
