@@ -600,7 +600,7 @@ sI83
 V%6.0f mislukking(en) op theTVDB.com\u000a
 p187
 sI84
-V%6.0f  basis pagina('s) opgehaald van%s\u000a
+V%6.0f  basis pagina('s) opgehaald van %s\u000a
 p188
 sI85
 V%6.0f detail pagina('s) opgehaald van %s\u000a

@@ -38,7 +38,7 @@ class Configure(tvgrabpyAPI.Configure):
         self.description = 'Dutch/Flemish grabber combining multiple sources.'
         self.major = 3
         self.minor = 0
-        self.patch = 0
+        self.patch = 1
         self.patchdate = u'20160619'
         self.alfa = True
         self.beta = True
@@ -99,7 +99,8 @@ def main():
         #~ source = config.init_sources(4)
 
         # vpro.nl
-        #~ source = config.init_sources(7)
+        channel = 'npo_1'
+        source = config.init_sources(7)
 
         # oorboekje.nl
         #~ channel = 'npo-radio-1'
@@ -110,8 +111,8 @@ def main():
         #~ source = config.init_sources(8)
 
         # tvgids.nl
-        channel = '5'
-        source = config.init_sources(3)
+        #~ channel = '5'
+        #~ source = config.init_sources(3)
 
         # tvgids.tv
         #~ channel ='nederland-1'
@@ -134,8 +135,8 @@ def main():
         source.init_channel_source_ids()
 
         tdict = {}
-        tdict['detail_url'] = '21126784'
-        modus = 3
+        tdict['detail_url'] = 'nos-rio-live/16083759'
+        modus = 2
 
         if modus == 1:
             source.get_channels()

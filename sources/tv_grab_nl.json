@@ -61,12 +61,12 @@
 			"cattransid":0},
 		"1":{
 			"json file":"source-tvgids.tv",
-			"version":2,
+			"version":3,
 			"cattrans type":2,
 			"cattransid":5},
 		"7":{
 			"json file":"source-vpro.nl",
-			"version":4,
+			"version":5,
 			"cattrans type":1,
 			"cattransid":4},
 		"10":{

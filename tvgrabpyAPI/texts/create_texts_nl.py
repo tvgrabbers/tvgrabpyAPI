@@ -372,7 +372,7 @@ def load_texts():
                 81: u' Tijd/pagina: %s seconds\n',
                 82: u'%6.0f pagina(\'s) opgehaald van theTVDB.com\n',
                 83: u'%6.0f mislukking(en) op theTVDB.com\n',
-                84: u'%6.0f  basis pagina(\'s) opgehaald van%s\n',
+                84: u'%6.0f  basis pagina(\'s) opgehaald van %s\n',
                 85: u'%6.0f detail pagina(\'s) opgehaald van %s\n',
                 86: u'%6.0f mislukking(en) op %s\n'
                 },

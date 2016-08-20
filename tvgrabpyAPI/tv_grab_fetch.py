@@ -156,6 +156,9 @@ class Functions():
                     if fle != None:
                         return json.load(fle)
 
+            except(ValueError) as e:
+                self.config.log('  JSON error: %s\n' % e)
+
             except:
                 traceback.print_exc()
                 pass
@@ -166,6 +169,9 @@ class Functions():
                     fle = self.config.IO_func.open_file('%s\%s' % (self.config.source_dir, local_name), 'r', 'utf-8')
                     if fle != None:
                         return json.load(fle)
+
+            except(ValueError) as e:
+                self.config.log('  JSON error: %s\n' % e)
 
             except:
                 pass
@@ -207,6 +213,9 @@ class Functions():
                 fle = self.config.IO_func.open_file('%s/%s' % (self.config.source_dir, local_name), 'r', 'utf-8')
                 if fle != None:
                     return json.load(fle)
+
+            except(ValueError) as e:
+                self.config.log('  JSON error: %s\n' % e)
 
             except:
                 return None
@@ -955,8 +964,8 @@ class theTVDB_v1(Thread):
 
             elif tid > 0 and isinstance(self.last_updated, datetime.date) and (datetime.date.today() - self.last_updated).days > 30 and not self.config.args.only_cache:
                 data = self.query_ttvdb('seriesname', { 'ttvdbid': tid, 'lang': lang})
-                if is_data_value([0, 'last updated'], data, datetime.date) and \
-                    data_value([0, 'last updated'], data, datetime.date) < self.last_updated:
+                if is_data_value([0, 'last updated'], data, datetime.datetime) and \
+                    data_value([0, 'last updated'], data, datetime.datetime).date() < self.last_updated:
                         # No updates on theTVDB
                         return {'tid': tid, 'tdate': self.last_updated, 'name': name}
 
@@ -1620,6 +1629,12 @@ class FetchData(Thread):
                     print 'No Data'
                 return None
 
+            for subset in self.data_value([ptype, 'text_replace'], list):
+                if not is_data_value(0, subset, str) or not is_data_value(1, subset, str, True):
+                    continue
+
+                page = re.sub(subset[0], subset[1], page)
+
             self.datatrees[ptype].init_data(page)
             if self.datatrees[ptype].searchtree == None:
                 self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
@@ -1644,7 +1659,7 @@ class FetchData(Thread):
                     self.current_item_count = self.datatrees[ptype].searchtree.find_data_value(self.datatrees[ptype].data_value(['data',"page-item-count"],list))
 
                 # We check on the right offset
-                if self.datatrees[ptype].is_data_value(['data',"today"],list):
+                if self.datatrees[ptype].is_data_value(['data',"today"], list):
                     cd = self.datatrees[ptype].searchtree.find_data_value(self.datatrees[ptype].data_value(['data',"today"],list))
                     if not isinstance(cd, datetime.date):
                         self.config.log([self.config.text('fetch', 27, (url[0], )),])
