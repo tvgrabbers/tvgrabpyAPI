@@ -31,9 +31,9 @@ if len(cmd) < 2:
     sys.exit(1)
 
 if len(cmd) == 2:
-    sys.exit(testjson.test_file(cmd[1]))
+    sys.exit(testjson.test_file(cmd[1], report_level = (1+2+4+8+16+128+256)))
 
-if len(cmd) == 3:
+if len(cmd) > 2:
     sys.exit(testjson.test_file(cmd[1], report_level = int(cmd[2])))
 
 else:
