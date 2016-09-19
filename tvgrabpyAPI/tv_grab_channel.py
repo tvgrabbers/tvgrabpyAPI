@@ -26,8 +26,8 @@ class Channel_Config(Thread):
         self.channel_node = None
         # Flag to stop the thread
         self.quit = False
-        self.state = None
-        self.statetext = ''
+        self.state = 0
+        self.source = None
 
         self.source_data = {}
         # Flag to indicate all data is processed
@@ -63,24 +63,14 @@ class Channel_Config(Thread):
         self.opt_dict = {}
         self.prevalidate_opt = {}
         self.opt_dict['xmltvid_alias'] = None
-        self.opt_dict['disable_source'] = []
-        self.opt_dict['disable_detail_source'] = []
-        self.opt_dict['disable_ttvdb'] = False
         self.opt_dict['prime_source'] = -1
         self.prevalidate_opt['prime_source'] = -1
         self.opt_dict['prefered_description'] = -1
-        self.opt_dict['fast'] = self.config.opt_dict['fast']
-        self.opt_dict['slowdays'] = self.config.opt_dict['slowdays']
-        self.opt_dict['compat'] = self.config.opt_dict['compat']
-        self.opt_dict['legacy_xmltvids'] = self.config.opt_dict['legacy_xmltvids']
-        self.opt_dict['max_overlap'] = self.config.opt_dict['max_overlap']
-        self.opt_dict['overlap_strategy'] = self.config.opt_dict['overlap_strategy']
-        self.opt_dict['logos'] = self.config.opt_dict['logos']
-        self.opt_dict['desc_length'] = self.config.opt_dict['desc_length']
-        self.opt_dict['use_split_episodes'] = self.config.opt_dict['use_split_episodes']
-        self.opt_dict['cattrans'] = self.config.opt_dict['cattrans']
-        self.opt_dict['mark_hd'] = self.config.opt_dict['mark_hd']
         self.opt_dict['add_hd_id'] = False
+
+        self.opt_dict['disable_source'] = []
+        self.opt_dict['disable_detail_source'] = []
+        self.opt_dict['disable_ttvdb'] = False
 
     def validate_settings(self):
 
@@ -104,59 +94,55 @@ class Channel_Config(Thread):
         if self.opt_dict['xmltvid_alias'] != None:
             self.xmltvid = self.opt_dict['xmltvid_alias']
 
-        elif (self.config.configversion < 2.208 or self.opt_dict['legacy_xmltvids'] == True):
+        elif (self.config.configversion < 2.208 or self.get_opt('legacy_xmltvids') == True):
             xmltvid = self.chanid.split('-',1)
-            self.xmltvid = xmltvid[1] if int(xmltvid[0]) < 4 else self.chanid
+            try:
+                self.xmltvid = xmltvid[1] if int(xmltvid[0]) < 4 else self.chanid
+
+            except:
+                self.xmltvid = self.chanid
 
     def run(self):
 
         if not self.active and not self.is_child:
             self.ready = True
-            self.state = None
             for index in self.config.source_order:
                 self.source_ready(index).set()
 
             return
 
         if not self.is_child:
-            self.state = None
             self.child_data.set()
 
         try:
             # Create the merge order
-            self.statetext = 'preparing'
-            self.state = 1
             self.merge_order = []
             last_merge = []
-            if (self.get_source_id(self.opt_dict['prime_source']) != '') \
-              and not (self.opt_dict['prime_source'] in self.opt_dict['disable_source']) \
-              and not (self.opt_dict['prime_source'] in self.config.opt_dict['disable_source']):
-                if self.get_source_id(self.opt_dict['prime_source']) in self.config.channelsource[self.opt_dict['prime_source']].no_genric_matching:
-                    last_merge.append(self.opt_dict['prime_source'])
+            ps = self.opt_dict['prime_source']
+            if (self.get_source_id(ps) != '') and not self.get_opt('disable_source', ps):
+                if self.get_source_id(ps) in self.config.channelsource[ps].no_genric_matching:
+                    last_merge.append(ps)
 
                 else:
-                    self.merge_order.append(self.opt_dict['prime_source'])
+                    self.merge_order.append(ps)
 
             for index in self.config.source_order:
-                if (self.get_source_id(index) != '') \
-                  and index != self.opt_dict['prime_source'] \
-                  and not (index in self.opt_dict['disable_source']) \
-                  and not (index in self.config.opt_dict['disable_source']):
+                if (self.get_source_id(index) != '') and index != ps and not self.get_opt('disable_source', index):
                     if self.get_source_id(index) in self.config.channelsource[index].no_genric_matching:
                         last_merge.append(index)
 
                     else:
                         self.merge_order.append(index)
 
-                elif index != self.opt_dict['prime_source']:
+                elif index != ps:
                     self.source_ready(index).set()
 
             self.merge_order.extend(last_merge)
             # Retrieve and merge the data from the available sources.
-            self.statetext = 'waiting for basepages'
-            self.state = 2
             for index in self.merge_order:
                 channelid = self.get_source_id(index)
+                self.source = index
+                self.state = 1
                 while not self.source_ready(index).is_set():
                     # Wait till the event is set by the source, but check every 5 seconds for an unexpected break or wether the source is still alive
                     self.source_ready(index).wait(5)
@@ -169,6 +155,8 @@ class Channel_Config(Thread):
                         self.source_ready(index).set()
                         break
 
+                self.state = 0
+                self.source = None
                 if self.source_ready(index).is_set():
                     if not is_data_value(channelid, self.config.channelsource[index].program_data, list, True):
                         # Nothing was returned. We log unless it is a virtual source
@@ -193,10 +181,10 @@ class Channel_Config(Thread):
 
             # And from any child channels
             if self.chanid in self.config.combined_channels.keys():
-                self.statetext = 'waiting for children'
-                self.state = 3
                 for c in self.config.combined_channels[self.chanid][:]:
                     if c['chanid'] in self.config.channels:
+                        self.source = c['chanid']
+                        self.state = 2
                         while not self.config.channels[c['chanid']].child_data.is_set():
                             # Wait till the event is set by the child, but check every 5 seconds for an unexpected break or wether the child is still alive
                             self.config.channels[c['chanid']].child_data.wait(5)
@@ -208,6 +196,8 @@ class Channel_Config(Thread):
                             if not self.config.channels[c['chanid']].is_alive():
                                 break
 
+                        self.state = 0
+                        self.source = None
                         if not isinstance(self.config.channels[c['chanid']].channel_node, ChannelNode) \
                           or self.config.channels[c['chanid']].channel_node.program_count() == 0:
                             self.config.log(self.config.text('fetch', 51, (self.config.channels[c['chanid']].chan_name, self.chan_name)))
@@ -221,23 +211,17 @@ class Channel_Config(Thread):
             # It's a not active child so we let the parent handle the rest
             if self.is_child and not self.active:
                 self.child_data.set()
-                self.statetext = ''
-                self.state = None
                 self.ready = True
 
             # And get the detailpages, IF there is any data
             elif not isinstance(self.channel_node, ChannelNode) or self.channel_node.program_count() == 0:
-                self.statetext = ''
-                self.state = None
                 self.detail_return.put({'source': None,'last_one': True})
 
             else:
-                self.statetext = 'processing details'
-                self.state = 4
                 self.channel_node.merge_type = 8
+                self.state = 3
                 self.get_details()
-                self.statetext = 'waiting for details'
-                self.state = 5
+                self.state = 4
                 while True:
                     if self.quit:
                         self.ready = True
@@ -257,7 +241,7 @@ class Channel_Config(Thread):
                             return
 
                         if data_value(['last_one'], fetched_detail, bool, False):
-                            if self.config.opt_dict['disable_ttvdb']:
+                            if self.get_opt('disable_ttvdb'):
                                 self.detail_data.set()
 
                             else:
@@ -277,7 +261,7 @@ class Channel_Config(Thread):
                                 self.add_tuple_values(fetched_detail['data'], pn, src_id)
                                 pn.add_detail_data(fetched_detail['data'], src_id)
                                 # and do a ttvdb check
-                                if not (self.config.opt_dict['disable_ttvdb'] or self.opt_dict['disable_ttvdb']):
+                                if not self.get_opt('disable_ttvdb'):
                                     pngenre = pn.get_value('genre').lower()
                                     pneptitle = pn.get_value('episode title')
                                     pnseason = pn.get_value('season')
@@ -310,6 +294,7 @@ class Channel_Config(Thread):
                         self.config.log([self.config.text('fetch', 52, (log_string, )), self.config.text('fetch', 53, (self.chan_name,))])
                         break
 
+                self.state = 0
                 self.channel_node.merge_type = None
 
             if self.is_child:
@@ -324,7 +309,7 @@ class Channel_Config(Thread):
             log_array.append( self.config.text('fetch',2, (self.functions.get_counter('detail', -99, self.chanid), ), type = 'stats'))
             log_array.append( self.config.text('fetch',10, (self.functions.get_counter('exclude', -99, self.chanid), ), type = 'stats'))
 
-            if self.opt_dict['fast']:
+            if self.get_opt('fast'):
                 log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
                 log_array.append('\n')
                 log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', -1, self.chanid), ), type = 'stats'))
@@ -357,7 +342,7 @@ class Channel_Config(Thread):
             # a final check on the sanity of the data
             self.channel_node.check_lineup()
 
-            if self.opt_dict['add_hd_id']:
+            if self.get_opt('add_hd_id'):
                 self.opt_dict['mark_hd'] = False
                 self.config.xml_output.create_channel_strings(self.chanid, False)
                 self.config.xml_output.create_program_string(self.chanid, False)
@@ -371,8 +356,6 @@ class Channel_Config(Thread):
             if self.config.write_info_files:
                 self.config.infofiles.write_raw_list()
 
-            self.statetext = ''
-            self.state = None
             self.ready = True
 
         except:
@@ -392,14 +375,14 @@ class Channel_Config(Thread):
         if self.channel_node.program_count() == 0:
             return
 
-        if self.opt_dict['fast']:
+        if self.get_opt('fast'):
             self.config.log(['\n', self.config.text('fetch', 41, \
-                (self.channel_node.program_count(), self.chan_name, self.xmltvid, (self.opt_dict['compat'] and self.config.compat_text or '')), type = 'report'), \
+                (self.channel_node.program_count(), self.chan_name, self.xmltvid, (self.get_opt('compat') and self.config.compat_text or '')), type = 'report'), \
                 self.config.text('fetch', 43, (self.counter, self.config.chan_count, self.config.opt_dict['days']), type = 'report')], 2)
 
         else:
             self.config.log(['\n', self.config.text('fetch', 42, \
-                (self.channel_node.program_count(), self.chan_name, self.xmltvid, (self.opt_dict['compat'] and self.config.compat_text or '')), type = 'report'), \
+                (self.channel_node.program_count(), self.chan_name, self.xmltvid, (self.get_opt('compat') and self.config.compat_text or '')), type = 'report'), \
                 self.config.text('fetch', 43, (self.counter, self.config.chan_count, self.config.opt_dict['days']), type = 'report')], 2)
 
         # randomize detail requests
@@ -422,7 +405,7 @@ class Channel_Config(Thread):
                                 (self.channel_node.get_start_stop(pn), pn.get_value('name'))
 
             # We only fetch when we are in slow mode and slowdays is not set to tight
-            no_fetch = (self.opt_dict['fast'] or pn.get_value('offset') >= (self.config.opt_dict['offset'] + self.opt_dict['slowdays']))
+            no_fetch = (self.get_opt('fast') or pn.get_value('offset') >= (self.config.opt_dict['offset'] + self.get_opt('slowdays')))
             sources = {}
             # Check the database and gather potiential detail fetches
             for src_id in self.config.detail_sources:
@@ -463,7 +446,7 @@ class Channel_Config(Thread):
                             break
 
                     else:
-                        if self.opt_dict['prefered_description'] == src_id:
+                        if self.get_opt('prefered_description') == src_id:
                             # Add it to the requests
                             sources[src_id] = detailids
 
@@ -475,7 +458,7 @@ class Channel_Config(Thread):
                     and not pn.is_set('genre'))):
                 self.functions.update_counter('exclude', -99, self.chanid)
                 # Check ttvdb
-                if not (self.config.opt_dict['disable_ttvdb'] or self.opt_dict['disable_ttvdb']):
+                if not self.get_opt('disable_ttvdb'):
                     pneptitle = pn.get_value('episode title')
                     pnseason = pn.get_value('season')
                     if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
@@ -491,7 +474,7 @@ class Channel_Config(Thread):
                     self.config.log(self.config.text('fetch', 34, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
 
                 # Check ttvdb
-                if not (self.config.opt_dict['disable_ttvdb'] or self.opt_dict['disable_ttvdb']):
+                if not self.get_opt('disable_ttvdb'):
                     pneptitle = pn.get_value('episode title')
                     pnseason = pn.get_value('season')
                     if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
@@ -517,6 +500,38 @@ class Channel_Config(Thread):
         else:
             self.detail_return.put({'source': None,'last_one': True})
 
+
+    def get_opt(self, opt, source_id = None):
+        retval = None
+        if opt in ('disable_source', 'disable_detail_source'):
+            if source_id in self.opt_dict[opt] or source_id in self.config.opt_dict[opt]:
+                return True
+
+            else:
+                return False
+
+        if opt == 'disable_ttvdb':
+            if self.config.opt_dict[opt] or self.opt_dict[opt]:
+                return True
+
+            else:
+                False
+
+        if opt in self.opt_dict.keys():
+            retval = self.opt_dict[opt]
+
+        elif opt in self.config.opt_dict.keys():
+            retval = self.config.opt_dict[opt]
+
+        if retval == None:
+            if opt == 'slowdays':
+                if self.get_opt('fast'):
+                    retval = 0
+
+                else:
+                    retval = self.config.opt_dict['days']
+
+        return retval
 
     def get_source_id(self, source):
         if source in self.source_id.keys():
@@ -562,7 +577,7 @@ class ChannelNode():
             self.tz = self.config.output_tz
             self.channel_config = channel_config
             self.chanid = channel_config.chanid
-            self.max_overlap = datetime.timedelta(minutes = self.channel_config.opt_dict['max_overlap'])
+            self.max_overlap = datetime.timedelta(minutes = self.channel_config.get_opt('max_overlap'))
             self.name = channel_config.chan_name
             self.shortname = self.name[:15] if len(self.name) > 15 else self.name
             self.current_stats = {}
@@ -1651,7 +1666,7 @@ class ChannelNode():
             else:
                 return
 
-            if self.channel_config.opt_dict['cattrans']:
+            if self.channel_config.get_opt('cattrans'):
                 cat0 = ('', '')
                 cat1 = (g.lower(), '')
                 cat2 = (g.lower(), sg.lower())
@@ -2055,7 +2070,7 @@ class ProgramNode():
                         self.tdict[key]['prime'].append(v.lower())
 
             elif key == 'description':
-                if source != None and self.channel_config.opt_dict['prefered_description'] == source and len(value) > 100:
+                if source != None and self.channel_config.get_opt('prefered_description') == source and len(value) > 100:
                     self.tdict[key]['preferred'] = True
                     self.set_source_value(key, source, value, value)
 
@@ -2624,8 +2639,8 @@ class ProgramNode():
             # Limit the length of the description
             if desc_line != '':
                 desc_line = re.sub('\n', ' ', desc_line)
-                if len(desc_line) > self.channel_config.opt_dict['desc_length']:
-                    spacepos = desc_line[0:self.channel_config.opt_dict['desc_length']-3].rfind(' ')
+                if len(desc_line) > self.channel_config.get_opt('desc_length'):
+                    spacepos = desc_line[0:self.channel_config.get_opt('desc_length')-3].rfind(' ')
                     desc_line = desc_line[0:spacepos] + '...'
 
         return desc_line.strip()
@@ -2781,10 +2796,10 @@ class XMLoutput():
 
         self.xml_channels[xmltvid] = []
         self.xml_channels[xmltvid].append(self.add_starttag('channel', 2, 'id="%s%s"' % \
-            (xmltvid, self.config.channels[chanid].opt_dict['compat'] and self.config.compat_text or '')))
+            (xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')))
         self.xml_channels[xmltvid].append(self.add_starttag('display-name', 4, 'lang="%s"' % (self.config.xml_language), \
             self.config.channels[chanid].chan_name, True))
-        if (self.config.channels[chanid].opt_dict['logos']):
+        if (self.config.channels[chanid].get_opt('logos')):
             if self.config.channels[chanid].icon_source in self.logo_provider.keys():
                 lpath = self.logo_provider[self.config.channels[chanid].icon_source]
                 lname = self.config.channels[chanid].icon
@@ -2834,7 +2849,7 @@ class XMLoutput():
             # Start/Stop
             attribs = 'start="%s" stop="%s" channel="%s%s"' % \
                 (self.format_timezone(program.start), self.format_timezone(program.stop), \
-                xmltvid, self.config.channels[chanid].opt_dict['compat'] and self.config.compat_text or '')
+                xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')
 
             #~ if 'clumpidx' in program and program['clumpidx'] != '':
                 #~ attribs += 'clumpidx="%s"' % program['clumpidx']
@@ -2885,7 +2900,7 @@ class XMLoutput():
 
             # Genre
             cat = program.get_genre()
-            if self.config.channels[chanid].opt_dict['cattrans']:
+            if self.config.channels[chanid].get_opt('cattrans'):
                 xml.append(self.add_starttag('category', 4 , '', self.xmlescape(cat), True))
 
             else:
@@ -2922,7 +2937,7 @@ class XMLoutput():
 
             # Process video/audio/teletext sections if present
             if program.get_value('widescreen') or program.get_value('blackwhite') \
-              or (program.get_value('HD') and (self.config.channels[chanid].opt_dict['mark_hd'] or add_HD == True)):
+              or (program.get_value('HD') and (self.config.channels[chanid].get_opt('mark_hd') or add_HD == True)):
                 xml.append(self.add_starttag('video', 4))
 
                 if program.get_value('widescreen'):
@@ -2931,7 +2946,7 @@ class XMLoutput():
                 if program.get_value('blackwhite'):
                     xml.append(self.add_starttag('colour', 6, '', 'no',True))
 
-                if program.get_value('HD') and (self.config.channels[chanid].opt_dict['mark_hd'] or add_HD == True):
+                if program.get_value('HD') and (self.config.channels[chanid].get_opt('mark_hd') or add_HD == True):
                     xml.append(self.add_starttag('quality', 6, '', 'HDTV',True))
 
                 xml.append(self.add_endtag('video', 4))
@@ -3035,7 +3050,7 @@ class XMLoutput():
         for channel in self.config.channels.values():
             if channel.active and channel.xmltvid in self.xml_channels:
                 xml.append(u"".join(self.xml_channels[channel.xmltvid]))
-                if channel.opt_dict['add_hd_id'] and '%s-hd' % (channel.xmltvid) in self.xml_channels:
+                if channel.get_opt('add_hd_id') and '%s-hd' % (channel.xmltvid) in self.xml_channels:
                     xml.append(u"".join(self.xml_channels['%s-hd' % channel.xmltvid]))
 
         for channel in self.config.channels.values():
@@ -3043,7 +3058,7 @@ class XMLoutput():
                 for program in self.xml_programs[channel.xmltvid]:
                     xml.append(u"".join(program))
 
-                if channel.opt_dict['add_hd_id'] and '%s-hd' % (channel.xmltvid) in self.xml_channels:
+                if channel.get_opt('add_hd_id') and '%s-hd' % (channel.xmltvid) in self.xml_channels:
                     for program in self.xml_programs['%s-hd' % channel.xmltvid]:
                         xml.append(u"".join(program))
 

@@ -10,6 +10,7 @@ import traceback, smtplib, sqlite3
 import datetime, time, calendar, pytz
 import tv_grab_channel, tv_grab_config, test_json_struct
 from threading import Thread, Lock, RLock
+from threading import enumerate as enumthreads
 from Queue import Queue, Empty
 from copy import deepcopy, copy
 from email.mime.text import MIMEText
@@ -223,6 +224,7 @@ class Logging(Thread):
         self.log_queue = Queue()
         self.log_output = None
         self.log_string = []
+        self.all_at_details = False
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -238,6 +240,8 @@ class Logging(Thread):
 
     def run(self):
         self.log_output = self.config.log_output
+        lastcheck = datetime.datetime.now()
+        checkinterfall = 60
         self.fatal_error = [self.config.text('IO', 10), \
                 '     %s\n' % (self.config.opt_dict['config_file']), \
                 '     %s\n' % (self.config.opt_dict['log_file'])]
@@ -250,6 +254,10 @@ class Logging(Thread):
                         self.send_mail(self.log_string, self.config.opt_dict['mail_log_address'])
 
                     return(0)
+
+                if (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
+                    lastcheck = datetime.datetime.now()
+                    self.check_thread_sanity()
 
                 try:
                     message = self.log_queue.get(True, 5)
@@ -363,6 +371,66 @@ class Logging(Thread):
          return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z') + ': '
 
     # end now()
+
+    def check_thread_sanity(self):
+        idle_timeout = 180
+        chan_count = {}
+        for t in range(-1, 5):
+            chan_count[t] = 0
+
+        for t in enumthreads():
+            if t.name[:8] == 'channel-':
+                state = t.state
+                chan_count[-1] += 1
+                chan_count[state] += 1
+                if state in (0, 3):
+                    continue
+
+                elif state == 1:
+                    # Waiting for a basepage
+                    s = t.source
+                    if not isinstance(s, int):
+                        continue
+
+                    sc = self.config.channelsource[s]
+                    if sc.is_alive() and sc.state < 2:
+                        continue
+
+                    t.source_data[s].set()
+
+                elif state == 2:
+                    # Waiting for a child channel
+                    s = t.source
+                    if not s in self.config.channels.keys():
+                        continue
+
+                    sc = self.config.channels[s]
+                    if sc.is_alive() and sc.state < 3:
+                        continue
+
+                    sc.child_data.set()
+
+        if not self.all_at_details and chan_count[-1] == chan_count[4]:
+            # All channels are at least waiting for details
+            self.all_at_details = True
+
+        if self.all_at_details:
+            for t in enumthreads():
+                if t.name[:7] == 'source-':
+                    waittime = None
+                    if isinstance(t.lastrequest, datetime.datetime):
+                        waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
+
+                    if waittime == None or waittime < idle_timeout:
+                        break
+
+            else:
+                # All sources are waiting more then idle_timeout
+                # So we tell all channels nothing more is coming
+                for t in enumthreads():
+                    if t.name[:8] == 'channel-':
+                        t.detail_data.set()
+    # end check_thread_sanity()
 
     def writelog(self, message, log_level = 1, log_target = 3):
         try:

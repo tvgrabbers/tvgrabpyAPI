@@ -1419,19 +1419,20 @@ class FetchData(Thread):
         # First some generic initiation that couldn't be done earlier in __init__
         detail_ids = {}
         idle_timeout = 1800
+        self.lastrequest = None
         try:
             self.init_channel_source_ids()
             # Check if the source is not deactivated and if so set them all loaded
             if self.proc_id in self.config.opt_dict['disable_source']:
-                for channelid, chanid in self.chanids.items():
-                    self.set_loaded('channel', channelid)
-
+                self.set_loaded('channel')
                 self.ready = True
 
             else:
                 # Load and proccess al the program pages
+                self.state = 1
                 self.load_pages()
 
+            self.state = 0
             if self.config.write_info_files:
                 self.config.infofiles.check_new_channels(self, self.config.source_channels)
 
@@ -1439,6 +1440,8 @@ class FetchData(Thread):
             self.config.queues['log'].put({'fatal': [self.config.text('IO', 14), \
                 traceback.format_exc(), '\n'], 'name': self.source})
 
+            self.set_loaded('channel')
+            self.state = 0
             self.ready = True
             return(98)
 
@@ -1453,6 +1456,7 @@ class FetchData(Thread):
                 rev_testlist = testlist[:]
                 rev_testlist.reverse()
                 # We process detail requests, so we loop till we are finished
+                self.state = 2
                 self.lastrequest = datetime.datetime.now()
                 while True:
                     if self.quit:
@@ -1526,8 +1530,8 @@ class FetchData(Thread):
                     parent.detail_return.put({'source': self.proc_id, 'data': detailed_program, 'counter': tdict['counter']})
                     self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
 
-            else:
-                self.ready = True
+            self.state = 0
+            self.ready = True
 
         except:
             if self.proc_id in detail_ids.keys() and 'detail_url' in detail_ids[self.proc_id].keys():
@@ -1537,6 +1541,7 @@ class FetchData(Thread):
             else:
                 self.config.queues['log'].put({'fatal': [self.config.text('IO', 16), traceback.format_exc(), '\n'], 'name': self.source})
 
+            self.state = 0
             self.ready = True
             return(98)
 
@@ -1624,9 +1629,9 @@ class FetchData(Thread):
 
                 self.datatrees[ptype] = DataTree(self, self.data_value(ptype, dict), 'always', self.proc_id)
 
-            # For the url we use the fetch timezone and not the site timezone
+            # For the url we use the fetch timezone and date, not the site timezone and page date
             self.datatrees[ptype].set_timezone(self.config.fetch_tz)
-            self.datatrees[ptype].set_current_date(self.current_ordinal + data_value('offset', pdata, int, default=0))
+            self.datatrees[ptype].set_current_date(self.current_ordinal)
             # Set the counter for the statistics and some other defaults
             if ptype in ('channels', 'base-channels'):
                 pdata['start'] = 0
@@ -1647,6 +1652,7 @@ class FetchData(Thread):
                 return
 
             if self.print_searchtree:
+                print pdata
                 print '(url, encoding, accept_header, url_data, is_json)'
                 print url
 
@@ -1797,7 +1803,7 @@ class FetchData(Thread):
             if (url_type & 3) == 1:
                 log_array =['\n', self.config.text('fetch', 1, \
                     (self.config.channels[chanid].chan_name, self.config.channels[chanid].xmltvid , \
-                    (self.config.channels[chanid].opt_dict['compat'] and self.config.compat_text or ''), self.source), type = 'report')]
+                    (self.config.channels[chanid].get_opt('compat') and self.config.compat_text or ''), self.source), type = 'report')]
 
                 if (url_type & 12) == 0:
                     log_array.append(self.config.text('fetch', 4, (channel_cnt, len(self.channels), offset, self.config.opt_dict['days']), type = 'report'))
@@ -2802,7 +2808,7 @@ class FetchData(Thread):
         if type == 'channel':
             for channelid in chanlist:
                 self.channel_loaded[channelid] = value
-                if value:
+                if value and channelid in self.all_chanids.keys():
                     for chanid in self.all_chanids[channelid]:
                         self.config.channels[chanid].source_ready(self.proc_id).set()
 

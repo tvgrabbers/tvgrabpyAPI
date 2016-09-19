@@ -672,9 +672,7 @@ class Configure:
             self.validate_option(o)
 
         # Continue validating the settings for the individual channels
-        for channel in self.channels.values():
-            channel.validate_settings()
-
+        self.validate_option('channel_settings')
         if not self.args.configure and self.configversion < float('%s.%s' % (self.api_major+2, self.api_minor)):
             # Update to the current version config
             if self.configversion == 1.0:
@@ -851,6 +849,28 @@ class Configure:
                 elif channel.get_source_id(value) != '':
                     if value not in channel.opt_dict['disable_detail_source']:
                         channel.opt_dict['disable_detail_source'].append(value)
+
+        elif option == 'channel_settings':
+            for chanid, chanlist in self.combined_channels.items():
+                if chanid in self.channels.keys() and self.channels[chanid].active:
+                    for child in chanlist:
+                        childid = child['chanid']
+                        if childid in self.virtual_sub_channels.keys():
+                            if not childid in self.channels.keys():
+                                # We start a channel thread
+                                self.channels[childid] = tv_grab_channel.Channel_Config(self, childid, unicode(childid), -1)
+
+                            for s, channelid in self.virtual_sub_channels[childid]['channelids'].items():
+                                self.channels[childid].source_id[s] = channelid
+
+                            self.process_channel_config(childid)
+                            self.channels[childid].is_child = True
+                            self.channels[childid].is_virtual_sub = True
+                            self.channels[childid].virtual_start = self.virtual_sub_channels[childid]['start']
+                            self.channels[childid].virtual_end = self.virtual_sub_channels[childid]['end']
+
+            for channel in self.channels.values():
+                channel.validate_settings()
 
         elif option == 'prime_source':
             if channel == None:
@@ -1095,37 +1115,20 @@ class Configure:
 
         elif option == 'slowdays':
             if channel == None:
-                if self.opt_dict['slowdays'] == None:
-                    self.opt_dict['slowdays'] = self.opt_dict['days']
-                    if self.opt_dict['desc_length'] == 0:
-                        # no description implies fast == True
-                        if not self.opt_dict['fast']:
-                            self.log(self.text('config', 22),1,1)
-                            self.opt_dict['fast'] = True
-
-                else:
+                if self.opt_dict['slowdays'] != None:
                     self.opt_dict['slowdays'] = min(self.opt_dict['days'], self.opt_dict['slowdays'])
                     # slowdays implies fast == False
                     if self.opt_dict['slowdays'] < self.opt_dict['days']:
                         self.opt_dict['fast']  = False
 
-            else:
-                if channel.opt_dict['slowdays'] == None:
-                    channel.opt_dict['slowdays'] = self.opt_dict['days']
-                    if channel.opt_dict['desc_length'] == 0:
-                        # no description implies fast == True
-                        if not channel.opt_dict['fast']:
-                            self.log(self.text('config', 23, (channel.chan_name, )),1,1)
-                            channel.opt_dict['fast'] = True
-
-                else:
-                    channel.opt_dict['slowdays'] = min(self.opt_dict['days'], channel.opt_dict['slowdays'])
-                    # slowdays implies fast == False
-                    if channel.opt_dict['slowdays'] < self.opt_dict['days']:
-                        channel.opt_dict['fast']  = False
+            elif channel.get_opt('slowdays') != None:
+                channel.opt_dict['slowdays'] = min(self.opt_dict['days'], channel.get_opt('slowdays'))
+                # slowdays implies fast == False
+                if channel.get_opt('slowdays') < self.opt_dict['days']:
+                    channel.opt_dict['fast']  = False
 
         elif option == 'desc_length':
-            if channel != None and channel.opt_dict['desc_length'] != self.opt_dict['desc_length']:
+            if channel != None and channel.get_opt('desc_length') != self.opt_dict['desc_length']:
                 self.log(self.text('config', 24, (channel.opt_dict['desc_length'], channel.chan_name)),1,1)
 
         elif option == 'overlap_strategy':
@@ -1133,9 +1136,8 @@ class Configure:
                 if not self.opt_dict['overlap_strategy'] in ['average', 'stop', 'start']:
                     self.opt_dict['overlap_strategy'] = 'none'
 
-            else:
-                if not channel.opt_dict['overlap_strategy'] in ['average', 'stop', 'start']:
-                    channel.opt_dict['overlap_strategy'] = 'none'
+            elif not channel.get_opt('overlap_strategy') in ['average', 'stop', 'start']:
+                channel.opt_dict['overlap_strategy'] = 'none'
 
         elif option == 'max_overlap':
             if channel == None:
@@ -1144,15 +1146,15 @@ class Configure:
                     self.opt_dict['overlap_strategy'] = 'None'
                     self.log(self.text('config', 25, (self.opt_dict['overlap_strategy'], )),1,1)
 
-            elif channel.opt_dict['max_overlap'] == 0:
+            elif channel.get_opt('max_overlap') == 0:
                 # no max_overlap implies strategie == 'None'
                 channel.opt_dict['overlap_strategy'] = 'None'
-                self.log(self.text('config', 26, (channel.chan_name, channel.opt_dict['overlap_strategy'])),1,1)
+                self.log(self.text('config', 26, (channel.chan_name, channel.get_opt('overlap_strategy'))),1,1)
 
-            elif channel.opt_dict['max_overlap'] != self.opt_dict['max_overlap']:
-                self.log(self.text('config', 27, (channel.opt_dict['max_overlap'], channel.chan_name)),1,1)
-                if channel.opt_dict['overlap_strategy'] != self.opt_dict['overlap_strategy']:
-                    self.log(self.text('config', 28, (channel.chan_name, channel.opt_dict['overlap_strategy'])),1,1)
+            elif channel.get_opt('max_overlap') != self.opt_dict['max_overlap']:
+                self.log(self.text('config', 27, (channel.get_opt('max_overlap'), channel.chan_name)),1,1)
+                if channel.get_opt('overlap_strategy') != self.opt_dict['overlap_strategy']:
+                    self.log(self.text('config', 28, (channel.chan_name, channel.get_opt('overlap_strategy'))),1,1)
 
     # end validate_option()
 
@@ -1489,9 +1491,15 @@ class Configure:
             for line in self.config_dict[2]:
                 try:
                     channel = line.split(None, 1) # split on first whitespace
-                    self.channels[unicode(channel[0]).strip()] = tv_grab_channel.Channel_Config(self, unicode(channel[0]).strip(), unicode(channel[1]).strip())
-                    self.channels[unicode(channel[0]).strip()].active = True
-                    channel_names[unicode(channel[1]).strip().lower()] = unicode(channel[0]).strip()
+                    chanid = unicode(channel[0]).strip()
+                    channame = unicode(channel[1]).strip()
+                    self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, channame)
+                    self.channels[chanid].active = True
+                    if chanid in channel_names.keys():
+                        channel_names[chanid].append(channame.lower())
+
+                    else:
+                        channel_names[chanid] = [channame.lower()]
 
                 except:
                     self.log([self.text('config', 38, (self.opt_dict['config_file'], )),'%r\n' % (line)])
@@ -1562,8 +1570,15 @@ class Configure:
                             continue
 
                         chanid = unicode(channel[2])
-                        channel_names[unicode(channel[0]).strip().lower()] = chanid
-                        self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, unicode(channel[0]).strip(), int(channel[1]))
+                        chanid = unicode(channel[2])
+                        channame = unicode(channel[0]).strip()
+                        if chanid in channel_names.keys():
+                            channel_names[chanid].append(channame.lower())
+
+                        else:
+                            channel_names[chanid] = [channame.lower()]
+
+                        self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, channame, int(channel[1]))
                         for index in range(len(channel) - 5):
                             if self.configversion < 3.0 and index in (0, 3):
                                 if index == 0:
@@ -1575,11 +1590,6 @@ class Configure:
                     # The icon defenition
                     self.channels[chanid].icon_source = int(channel[-2])
                     self.channels[chanid].icon = unicode(channel[-1]).strip()
-                    # fill in the default options
-                    for i, v in self.opt_dict.items():
-                        if i in self.channels[chanid].opt_dict.keys() and not i in ('disable_source', 'disable_detail_source'):
-                            self.channels[chanid].opt_dict[i] = v
-
                     # Set active if not remarked out
                     self.channels[chanid].active = active
                     if active:
@@ -1589,92 +1599,17 @@ class Configure:
                     self.log([self.text('config', 38, (self.opt_dict['config_file'], )),'%r\n' % (line), traceback.format_exc()])
 
             # Read the channel specific configuration
-            for section, values in self.config_dict[9].items():
-                if self.configversion == 2.1 or test_as_21:
-                    if section in old_chanids.keys():
-                        chanid = old_chanids[section]
+            if self.configversion == 2.1 or test_as_21:
+                for k, v in old_chanids.items():
+                    self.process_channel_config(v, [k])
+
+            else:
+                for chanid in self.channels.keys():
+                    if chanid in channel_names.keys():
+                        self.process_channel_config(chanid, channel_names[chanid])
 
                     else:
-                        continue
-
-                # is the name in the sectionheader a known chanid?
-                elif section in self.channels.keys():
-                    chanid = section
-
-                # or a known channelname
-                elif section in channel_names.keys():
-                    chanid = channel_names[section]
-
-                else:
-                    # unknown chanid or channelname
-                    self.log(self.text('config', 39, (section, )))
-                    continue
-
-                for line in values:
-                    try:
-                        # Strip the name from the value
-                        a = re.split('=',line)
-                        cfg_option = a[0].lower().strip()
-                        # Boolean Values
-                        if cfg_option in ('fast', 'compat', 'logos', 'cattrans', 'mark_hd', 'add_hd_id', \
-                          'disable_ttvdb', 'use_split_episodes', 'legacy_xmltvids'):
-                            if len(a) == 1:
-                                self.channels[chanid].opt_dict[cfg_option] = True
-
-                            elif a[1].lower().strip() in ('true', '1' , 'on'):
-                                self.channels[chanid].opt_dict[cfg_option] = True
-
-                            else:
-                                self.channels[chanid].opt_dict[cfg_option] = False
-
-                        elif len(a) == 2:
-                            cfg_value = a[1].lower().strip()
-                            if cfg_option == 'use_npo':
-                                if cfg_value in ('false', '0' , 'off'):
-                                    self.validate_option('disable_source', self.channels[chanid], 4)
-
-                            # String values
-                            elif cfg_option in ('xmltvid_alias', ):
-                                self.channels[chanid].opt_dict[cfg_option] = cfg_value.strip()
-
-                            # Select Values
-                            elif cfg_option == 'overlap_strategy':
-                                if cfg_value in ('average', 'stop', 'start'):
-                                    self.channels[chanid].opt_dict[cfg_option] = cfg_value
-
-                                else:
-                                    self.channels[chanid].opt_dict[cfg_option] = 'none'
-
-                            # Integer Values
-                            elif cfg_option in ('slowdays', 'max_overlap', 'desc_length'):
-                                try:
-                                    cfg_value = int(cfg_value)
-
-                                except ValueError:
-                                    if (cfg_option == 'slowdays') and (cfg_value == 'none'):
-                                        self.channels[chanid].opt_dict[cfg_option] = None
-
-                                else:
-                                    self.channels[chanid].opt_dict[cfg_option] = cfg_value
-
-                            # Source Values
-                            elif cfg_option in ('prime_source', 'prefered_description', 'disable_source', 'disable_detail_source'):
-                                try:
-                                    cfg_value = int(cfg_value)
-
-                                except ValueError:
-                                    continue
-
-                                else:
-                                    if cfg_option == 'prime_source':
-                                        # We have to validate this value after reading sourcematching.json
-                                        self.channels[chanid].prevalidate_opt[cfg_option] = cfg_value
-
-                                    else:
-                                        self.validate_option(cfg_option, self.channels[chanid], cfg_value)
-
-                    except:
-                        self.log([self.text('config', 40, (section, self.opt_dict['config_file'], )),'%r\n' % (line), traceback.format_exc()])
+                        self.process_channel_config(chanid)
 
         # an extra option for gathering extra info to better the code
         if 'write_info_files' in self.opt_dict.keys():
@@ -1690,6 +1625,90 @@ class Configure:
 
         return True
     # end read_config()
+
+    def process_channel_config(self, chanid, channames = None):
+        if chanid in self.config_dict[9].keys():
+            chan_conf = self.config_dict[9][chanid]
+
+        elif channames != None:
+            for name in channames:
+                if name in self.config_dict[9].keys():
+                    chan_conf = self.config_dict[9][name]
+                    break
+
+            else:
+                return
+
+        else:
+            return
+
+        for line in chan_conf:
+            try:
+                # Strip the name from the value
+                a = re.split('=',line)
+                cfg_option = a[0].lower().strip()
+                # Boolean Values
+                if cfg_option in ('fast', 'compat', 'logos', 'cattrans', 'mark_hd', 'add_hd_id', \
+                  'disable_ttvdb', 'use_split_episodes', 'legacy_xmltvids'):
+                    if len(a) == 1:
+                        self.channels[chanid].opt_dict[cfg_option] = True
+
+                    elif a[1].lower().strip() in ('true', '1' , 'on'):
+                        self.channels[chanid].opt_dict[cfg_option] = True
+
+                    else:
+                        self.channels[chanid].opt_dict[cfg_option] = False
+
+                elif len(a) == 2:
+                    cfg_value = a[1].lower().strip()
+                    if cfg_option == 'use_npo':
+                        if cfg_value in ('false', '0' , 'off'):
+                            self.validate_option('disable_source', self.channels[chanid], 4)
+
+                    # String values
+                    elif cfg_option in ('xmltvid_alias', ):
+                        self.channels[chanid].opt_dict[cfg_option] = cfg_value.strip()
+
+                    # Select Values
+                    elif cfg_option == 'overlap_strategy':
+                        if cfg_value in ('average', 'stop', 'start'):
+                            self.channels[chanid].opt_dict[cfg_option] = cfg_value
+
+                        else:
+                            self.channels[chanid].opt_dict[cfg_option] = 'none'
+
+                    # Integer Values
+                    elif cfg_option in ('slowdays', 'max_overlap', 'desc_length'):
+                        try:
+                            cfg_value = int(cfg_value)
+
+                        except ValueError:
+                            if (cfg_option == 'slowdays') and (cfg_value == 'none'):
+                                self.channels[chanid].opt_dict[cfg_option] = None
+
+                        else:
+                            self.channels[chanid].opt_dict[cfg_option] = cfg_value
+
+                    # Source Values
+                    elif cfg_option in ('prime_source', 'prefered_description', 'disable_source', 'disable_detail_source'):
+                        try:
+                            cfg_value = int(cfg_value)
+
+                        except ValueError:
+                            continue
+
+                        else:
+                            if cfg_option == 'prime_source':
+                                # We have to validate this value after reading sourcematching.json
+                                self.channels[chanid].prevalidate_opt[cfg_option] = cfg_value
+
+                            else:
+                                self.validate_option(cfg_option, self.channels[chanid], cfg_value)
+
+            except:
+                self.log([self.text('config', 40, (section, self.opt_dict['config_file'], )),'%r\n' % (line), traceback.format_exc()])
+
+    # end process_channel_config()
 
     def read_defaults_list(self):
         """
@@ -2319,7 +2338,7 @@ class Configure:
                 channel.source_id[index] = ''
 
             # These groupids have changed, so to be sure
-            if self.opt_dict['always_use_json']:
+            if self.opt_dict['always_use_json'] and channel.group != -1:
                 channel.group = 99
 
             # And all not custom set icons
@@ -2525,8 +2544,8 @@ class Configure:
                 continue
 
             log_array.append(u'[%s (Chanid=%s)]\n' % (chan_def.chan_name, chan_def.chanid))
-            if chan_def.opt_dict['xmltvid_alias'] != None:
-                log_array.append(u'  xmltvID_alias = %s\n' % (chan_def.opt_dict['xmltvid_alias']))
+            if chan_def.get_opt('xmltvid_alias') != None:
+                log_array.append(u'  xmltvID_alias = %s\n' % (chan_def.get_opt('xmltvid_alias')))
 
             src_id = chan_def.opt_dict['prime_source']
             log_array.append(u'  prime_source = %s (%s)\n' % (src_id, self.channelsource[src_id].source))
@@ -2550,19 +2569,19 @@ class Configure:
                 if chan_def.get_source_id(src_id) != '':
                     log_array.append(u'  prefered_description = %s (%s)\n' % (src_id, self.channelsource[src_id].source))
 
-            if chan_def.opt_dict['add_hd_id']:
+            if chan_def.get_opt('add_hd_id'):
                 log_array.append(u'  add_hd_id = True\n')
 
-            elif chan_def.opt_dict['mark_hd']:
+            elif chan_def.get_opt('mark_hd'):
                 log_array.append(u'  mark_hd = True\n')
 
-            if chan_def.opt_dict['slowdays'] != self.opt_dict['slowdays'] and chan_def.opt_dict['slowdays'] != None:
-                log_array.append(u'  slowdays = %s' % (chan_def.opt_dict['slowdays']))
+            if chan_def.get_opt('slowdays') != self.opt_dict['slowdays'] and chan_def.get_opt('slowdays') != None:
+                log_array.append(u'  slowdays = %s' % (chan_def.get_opt('slowdays')))
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
               'logos', 'desc_length', 'cattrans', 'disable_ttvdb', 'use_split_episodes'):
-                if chan_def.opt_dict[val] != self.opt_dict[val]:
-                    log_array.append(u'  %s = %s\n' % (val, chan_def.opt_dict[val]))
+                if chan_def.get_opt(val) != self.opt_dict[val]:
+                    log_array.append(u'  %s = %s\n' % (val, chan_def.get_opt(val)))
 
         log_array.append(u' \n')
         self.log(log_array, 1, 2)
@@ -3033,7 +3052,7 @@ class Configure:
 
                 f.write(u'prefered_description = %s\n' % ( opt_val))
 
-            if chan_def.opt_dict['add_hd_id']:
+            if chan_def.get_opt('add_hd_id'):
                 if not chan_name_written:
                     f.write(u'\n')
                     f.write(u'# %s\n' % (chan_def.chan_name))
@@ -3042,14 +3061,14 @@ class Configure:
 
                 f.write(u'add_hd_id = True\n')
 
-            if chan_def.opt_dict['slowdays'] != self.opt_dict['slowdays'] and chan_def.opt_dict['slowdays'] != None:
+            if chan_def.get_opt('slowdays') != self.opt_dict['slowdays'] and chan_def.get_opt('slowdays') != None:
                 if not chan_name_written:
                     f.write(u'\n')
                     f.write(u'# %s\n' % (chan_def.chan_name))
                     f.write(u'[Channel %s]\n' % (chan_def.chanid))
                     chan_name_written = True
 
-                f.write(u'slowdays = %s\n' % (chan_def.opt_dict['slowdays']))
+                f.write(u'slowdays = %s\n' % (chan_def.get_opt('slowdays')))
 
             if self.opt_dict['disable_ttvdb'] == False and chan_def.opt_dict['disable_ttvdb'] == True:
                 if not chan_name_written:
@@ -3062,14 +3081,14 @@ class Configure:
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
               'logos', 'desc_length', 'cattrans', 'mark_hd', 'use_split_episodes'):
-                if chan_def.opt_dict[val] != self.opt_dict[val]:
+                if chan_def.get_opt(val) != self.opt_dict[val]:
                     if not chan_name_written:
                         f.write(u'\n')
                         f.write(u'# %s\n' % (chan_def.chan_name))
                         f.write(u'[Channel %s]\n' % (chan_def.chanid))
                         chan_name_written = True
 
-                    f.write(u'%s = %s\n' % (val, chan_def.opt_dict[val]))
+                    f.write(u'%s = %s\n' % (val, chan_def.get_opt(val)))
 
         f.close()
         return True
