@@ -20,7 +20,7 @@ class Channel_Config(Thread):
     Class that holds the Channel definitions and manages the data retrieval and processing
     """
     def __init__(self, config, chanid = 0, name = '', group = 99):
-        Thread.__init__(self)
+        Thread.__init__(self, name = ('channel-%s'% name).encode('utf-8', 'replace'))
         self.config = config
         self.functions = self.config.fetch_func
         self.channel_node = None
@@ -156,6 +156,7 @@ class Channel_Config(Thread):
             self.statetext = 'waiting for basepages'
             self.state = 2
             for index in self.merge_order:
+                channelid = self.get_source_id(index)
                 while not self.source_ready(index).is_set():
                     # Wait till the event is set by the source, but check every 5 seconds for an unexpected break or wether the source is still alive
                     self.source_ready(index).wait(5)
@@ -169,27 +170,26 @@ class Channel_Config(Thread):
                         break
 
                 if self.source_ready(index).is_set():
-                    if not self.chanid in self.config.channelsource[index].program_data.keys() \
-                      or len(self.config.channelsource[index].program_data[self.chanid]) == 0:
+                    if not is_data_value(channelid, self.config.channelsource[index].program_data, list, True):
                         # Nothing was returned. We log unless it is a virtual source
                         if not self.config.channelsource[index].is_virtual:
                             self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_name)))
 
-                    elif self.channel_node == None:
-                        # This is the first source with data, so we just take in the data creating the channel Node
-                        for p in self.config.channelsource[index].program_data[self.chanid][:]:
-                            self.add_tuple_values(p)
+                        continue
 
-                        with self.config.channelsource[index].source_lock:
-                            self.channel_node = ChannelNode(self.config, self, self.config.channelsource[index].program_data[self.chanid][:], index)
+                    with self.config.channelsource[index].source_lock:
+                        programs = deepcopy(self.config.channelsource[index].program_data[channelid])
+
+                    for p in programs[:]:
+                        self.add_tuple_values(p)
+
+                    if self.channel_node == None:
+                        # This is the first source with data, so we just take in the data creating the channel Node
+                        self.channel_node = ChannelNode(self.config, self, programs, index)
 
                     else:
                         # There is already data, so we merge the incomming data into that
-                        for p in self.config.channelsource[index].program_data[self.chanid][:]:
-                            self.add_tuple_values(p)
-
-                        with self.config.channelsource[index].source_lock:
-                            self.channel_node.merge_source(self.config.channelsource[index].program_data[self.chanid][:], index)
+                        self.channel_node.merge_source(programs, index)
 
             # And from any child channels
             if self.chanid in self.config.combined_channels.keys():
@@ -924,11 +924,11 @@ class ChannelNode():
                 else:
                     # Unmatched
                     unmatched.append(pp)
-                    if self.config.write_info_files:
-                        self.config.infofiles.write_raw_string('%s, %s: %s - %s' % \
-                            (source, self.chanid,
-                            self.config.in_output_tz(pp['start-time']).strftime('%d %b %H:%M'),
-                            self.config.in_output_tz(pp['stop-time']).strftime('%d %b %H:%M')))
+                    #~ if self.config.write_info_files:
+                        #~ self.config.infofiles.write_raw_string('%s, %s: %s - %s' % \
+                            #~ (source, self.chanid,
+                            #~ self.config.in_output_tz(pp['start-time']).strftime('%d %b %H:%M'),
+                            #~ self.config.in_output_tz(pp['stop-time']).strftime('%d %b %H:%M')))
 
         #Is it a valid source or does It look like a a channel merge
         if isinstance(programs, ChannelNode):

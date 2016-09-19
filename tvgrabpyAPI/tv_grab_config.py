@@ -672,8 +672,8 @@ class Configure:
             self.validate_option(o)
 
         # Continue validating the settings for the individual channels
-        for chanid in self.channels.keys():
-            self.channels[chanid].validate_settings()
+        for channel in self.channels.values():
+            channel.validate_settings()
 
         if not self.args.configure and self.configversion < float('%s.%s' % (self.api_major+2, self.api_minor)):
             # Update to the current version config
@@ -1857,6 +1857,21 @@ class Configure:
 
             return get_int_keys( githubdata[gvar], intlevels)
 
+        def get_time(tvar, default = 0):
+            try:
+                st = tvar.split(':')
+                self.time = datetime.time(int(st[0]), int(st[1]), tzinfo=self.combined_channels_tz)
+                return True
+
+            except:
+                if default == 0:
+                    self.time = datetime.time(0, 0, tzinfo=self.combined_channels_tz)
+
+                elif default == 24:
+                    self.time = datetime.time(23, 59, 59, 999999, tzinfo=self.combined_channels_tz)
+
+                return False
+
         def log_failure():
             self.log([self.text('config', 43), traceback.format_exc()], 0)
             if configuring:
@@ -2095,6 +2110,36 @@ class Configure:
         except:
             self.combined_channels_tz = pytz.utc
 
+        virtual_sub_channels = gitdata_dict("virtual-sub-channels")
+        self.virtual_sub_channels = {}
+        for chanid, chandef in virtual_sub_channels.items():
+            self.virtual_sub_channels[chanid] = {}
+            if 'start' in chandef:
+                if not get_time(chandef['start'], 0):
+                    self.log(self.text('config', 47, (chanid)))
+
+                self.virtual_sub_channels[chanid]['start'] = self.time
+
+            else:
+                self.virtual_sub_channels[chanid]['start'] = datetime.time(0, 0, tzinfo=CET_CEST)
+
+            if 'end' in chandef:
+                if not get_time(chandef['end'], 24):
+                    self.log(self.text('config', 48, (chanid)))
+
+                self.virtual_sub_channels[chanid]['end'] = self.time
+
+            else:
+                self.virtual_sub_channels[chanid]['end'] = datetime.time(23, 59, 59, 999999, tzinfo=CET_CEST)
+
+            self.virtual_sub_channels[chanid]['channelids'] = {}
+            for s in xml_output.source_order:
+                if unicode(s) in chandef.keys():
+                    self.virtual_sub_channels[chanid]['channelids'][s] = chandef[unicode(s)]
+
+                else:
+                    self.virtual_sub_channels[chanid]['channelids'][s] = ''
+
         combined_channels = gitdata_dict("combined_channels")
         self.combined_channels = {}
         for chanid, chanlist in combined_channels.items():
@@ -2110,23 +2155,19 @@ class Configure:
             for child in chanlist:
                 if isinstance(child, dict) and 'chanid' in child:
                     if 'start' in child:
-                        try:
-                            st = child['start'].split(':')
-                            child['start'] = datetime.time(int(st[0]), int(st[1]))
-                        except:
+                        if not get_time(child['start'], 0):
                             self.log(self.text('config', 45, (child['chanid'], chanid)))
-                            del child['start']
+
+                        child['start'] = self.time
 
                     if 'end' in child:
-                        try:
-                            st = child['end'].split(':')
-                            child['end'] = datetime.time(int(st[0]), int(st[1]))
-                        except:
+                        if not get_time(child['end'], 24):
                             self.log(self.text('config', 46, (child['chanid'], chanid)))
-                            del child['end']
+
+                        child['end'] = self.time
 
                     if not 'end' in child and ('start' in child or with_timings):
-                        child['end'] = datetime.time(23, 59)
+                        child['end'] = datetime.time(23, 59, 59, 999999)
 
                     if not 'start' in child and ('end' in child or with_timings):
                         child['start'] = datetime.time(0, 0)

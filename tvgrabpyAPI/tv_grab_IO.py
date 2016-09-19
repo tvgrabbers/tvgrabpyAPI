@@ -216,7 +216,7 @@ class Logging(Thread):
     Before the fle to log to is known
     """
     def __init__(self, config):
-        Thread.__init__(self)
+        Thread.__init__(self, name = 'logging')
         self.quit = False
         self.config = config
         self.functions = Functions(config)
@@ -456,7 +456,7 @@ class ProgramCache(Thread):
     (expensive) page fetch.
     """
     def __init__(self, config, filename=None):
-        Thread.__init__(self)
+        Thread.__init__(self, name = 'caching')
         """
         Create a new ProgramCache object, optionally from file
         """
@@ -2189,6 +2189,7 @@ class InfoFiles():
             with self.info_lock:
                 self.raw_string = unicode(self.raw_string + string)
                 self.raw_output.write(self.raw_string + u'\n')
+                self.raw_output.flush()
                 self.raw_string = ''
 
     def addto_raw_list(self, raw_data = None):
@@ -2219,6 +2220,7 @@ class InfoFiles():
 
                 self.raw_output.write(i + u'\n')
 
+            self.raw_output.flush()
             self.raw_list = []
             self.raw_string = ''
 
