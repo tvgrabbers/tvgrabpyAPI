@@ -2935,6 +2935,15 @@ class XMLoutput():
 
                     xml.append(self.add_starttag('episode-num', 4, 'system="xmltv_ns"', text,True))
 
+            if program.is_set('ttvdbid'):
+                xml.append(self.add_starttag('episode-num', 4, 'system="thetvdb.com"', 'series/%s' % program.get_value('ttvdbid'),True))
+
+            if program.is_set('tmdbid'):
+                xml.append(self.add_starttag('episode-num', 4, 'system="themoviedb.org"', 'movie/%s' % program.get_value('tmdbid'),True))
+
+            if program.is_set('programid'):
+                xml.append(self.add_starttag('episode-num', 4, 'system="dd_progid"', program.get_value('programid'),True))
+
             # Process video/audio/teletext sections if present
             if program.get_value('widescreen') or program.get_value('blackwhite') \
               or (program.get_value('HD') and (self.config.channels[chanid].get_opt('mark_hd') or add_HD == True)):

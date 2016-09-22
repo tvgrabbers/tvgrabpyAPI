@@ -1121,11 +1121,12 @@ class Configure:
                     if self.opt_dict['slowdays'] < self.opt_dict['days']:
                         self.opt_dict['fast']  = False
 
-            elif channel.get_opt('slowdays') != None:
-                channel.opt_dict['slowdays'] = min(self.opt_dict['days'], channel.get_opt('slowdays'))
-                # slowdays implies fast == False
-                if channel.get_opt('slowdays') < self.opt_dict['days']:
-                    channel.opt_dict['fast']  = False
+            elif 'slowdays' in channel.opt_dict.keys():
+                if channel.get_opt('slowdays') != None:
+                    channel.opt_dict['slowdays'] = min(self.opt_dict['days'], channel.get_opt('slowdays'))
+                    # slowdays implies fast == False
+                    if channel.get_opt('slowdays') < self.opt_dict['days']:
+                        channel.opt_dict['fast']  = False
 
         elif option == 'desc_length':
             if channel != None and channel.get_opt('desc_length') != self.opt_dict['desc_length']:
@@ -2575,7 +2576,7 @@ class Configure:
             elif chan_def.get_opt('mark_hd'):
                 log_array.append(u'  mark_hd = True\n')
 
-            if chan_def.get_opt('slowdays') != self.opt_dict['slowdays'] and chan_def.get_opt('slowdays') != None:
+            if 'slowdays' in chan_def.opt_dict.keys() and chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
                 log_array.append(u'  slowdays = %s' % (chan_def.get_opt('slowdays')))
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
@@ -3061,7 +3062,7 @@ class Configure:
 
                 f.write(u'add_hd_id = True\n')
 
-            if chan_def.get_opt('slowdays') != self.opt_dict['slowdays'] and chan_def.get_opt('slowdays') != None:
+            if 'slowdays' in chan_def.opt_dict.keys() and chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
                 if not chan_name_written:
                     f.write(u'\n')
                     f.write(u'# %s\n' % (chan_def.chan_name))
