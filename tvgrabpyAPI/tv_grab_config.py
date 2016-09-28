@@ -123,8 +123,8 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 2
-api_patchdate = u'2016020160820'
+api_patch = 3
+api_patchdate = u'2016020160927'
 api_alfa = False
 api_beta = True
 
@@ -866,8 +866,14 @@ class Configure:
                             self.process_channel_config(childid)
                             self.channels[childid].is_child = True
                             self.channels[childid].is_virtual_sub = True
-                            self.channels[childid].virtual_start = self.virtual_sub_channels[childid]['start']
-                            self.channels[childid].virtual_end = self.virtual_sub_channels[childid]['end']
+                            date_now = self.in_fetch_tz(datetime.datetime.now(pytz.utc)).toordinal()
+                            start_date = date_now + self.opt_dict['offset']
+                            self.channels[childid].virtual_end = self.fetch_func.merge_date_time(start_date, self.virtual_sub_channels[childid]['end'], self.combined_channels_tz)
+                            if self.virtual_sub_channels[childid]['start'] < self.virtual_sub_channels[childid]['end']:
+                                self.channels[childid].virtual_start = self.fetch_func.merge_date_time(start_date, self.virtual_sub_channels[childid]['start'], self.combined_channels_tz)
+
+                            else:
+                                self.channels[childid].virtual_start = self.fetch_func.merge_date_time(start_date - 1, self.virtual_sub_channels[childid]['start'], self.combined_channels_tz)
 
             for channel in self.channels.values():
                 channel.validate_settings()
@@ -1880,15 +1886,15 @@ class Configure:
         def get_time(tvar, default = 0):
             try:
                 st = tvar.split(':')
-                self.time = datetime.time(int(st[0]), int(st[1]), tzinfo=self.combined_channels_tz)
+                self.time = datetime.time(int(st[0]), int(st[1]))
                 return True
 
             except:
                 if default == 0:
-                    self.time = datetime.time(0, 0, tzinfo=self.combined_channels_tz)
+                    self.time = datetime.time(0, 0)
 
                 elif default == 24:
-                    self.time = datetime.time(23, 59, 59, 999999, tzinfo=self.combined_channels_tz)
+                    self.time = datetime.time(23, 59, 59, 999999)
 
                 return False
 
@@ -2153,7 +2159,7 @@ class Configure:
                 self.virtual_sub_channels[chanid]['end'] = datetime.time(23, 59, 59, 999999, tzinfo=CET_CEST)
 
             self.virtual_sub_channels[chanid]['channelids'] = {}
-            for s in xml_output.source_order:
+            for s in self.source_order:
                 if unicode(s) in chandef.keys():
                     self.virtual_sub_channels[chanid]['channelids'][s] = chandef[unicode(s)]
 
@@ -2961,6 +2967,9 @@ class Configure:
                 chan_list[unicode(g)] =[]
 
             for chanid, channel in self.channels.items():
+                if channel.group == -1:
+                    continue
+
                 grp = u'0' if self.args.group_active_channels and channel.active else unicode(channel.group)
                 chan_list[grp].append(get_channel_string(chanid))
 

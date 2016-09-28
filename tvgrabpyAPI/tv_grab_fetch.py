@@ -321,8 +321,7 @@ class FetchURL(Thread):
         the specified number of timeout seconds.
         """
         try:
-            url_request = requests.get(self.url, headers = self.txtheaders, params = self.txtdata, timeout=self.config.opt_dict['global_timeout']/2)
-            self.raw = url_request.content
+            url_request = requests.get(self.url, headers = self.txtheaders, params = self.txtdata, timeout=self.config.opt_dict['global_timeout']/2, stream=True)
             encoding = self.find_html_encoding()
             if encoding != None:
                 url_request.encoding = encoding
@@ -330,6 +329,7 @@ class FetchURL(Thread):
             elif self.encoding != None:
                 url_request.encoding = self.encoding
 
+            self.raw = url_request.content
             self.url_text = url_request.text
 
             if 'content-type' in url_request.headers and 'json' in url_request.headers['content-type'] or self.is_json:
@@ -562,6 +562,9 @@ class DataTree(DataTreeShell):
 
                         for cn in cast:
                             cn = cn.split('(')
+                            if len(cn[0].strip().split(' ')) > 4:
+                                continue
+
                             if len(cn) > 1:
                                 add_person(role, cn[0].strip(), cn[1].split(')')[0].strip())
 
@@ -1065,7 +1068,8 @@ class theTVDB_v1(Thread):
                 if is_data_value(0, r, dict):
                     rdata = r[0]
 
-            return {'season': data_value('sid', rdata, int, 0),
+            return {'ttvdbid': tid,
+                    'season': data_value('sid', rdata, int, 0),
                     'episode': data_value('eid', rdata, int, 0),
                     'airdate': data_value('airdate', rdata, datetime.date, None),
                     'episode title': data_value('episode title', rdata, str),
@@ -1577,9 +1581,10 @@ class FetchData(Thread):
                     # Then see if any of the childs has a sourceid for this source and does not have this source disabled
                     for c in self.config.combined_channels[chanid]:
                         if c['chanid'] in self.config.channels.keys():
-                            vchannel = config.channels[c['chanid']]
+                            vchannel = self.config.channels[c['chanid']]
                             if vchannel.get_source_id(self.proc_id) != '':
                                 channelid = vchannel.get_source_id(self.proc_id)
+                                self.groupitems[channelid] = 0
                                 self.program_data[channelid] = []
                                 # Unless it is in empty channels we add and mark it as a child else set it ready
                                 if channelid in self.config.channelsource[self.proc_id].empty_channels or self.proc_id in vchannel.opt_dict['disable_source']:
@@ -1600,7 +1605,7 @@ class FetchData(Thread):
 
             else:
                 for chanid in chanidlist:
-                    if not config.channels[chanid].is_virtual_sub:
+                    if not self.config.channels[chanid].is_virtual_sub:
                         self.chanids[channelid] = chanid
                         break
 
@@ -1699,7 +1704,7 @@ class FetchData(Thread):
                     cd = self.datatrees[ptype].searchtree.find_data_value(self.datatrees[ptype].data_value(['data',"today"],list))
                     if not isinstance(cd, datetime.date):
                         self.config.log([self.config.text('fetch', 27, (url[0], )),])
-                        #~ return None
+                        return None
 
                     elif self.night_date_switch > 0 and self.current_fetchdate.hour < self.night_date_switch and (self.current_ordinal - cd.toordinal()) == 1:
                         # This page switches date at a later time so we allow
@@ -1768,7 +1773,10 @@ class FetchData(Thread):
                 return
 
             #extract the data
-            channel_list = self.get_page_data(ptype)
+            for retry in (0, 1):
+                channel_list = self.get_page_data(ptype)
+                if channel_list != None:
+                    break
 
         else:
             # The list is extracted from a base page
@@ -1787,8 +1795,6 @@ class FetchData(Thread):
                         channel['channelid'] = self.alt_channels[channelid][0]
                         channel['name'] = self.alt_channels[channelid][1]
                         channelid = unicode(channel['channelid'])
-                    if channelid in self.empty_channels:
-                        continue
 
                     self.all_channels[channelid] = channel
 
@@ -2083,14 +2089,17 @@ class FetchData(Thread):
                                 repeat+= 1
                                 for g in group[:]:
                                     gdict = g.copy()
-                                    gdict['prog_ID'] = ''
-                                    gdict['rerun'] = True
                                     gdict['start-time'] += repeat*group_duur
-                                    gdict['stop-time'] += repeat*group_duur
                                     if gdict['start-time'] < group_eind:
+                                        gdict['stop-time'] += repeat*group_duur
                                         if gdict['stop-time'] > group_eind:
                                             gdict['stop-time'] = group_eind
 
+                                        gdict['length'] = gdict['stop-time'] - gdict['start-time']
+                                        gdict['offset'] = self.functions.get_offset(gdict['start-time'])
+                                        gdict['scandate'] = self.functions.get_fetchdate(gdict['start-time'])
+                                        gdict['prog_ID'] = ''
+                                        gdict['rerun'] = True
                                         good_programs.append(gdict)
 
                                     else:

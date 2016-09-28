@@ -46,6 +46,9 @@ class Channel_Config(Thread):
 
         self.active = False
         self.is_child = False
+        self.is_virtual_sub = False
+        self.virtual_start = None
+        self.virtual_end = None
         self.child_programs = []
         self.counter = 0
         self.chanid = chanid
@@ -166,7 +169,31 @@ class Channel_Config(Thread):
                         continue
 
                     with self.config.channelsource[index].source_lock:
-                        programs = deepcopy(self.config.channelsource[index].program_data[channelid])
+                        if self.is_virtual_sub and isinstance(self.virtual_start, datetime.time) and isinstance(self.virtual_end, datetime.time):
+                            programs = []
+                            for tdict in self.config.channelsource[index].program_data[channelid][:]:
+                                pstart = copy(tdict['start-time'])
+                                pstop = copy(tdict['stop-time'])
+                                for i in range(15):
+                                    td = datetime.timedelta(days = 1)
+                                    if pstart > self.virtual_end + td:
+                                        continue
+
+                                    if pstop < self.virtual_start + td:
+                                        break
+
+                                    p = deepcopy(tdict)
+                                    if pstart < self.virtual_start + td and pstop >= self.virtual_start + td:
+                                        p['start-time'] = self.virtual_start + td
+
+                                    if pstart <= self.virtual_end + td and pstop > self.virtual_end + td:
+                                        p['stop-time'] = self.virtual_end + td
+
+                                    programs.append(p)
+                                    break
+
+                        else:
+                            programs = deepcopy(self.config.channelsource[index].program_data[channelid])
 
                     for p in programs[:]:
                         self.add_tuple_values(p)
@@ -340,7 +367,7 @@ class Channel_Config(Thread):
                 return
 
             # a final check on the sanity of the data
-            self.channel_node.check_lineup()
+            self.channel_node.check_lineup(self.get_opt('overlap_strategy'))
 
             if self.get_opt('add_hd_id'):
                 self.opt_dict['mark_hd'] = False
@@ -605,8 +632,8 @@ class ChannelNode():
                 date_now = self.config.in_fetch_tz(datetime.datetime.now(pytz.utc)).toordinal()
                 start_date = date_now + self.config.opt_dict['offset']
                 start_time = self.config.fetch_func.merge_date_time(start_date, datetime.time(0, 0), self.config.combined_channels_tz)
-                end_date = start_date + self.config.opt_dict['days']
-                end_time = self.config.fetch_func.merge_date_time(end_date, datetime.time(0, 0), self.config.combined_channels_tz)
+                stop_date = start_date + self.config.opt_dict['days']
+                stop_time = self.config.fetch_func.merge_date_time(stop_date, datetime.time(0, 0), self.config.combined_channels_tz)
                 clist = self.config.combined_channels[self.chanid]
                 if 'start' in clist[0]:
                     # They have time restrictions
@@ -621,7 +648,7 @@ class ChannelNode():
                     else:
                         last_date = {'start': start_time, 'stop': None, 'chanid': None, 'slots': []}
 
-                    for offset in range(start_date, end_date):
+                    for offset in range(start_date, stop_date):
                         for item in clist:
                             cstart = self.config.fetch_func.merge_date_time(offset, item['start'], self.config.combined_channels_tz)
                             if item['end'] > item['start']:
@@ -640,9 +667,9 @@ class ChannelNode():
                             if 'slots' in item:
                                 last_date['slots'] = item['slots']
 
-                    if last_date['stop'] > end_time:
+                    if last_date['stop'] > stop_time:
                         last_date['real-stop'] = last_date['stop']
-                        last_date['stop'] = end_time
+                        last_date['stop'] = stop_time
 
                     self.child_times.append(last_date)
 
@@ -1341,7 +1368,8 @@ class ChannelNode():
                     if gap.abs_length > self.max_overlap:
                         continue
 
-                     # stop-time of previous program wins
+                    self.config.log('\n', self.config.text('merge', 1, (gap.length.total_seconds() / 60, gap.start.strftime('%d %b %H:%M'), self.name)).encode('utf-8', 'replace'), 4, 3)
+                    # stop-time of previous program wins
                     if overlap_strategy == 'stop':
                         gap.next.adjust_start(gap.start)
 
@@ -1351,8 +1379,9 @@ class ChannelNode():
 
                     # average the difference
                     elif overlap_strategy == 'average':
-                        gap.next.adjust_start(gap.start + (gap.length // 2))
-                        gap.previous.adjust_stop(gap.start + (gap.length // 2))
+                        ntime = (gap.start + (gap.length // 2)).replace(second = 0, microsecond = 0)
+                        gap.next.adjust_start(ntime)
+                        gap.previous.adjust_stop(ntime)
 
                     self.remove_gap(gap)
 
@@ -1391,7 +1420,7 @@ class ChannelNode():
                 elif adjust_overlap == 'start':
                     node2.adjust_start(node1.stop)
 
-            if abs(node2.start - node1.stop) > self.max_overlap:
+            if abs(node2.start - node1.stop) > datetime.timedelta(seconds = 30):
                 gap = GapNode(self, node1, node2)
                 return gap
 
@@ -1832,44 +1861,8 @@ class ProgramNode():
                 self.match_name = re.sub('[-,. ]', '', self.config.fetch_func.remove_accents(data['name']).lower()).strip()
 
             else:
-                # Check if the new source is longer and if so extend over any gap
-                start_diff = (self.start - data['start-time'])
-                if start_diff.total_seconds() > 0:
-                    if self.previous_gap != None and not self.previous_gap.is_overlap:
-                        if data['start-time'] <= self.previous_gap.start:
-                            # We add the gap to the program
-                            self.adjust_start(self.previous_gap.start.replace(second = 0, microsecond = 0))
-                            self.channode.remove_gap(self.previous_gap)
+                self.check_start_stop(data['start-time'], data_value('stop-time', data, datetime.datetime))
 
-                        else:
-                            # We reduce the gap
-                            self.adjust_start(data['start-time'].replace(second = 0, microsecond = 0))
-                            self.previous_gap.adjust_stop(self.start)
-
-                    elif self.previous == None and start_diff < self.channode.max_overlap:
-                        # It's the first program
-                        self.adjust_start(data['start-time'].replace(second = 0, microsecond = 0))
-
-                if 'stop-time' in data and isinstance(data['stop-time'], datetime.datetime):
-                    stop_diff = (data['stop-time'] - self.stop)
-                    if stop_diff.total_seconds() > 0:
-                        if self.next_gap != None and not self.next_gap.is_overlap:
-                            if data['stop-time'] >= self.next_gap.stop:
-                                # We add the gap to the program
-                                self.adjust_stop(self.next_gap.stop.replace(second = 0, microsecond = 0))
-                                self.channode.remove_gap(self.next_gap)
-
-                            else:
-                                # We reduce the gap
-                                self.adjust_stop(data['stop-time'].replace(second = 0, microsecond = 0))
-                                self.next_gap.adjust_start(self.stop)
-
-                        elif self.next == None and stop_diff < self.channode.max_overlap:
-                            # It's the last program
-                            self.adjust_stop(data['stop-time'].replace(second = 0, microsecond = 0))
-
-
-            self.length = self.stop - self.start
             # Check for allowed key values
             for k, v in data.items():
                 if k in ('credits', 'video'):
@@ -1894,11 +1887,11 @@ class ProgramNode():
                     self.stop = pnode.stop
                     self.length = self.stop - self.start
 
-                elif 'stop-time' in pnode.tdict.keys() and isinstance(pnode.tdict['stop-time']['prime'], datetime.datetime):
+                elif is_data_value(['stop-time', 'prime'], pnode.tdict, datetime.datetime):
                     self.stop = pnode.tdict['stop-time']['prime'].replace(second = 0, microsecond = 0)
                     self.length = self.stop - self.start
 
-                elif 'length'  in  pnode.tdict.keys() and isinstance(pnode.tdict['length']['prime'], datetime.timedelta):
+                elif is_data_value(['length', 'prime'], pnode.tdict, datetime.datetime):
                     self.length = pnode.tdict['length']['prime']
                     self.stop = (self.start + self.length).replace(second = 0, microsecond = 0)
 
@@ -1909,42 +1902,8 @@ class ProgramNode():
                 self.match_name = pnode.match_name
 
             else:
-                # Check if the new node is longer and if so extend over any gap
-                start_diff = (self.start - pnode.start)
-                if start_diff.total_seconds() > 0:
-                    if self.previous_gap != None and not self.previous_gap.is_overlap:
-                        if pnode.start <= self.previous_gap.start:
-                            # We add the gap to the program
-                            self.adjust_start(self.previous_gap.start.replace(second = 0, microsecond = 0))
-                            self.channode.remove_gap(self.previous_gap)
+                self.check_start_stop(pnode.start, pnode.stop)
 
-                        else:
-                            # We reduce the gap
-                            self.adjust_start(pnode.start.replace(second = 0, microsecond = 0))
-                            self.previous_gap.adjust_stop(self.start)
-
-                    elif self.previous == None and start_diff < self.channode.max_overlap:
-                        # It's the first program
-                        self.adjust_start(pnode.start.replace(second = 0, microsecond = 0))
-
-                stop_diff = (pnode.stop - self.stop)
-                if stop_diff.total_seconds() > 0:
-                    if self.next_gap != None and not self.next_gap.is_overlap:
-                        if pnode.stop >= self.next_gap.stop:
-                            # We add the gap to the program
-                            self.adjust_stop(self.next_gap.stop.replace(second = 0, microsecond = 0))
-                            self.channode.remove_gap(self.next_gap)
-
-                        else:
-                            # We reduce the gap
-                            self.adjust_stop(pnode.stop.replace(second = 0, microsecond = 0))
-                            self.next_gap.adjust_start(self.stop)
-
-                    elif self.next == None and stop_diff < self.channode.max_overlap:
-                        # It's the last program
-                        self.adjust_stop(pnode.stop.replace(second = 0, microsecond = 0))
-
-            self.length = self.stop - self.start
             # Check for allowed key values
             for key, v in pnode.tdict.items():
                 value = pnode.get_value(key)
@@ -1956,6 +1915,46 @@ class ProgramNode():
                     self.set_value(key, value, source)
 
             self.first_source = False
+
+    def check_start_stop(self, pstart, pstop):
+        with self.node_lock:
+            # Check if the new source is longer and if so extend over any gap
+            start_diff = (self.start - pstart)
+            if start_diff.total_seconds() > 0:
+                if self.previous_gap != None and not self.previous_gap.is_overlap:
+                    if pstart <= self.previous_gap.start:
+                        # We add the gap to the program
+                        self.adjust_start(self.previous_gap.start.replace(second = 0, microsecond = 0))
+                        self.channode.remove_gap(self.previous_gap)
+
+                    else:
+                        # We reduce the gap
+                        self.adjust_start(pstart.replace(second = 0, microsecond = 0))
+                        self.previous_gap.adjust_stop(self.start)
+
+                elif self.previous == None and start_diff < self.channode.max_overlap:
+                    # It's the first program
+                    self.adjust_start(pstart.replace(second = 0, microsecond = 0))
+
+            if isinstance(pstop, datetime.datetime):
+                stop_diff = (pstop - self.stop)
+                if stop_diff.total_seconds() > 0:
+                    if self.next_gap != None and not self.next_gap.is_overlap:
+                        if pstop >= self.next_gap.stop:
+                            # We add the gap to the program
+                            self.adjust_stop(self.next_gap.stop.replace(second = 0, microsecond = 0))
+                            self.channode.remove_gap(self.next_gap)
+
+                        else:
+                            # We reduce the gap
+                            self.adjust_stop(pstop.replace(second = 0, microsecond = 0))
+                            self.next_gap.adjust_start(self.stop)
+
+                    elif self.next == None and stop_diff < self.channode.max_overlap:
+                        # It's the last program
+                        self.adjust_stop(pstop.replace(second = 0, microsecond = 0))
+
+            self.length = self.stop - self.start
 
     def add_detail_data(self, data, source):
         if not source in self.config.channelsource.keys() or not isinstance(data, dict):
@@ -2071,8 +2070,8 @@ class ProgramNode():
 
             elif key == 'description':
                 if source != None and self.channel_config.get_opt('prefered_description') == source and len(value) > 100:
-                    self.tdict[key]['preferred'] = True
                     self.set_source_value(key, source, value, value)
+                    self.tdict[key]['preferred'] = True
 
                 elif self.is_set(key) and not 'preferred' in self.tdict[key].keys() and len(value) > len(self.get_value(key)):
                     self.set_source_value(key, source, value, value)
@@ -2148,7 +2147,8 @@ class ProgramNode():
                     if isinstance(value, unicode) and len(value) == 4:
                         try:
                             x = int(value)
-                            add_value(value)
+                            if 1900 < x <= datetime.date.today().year:
+                                add_value(value)
 
                         except:
                             return
@@ -2879,7 +2879,7 @@ class XMLoutput():
                         rlist = program.get_value(role)
                         for name in rlist:
                             if isinstance(name, dict) and 'name'in name:
-                                if 'role'in name:
+                                if 'role'in name and name['role'] != None:
                                     xml.append(self.add_starttag((role), 6, 'role="%s"' % (name['role']), self.xmlescape(name['name']),True))
 
                                 else:
@@ -2938,7 +2938,7 @@ class XMLoutput():
             if program.is_set('ttvdbid'):
                 xml.append(self.add_starttag('episode-num', 4, 'system="thetvdb.com"', 'series/%s' % program.get_value('ttvdbid'),True))
 
-            if program.is_set('tmdbid'):
+            elif program.is_set('tmdbid'):
                 xml.append(self.add_starttag('episode-num', 4, 'system="themoviedb.org"', 'movie/%s' % program.get_value('tmdbid'),True))
 
             if program.is_set('programid'):

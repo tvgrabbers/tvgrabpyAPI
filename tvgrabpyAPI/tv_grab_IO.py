@@ -2495,21 +2495,27 @@ class test_JSON(test_json_struct.test_JSON):
 
     def add_extra_lookup_lists(self, struct_name):
         if struct_name == 'struct-grabberfile':
-            ll = []
-            for li in self.config.xml_output.logo_source_preference:
-                ll.append(unicode(li))
+            ilids = self.config.xml_output.logo_provider.keys()[:]
+            slids = []
+            for li in ilids:
+                slids.append(unicode(li))
 
-            ll.extend(self.config.xml_output.logo_source_preference)
             if 'lst-logoid' in self.lookup_lists.keys():
-                self.lookup_lists['lst-logoid'].extend(ll)
+                self.lookup_lists['lst-logoid'].extend(ilids)
 
             else:
-                 self.lookup_lists['lst-logoid'] = ll
+                 self.lookup_lists['lst-logoid'] = ilids
 
+            self.lookup_lists['lst-logoid'].extend(slids)
             if 'int-lst-logoid' in self.lookup_lists.keys():
-                self.lookup_lists['int-lst-logoid'].extend(self.config.xml_output.logo_source_preference)
+                self.lookup_lists['int-lst-logoid'].extend(ilids)
 
             else:
-                 self.lookup_lists['int-lst-logoid'] = self.config.xml_output.logo_source_preference
+                 self.lookup_lists['int-lst-logoid'] = ilids
 
+            if 'str-lst-logoid' in self.lookup_lists.keys():
+                self.lookup_lists['str-lst-logoid'].extend(slids)
+
+            else:
+                 self.lookup_lists['str-lst-logoid'] = slids
 # end test_JSON
