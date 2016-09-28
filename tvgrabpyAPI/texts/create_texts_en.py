@@ -488,6 +488,7 @@ def load_texts():
                 u'': u''}},
         u'merge':{
             u'error':{
+                1: u'Adjusting gap/overlap of %s min. at %s on channel %s.\n'
                 },
             u'stats':{
                 1: u'Now adding %s programs from %s to %s\n',
@@ -516,7 +517,7 @@ def load_texts():
                 36: u'      on time and title to:%s: %s Genre: %s.\n',
                 37: u'Added to groupslot:        %s: %s Genre: %s.\n',
                 38: u'',
-                39: u'',
+                39: u''
                 }},
         u'ttvdb':{
             u'error':{

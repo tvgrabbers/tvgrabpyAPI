@@ -84,10 +84,11 @@ def main():
         #~ source = config.init_sources(2)
 
         # humo.be
+        #~ channel = '30'
         #~ source = config.init_sources(6)
 
         # horizon.tv
-        #~ channel ='24443943146'
+        #~ channel ='24443943091'
         #~ source = config.init_sources(5)
 
         # vrt.be
@@ -99,24 +100,24 @@ def main():
         #~ source = config.init_sources(4)
 
         # vpro.nl
-        channel = 'npo_1'
-        source = config.init_sources(7)
+        #~ channel = 'npo_1'
+        #~ source = config.init_sources(7)
 
         # oorboekje.nl
         #~ channel = 'npo-radio-1'
         #~ source = config.init_sources(12)
 
         # nieuwsblad.be
-        #~ channel ='een'
+        #~ channel ='npo1'
         #~ source = config.init_sources(8)
 
         # tvgids.nl
-        #~ channel = '5'
+        #~ channel = '1'
         #~ source = config.init_sources(3)
 
         # tvgids.tv
-        #~ channel ='nederland-1'
-        #~ source = config.init_sources(1)
+        channel ='nederland-1'
+        source = config.init_sources(1)
 
         # primo.eu
         #~ channel ='een'
@@ -136,17 +137,17 @@ def main():
 
         tdict = {}
         tdict['detail_url'] = 'nos-rio-live/16083759'
-        modus = 2
+        modus = 1
 
         if modus == 1:
             source.get_channels()
 
         elif modus == 2:
             tdict['chanid'] = source.chanids[channel]
-            offset = 1
+            offset = 0
             first_day = 0
             max_days = 4
-            last_day = 1
+            last_day = 3
             data = source.get_page_data('base',{'channels': source.channels,
                                                                     'channel': channel,
                                                                     'channelgrp': 'main',

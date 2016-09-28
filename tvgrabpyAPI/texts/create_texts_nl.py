@@ -496,6 +496,7 @@ def load_texts():
                 u'': u''}},
         u'merge':{
             u'error':{
+                1: u'Het gat/overlap van %s min. om %s op zender %s wordt gecorrigeerd.\n'
                 },
             u'stats':{
                 1: u'Nu worden %s programma\'s van %s aan %s toegevoegd\n',
