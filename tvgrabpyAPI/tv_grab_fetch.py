@@ -1528,6 +1528,7 @@ class FetchData(Thread):
                     #~ detailed_program[self.config.channelsource[self.proc_id].detail_check] = True
                     self.config.log(self.config.text('fetch', 32, (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
                     detailed_program['sourceid'] = self.proc_id
+                    detailed_program['name'] = detail_ids[self.proc_id]['name']
                     detailed_program['channelid'] = detail_ids[self.proc_id]['channelid']
                     detailed_program['prog_ID'] = detail_ids[self.proc_id]['prog_ID']
                     detailed_program['gen_ID'] = detail_ids[self.proc_id]['gen_ID']

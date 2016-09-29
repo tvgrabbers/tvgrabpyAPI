@@ -1961,11 +1961,6 @@ class ProgramNode():
             return
 
         with self.node_lock:
-            # Sometimes the Name on a Detail page is an Article Title and not the programname
-            if not self.match_title(re.sub('[-,. ]', '', self.config.fetch_func.remove_accents(data_value(['name'], data, str)).lower()).strip()):
-                data['name'] = self.get_value('name')
-                data['title'] = (data['title'][0], self.get_value('name'), data['title'][2])
-
             for key, value in data.items():
                 if value not in (None, ''):
                     self.set_value(key, value, source)
@@ -2601,6 +2596,7 @@ class ProgramNode():
                         rval['gen_ID'] = self.get_value('gen_ID', source)
                         rval['org-genre'] = self.get_value('org-genre', source)
                         rval['org-subgenre'] = self.get_value('org-subgenre', source)
+                        rval['name'] = self.get_value('name', source)
                         return rval
 
                     else:
@@ -2609,6 +2605,7 @@ class ProgramNode():
                 for source in self.config.detail_sources:
                     if source in self.channel_config.merge_order:
                         rval[source] = {}
+                        rval[source]['name'] = self.get_value('name', source)
                         rval[source]['detail_url'] = self.get_value('detail_url', source)
                         rval[source]['prog_ID'] = self.get_value('prog_ID', source)
                         rval[source]['gen_ID'] = self.get_value('gen_ID', source)
