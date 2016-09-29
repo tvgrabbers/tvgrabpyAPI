@@ -1368,7 +1368,7 @@ class ChannelNode():
                     if gap.abs_length > self.max_overlap:
                         continue
 
-                    self.config.log('\n', self.config.text('merge', 1, (gap.length.total_seconds() / 60, gap.start.strftime('%d %b %H:%M'), self.name)).encode('utf-8', 'replace'), 4, 3)
+                    self.config.log(self.config.text('merge', 1, (gap.length.total_seconds() / 60, gap.start.strftime('%d %b %H:%M'), self.name)), 4, 3)
                     # stop-time of previous program wins
                     if overlap_strategy == 'stop':
                         gap.next.adjust_start(gap.start)
@@ -1961,6 +1961,11 @@ class ProgramNode():
             return
 
         with self.node_lock:
+            # Sometimes the Name on a Detail page is an Article Title and not the programname
+            if not self.match_title(re.sub('[-,. ]', '', self.config.fetch_func.remove_accents(data_value(['name'], data, str)).lower()).strip()):
+                data['name'] = self.get_value('name')
+                data['title'] = (data['title'][0], self.get_value('name'), data['title'][2])
+
             for key, value in data.items():
                 if value not in (None, ''):
                     self.set_value(key, value, source)
