@@ -169,7 +169,31 @@ def load_texts():
                     '<default 10 minutes>',
                 47: u'Give the language to use for system and log messages.\n' + \
                     'At present "en" (default) or "nl"',
-                48: u'Only use data from the cache.'
+                48: u'Only use data from the cache.',
+                100: u'  A testmodule to test sourcefiles.\n' + \
+                    '  You can also set the variables in:%s/.json_struct/tv_grab_test.conf',
+                101: u'name of the grabber and config to test\n' + \
+                    'like <"tv_grab_xx">',
+                102: u'The day to do the testing <defaults to 0 is today>',
+                103: u'The directory to look for source files\n' + \
+                    '<default = "%s">\n' + \
+                    '(You can set a separate directory for the grabberfile\n' + \
+                    'in %s/.json_struct/tv_grab_test.conf)',
+                104: u'The directory to place the reports\n' + \
+                    '<default = "%s">',
+                105: u'The source to test <default = 1>',
+                106: u'The test to perform. Valid are:\n' + \
+                    '   channels: test the channels or base-channels data_def\n' + \
+                    '   base:     test the base data_def\n' + \
+                    '   detail:   test the detail data_def\n' + \
+                    '   lineup:   test the lineup of all the sources\n' + \
+                    '<default = channels>',
+                107: u'The chanid to extract from a base-page',
+                108: u'The detailid in the URL for the detail-page',
+                109: u'The report-level to use for tv_grab_test_json.py\n' + \
+                    '<default = 511 or -513>',
+                110: u'Create or update the configfile:\n' + \
+                    '"%s.json_struct/tv_grab_test.conf"'
                 },
             u'confighelp':{
                 0: u'# DO NOT CHANGE THIS VALUE!\n',
@@ -375,7 +399,7 @@ def load_texts():
                 1: u'The available sources are: ',
                 2: u'The available detail sources are: ',
                 3: u'The available logo sources are: ',
-                4: u' 99: Your own full logo url',
+                4: u'  99: Your own full logo url',
                 5: u'Start time of this run: %s\n',
                 6: u'Version',
                 7: u'Language',

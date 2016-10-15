@@ -177,7 +177,31 @@ def load_texts():
                     '<standaard 10 minuten>',
                 47: u'Geef de taal voor de systeem en log berichten.\n' + \
                     'Op dit moment "en" (standaard) of "nl"',
-                48: u'Gebruik alleen data uit de cache.'
+                48: u'Gebruik alleen data uit de cache.',
+                100: u'  Een testmodule om bronbestanden te testen.\n' + \
+                    '  Je kunt de variabelen ook instellen in:%s/.json_struct/tv_grab_test.conf',
+                101: u'Naam van de grabber en de configuratie on te testen\n' + \
+                    'like <"tv_grab_xx">',
+                102: u'De dag waarop te testen <defaults to 0 is today>',
+                103: u'De directory waar de bron bestanden zich bevinden.\n' + \
+                    '<default = "%s">\n' + \
+                    '(Je kan een aparte directory voor het graber bestand\n' + \
+                    'in %s/.json_struct/tv_grab_test.conf instellen)',
+                104: u'De directory waarin de rapporten te plaatsen\n' + \
+                    '<default = "%s">',
+                105: u'De te testen bron <default = 1>',
+                106: u'De uit te voeren test. Geldig zijn:\n' + \
+                    '   channels: test de channels of base-channels data_def\n' + \
+                    '   base:     test de base data_def\n' + \
+                    '   detail:   test de detail data_def\n' + \
+                    '   lineup:   test de lineup van al de bronnen\n' + \
+                    '<default = channels>',
+                107: u'De van de base-page te extraheren chanid',
+                108: u'De detailid in de URL van de detail-pagina',
+                109: u'Het voor tv_grab_test_json.py te gebruiken report-level\n' + \
+                    '<default = 511 or -513>',
+                110: u'Creer of update het configuratie bestand:\n' + \
+                    '"%s.json_struct/tv_grab_test.conf"'
                 },
             u'confighelp':{
                 0: u'# VERANDER DE ONDERSTAANDE WAARDE NIET!\n',

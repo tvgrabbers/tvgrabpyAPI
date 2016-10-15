@@ -74,6 +74,7 @@ class Channel_Config(Thread):
         self.opt_dict['disable_source'] = []
         self.opt_dict['disable_detail_source'] = []
         self.opt_dict['disable_ttvdb'] = False
+        self.requested_details = {}
 
     def validate_settings(self):
 
@@ -245,6 +246,9 @@ class Channel_Config(Thread):
                 self.detail_return.put({'source': None,'last_one': True})
 
             else:
+                for src_id in self.config.detail_sources:
+                    self.requested_details[src_id] = []
+
                 self.channel_node.merge_type = 8
                 self.state = 3
                 self.get_details()
@@ -328,47 +332,13 @@ class Channel_Config(Thread):
                 self.child_data.set()
 
             # And log the results
-            with self.functions.count_lock:
-                self.functions.progress_counter+= 1
-                counter = self.functions.progress_counter
-
-            log_array = ['\n', self.config.text('fetch', 1, (self.chan_name, counter, self.config.chan_count), type = 'stats')]
-            log_array.append( self.config.text('fetch',2, (self.functions.get_counter('detail', -99, self.chanid), ), type = 'stats'))
-            log_array.append( self.config.text('fetch',10, (self.functions.get_counter('exclude', -99, self.chanid), ), type = 'stats'))
-
-            if self.get_opt('fast'):
-                log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
-                log_array.append('\n')
-                log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', -1, self.chanid), ), type = 'stats'))
-                log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', -1, self.chanid), ), type = 'stats'))
-
-            else:
-                fail = 0
-                for source in self.config.detail_sources:
-                    fail += self.functions.get_counter('fail', source, self.chanid)
-                    log_array.append(self.config.text('fetch', 6, \
-                        (self.functions.get_counter('detail', source, self.chanid), self.config.channelsource[source].source), type = 'stats'))
-
-                log_array.append(self.config.text('fetch', 7, (fail,), type = 'stats'))
-                log_array.append(self.config.text('fetch', 8, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
-                log_array.append('\n')
-                log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', -1, self.chanid), ), type = 'stats'))
-                log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', -1, self.chanid), ), type = 'stats'))
-                log_array.append('\n')
-                for source in self.config.detail_sources:
-                    log_array.append(self.config.text('fetch', 9, \
-                        (self.config.channelsource[source].detail_request.qsize(), self.config.channelsource[source].source), type = 'stats'))
-
-            log_array.append('\n')
-            self.config.log(log_array, 4, 3)
-
+            self.log_results()
             if not isinstance(self.channel_node, ChannelNode) or self.channel_node.program_count() == 0:
                 self.ready = True
                 return
 
-            # a final check on the sanity of the data
+            # a final check on the sanity of the data and create the output
             self.channel_node.check_lineup(self.get_opt('overlap_strategy'))
-
             if self.get_opt('add_hd_id'):
                 self.opt_dict['mark_hd'] = False
                 self.config.xml_output.create_channel_strings(self.chanid, False)
@@ -390,7 +360,7 @@ class Channel_Config(Thread):
             self.ready = True
             return(97)
 
-    def get_details(self, ):
+    def get_details(self):
         def get_counter():
             self.fetch_counter += 1
             return 100*float(self.fetch_counter)/float(self.channel_node.program_count())
@@ -441,9 +411,9 @@ class Channel_Config(Thread):
                 if detailids == None:
                     continue
 
-                detailids['channelid'] = channelid
-                detailids['chanid'] = self.chanid
-                if 'prog_ID'in detailids and detailids['prog_ID'] not in ('', None):
+                #~ detailids['channelid'] = channelid
+                #~ detailids['chanid'] = self.chanid
+                if is_data_value(['prog_ID'], detailids, str, True):
                     self.config.queues['cache'].put({'task':'query', 'parent': self, \
                                 'programdetails': {'sourceid': src_id, 'channelid': channelid, 'prog_ID': detailids['prog_ID']}})
                     cache_detail = self.cache_return.get(True)
@@ -464,7 +434,7 @@ class Channel_Config(Thread):
 
                         continue
 
-                if 'detail_url'in detailids and detailids['detail_url'] not in ('', None):
+                if is_data_value(['detail_url'], detailids, str, True):
                     # check if this source could add anything
                     for key in self.config.channelsource[src_id].detail_keys:
                         if not pn.is_set(key):
@@ -511,11 +481,17 @@ class Channel_Config(Thread):
                 continue
 
             # Do the detail requests
-            #~ print pngenre, sources
             for src_id in self.config.detail_sources:
                 if src_id in sources.keys():
+                    # Check if there is a request pending
+                    if data_value([src_id, 'detail_url'], sources, str) in self.requested_details[src_id]:
+                        break
+
                     self.functions.update_counter('queue',src_id, self.chanid)
                     self.config.channelsource[src_id].detail_request.put({'detail_ids': sources, 'logstring': logstring, 'counter': counter, 'parent': self})
+                    if is_data_value([src_id, 'detail_url'], sources, str, True):
+                        self.requested_details[src_id].append(data_value([src_id, 'detail_url'], sources, str))
+
                     break
 
         # Place terminator items in the queue
@@ -527,6 +503,41 @@ class Channel_Config(Thread):
         else:
             self.detail_return.put({'source': None,'last_one': True})
 
+
+    def log_results(self):
+        with self.functions.count_lock:
+            self.functions.progress_counter+= 1
+            counter = self.functions.progress_counter
+
+        log_array = ['\n', self.config.text('fetch', 1, (self.chan_name, counter, self.config.chan_count), type = 'stats')]
+        log_array.append( self.config.text('fetch',2, (self.functions.get_counter('detail', -99, self.chanid), ), type = 'stats'))
+        log_array.append( self.config.text('fetch',10, (self.functions.get_counter('exclude', -99, self.chanid), ), type = 'stats'))
+
+        if self.get_opt('fast'):
+            log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
+            log_array.append('\n')
+            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', -1, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', -1, self.chanid), ), type = 'stats'))
+
+        else:
+            fail = 0
+            for source in self.config.detail_sources:
+                fail += self.functions.get_counter('fail', source, self.chanid)
+                log_array.append(self.config.text('fetch', 6, \
+                    (self.functions.get_counter('detail', source, self.chanid), self.config.channelsource[source].source), type = 'stats'))
+
+            log_array.append(self.config.text('fetch', 7, (fail,), type = 'stats'))
+            log_array.append(self.config.text('fetch', 8, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
+            log_array.append('\n')
+            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', -1, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', -1, self.chanid), ), type = 'stats'))
+            log_array.append('\n')
+            for source in self.config.detail_sources:
+                log_array.append(self.config.text('fetch', 9, \
+                    (self.config.channelsource[source].detail_request.qsize(), self.config.channelsource[source].source), type = 'stats'))
+
+        log_array.append('\n')
+        self.config.log(log_array, 4, 3)
 
     def get_opt(self, opt, source_id = None):
         retval = None
@@ -2591,12 +2602,14 @@ class ProgramNode():
             if self.is_set("detail_url"):
                 if source != None:
                     if source in self.channel_config.merge_order:
+                        rval['chanid'] = self.channel_config.chanid
+                        rval['org-genre'] = self.get_value('org-genre', source)
+                        rval['org-subgenre'] = self.get_value('org-subgenre', source)
+                        rval['channelid'] = self.channel_config.get_source_id(source)
+                        rval['name'] = self.get_value('name', source)
                         rval['detail_url'] = self.get_value('detail_url', source)
                         rval['prog_ID'] = self.get_value('prog_ID', source)
                         rval['gen_ID'] = self.get_value('gen_ID', source)
-                        rval['org-genre'] = self.get_value('org-genre', source)
-                        rval['org-subgenre'] = self.get_value('org-subgenre', source)
-                        rval['name'] = self.get_value('name', source)
                         return rval
 
                     else:
@@ -2605,6 +2618,7 @@ class ProgramNode():
                 for source in self.config.detail_sources:
                     if source in self.channel_config.merge_order:
                         rval[source] = {}
+                        rval[source]['channelid'] = self.channel_config.get_source_id(source)
                         rval[source]['name'] = self.get_value('name', source)
                         rval[source]['detail_url'] = self.get_value('detail_url', source)
                         rval[source]['prog_ID'] = self.get_value('prog_ID', source)

@@ -146,7 +146,7 @@ class Functions():
 
     def get_json_data(self, name, version = None, source = -98, url = None, fpath = None):
         self.raw_json[name] = ''
-        local_name = '%s.%s.json' % (name, version) if isinstance(version, int) else '%s.json' % (name)
+        local_name = '%s.%s.json' % (name, version) if isinstance(version, int) and not self.config.test_modus else '%s.json' % (name)
         # Try to find the source files locally
         if isinstance(version, int) or self.config.only_local_sourcefiles:
             # First we try to get it in the supplied location
@@ -376,7 +376,7 @@ class DataTree(DataTreeShell):
         self.fetch_string_parts = re.compile("(.*?[.?!:]+ |.*?\Z)")
         DataTreeShell.__init__(self, data_def, warnaction = warnaction, warngoal = self.config.logging.log_queue, caller_id = caller_id)
         self.print_tags = source.print_tags
-        self.print_searchtree = source.print_searchtree
+        #~ self.print_searchtree = source.print_searchtree
         self.show_result = source.show_parsing
         self.fle = source.test_output
         #~ sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, message = 'Regex "\\\d\*/\?\(\\\d\*\)\.\*" in: .*?', caller_id = caller_id)
@@ -738,6 +738,7 @@ class theTVDB_v1(Thread):
         self.ready = False
         self.state = 0
         self.active = True
+        self.lastrequest = None
         self.api_key = "0BB856A59C51D607"
         self.source_lock = RLock()
         # The queue to receive answers on database queries
@@ -748,9 +749,10 @@ class theTVDB_v1(Thread):
         self.thread_type = 'ttvdb'
         self.test_output = sys.stdout
         self.print_tags = False
-        self.print_roottree = False
         self.print_searchtree = False
         self.show_parsing = False
+        self.print_roottree = False
+        self.roottree_output = self.test_output
         self.show_result = False
         self.config.threads.append(self)
         self.local_encoding = self.config.logging.local_encoding
@@ -861,25 +863,6 @@ class theTVDB_v1(Thread):
         if len(data) == 0:
             self.functions.update_counter('fail', -1, chanid)
             return None
-
-        if self.show_result:
-            for p in self.datatrees[ptype].searchtree.result:
-                if isinstance(p[0], (str, unicode)):
-                    print p[0].encode('utf-8', 'replace')
-                else:
-                    print p[0]
-                for v in range(1,len(p)):
-                    if isinstance(p[v], (str, unicode)):
-                        print '    ', p[v].encode('utf-8', 'replace')
-                    else:
-                        print '    ', p[v]
-
-            #~ for p in data:
-                #~ for k, v in p.item():
-                    #~ if isinstance(v, (str, unicode)):
-                        #~ print '    %s = %s'.encode('utf-8', 'replace') % (k, v)
-                    #~ else:
-                        #~ print '    %s = %s' % (k, v))
 
         # be nice to the source site
         time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
@@ -1282,6 +1265,7 @@ class FetchData(Thread):
         self.ready = False
         self.state = 0
         self.active = True
+        self.lastrequest = None
         # The ID of the source
         self.proc_id = proc_id
         self.source_lock = RLock()
@@ -1311,10 +1295,13 @@ class FetchData(Thread):
 
         self.test_output = sys.stdout
         self.print_tags = False
-        self.print_roottree = False
         self.print_searchtree = False
         self.show_parsing = False
+        self.print_roottree = False
+        self.roottree_output = self.test_output
         self.show_result = False
+        self.raw_output = self.test_output
+        self.data_output = self.test_output
         self.cattrans = {}
         self.new_cattrans = None
         self.cattrans_type = cattrans_type
@@ -1657,34 +1644,40 @@ class FetchData(Thread):
                 self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
                 return
 
-            if self.print_searchtree:
-                print pdata
-                print '(url, encoding, accept_header, url_data, is_json)'
-                print url
+            if self.print_roottree:
+                if self.roottree_output == sys.stdout:
+                    self.roottree_output.write(u'pdata = %s' % pdata)
+                    prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
+                    for index in range(len(url)):
+                        self.roottree_output.write(('%s = %s'% (prtdata[index], url[index])).encode('utf-8', 'replace'))
+
+                else:
+                    self.roottree_output.write(u'pdata = %s\n' % pdata)
+                    prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
+                    for index in range(len(url)):
+                        self.roottree_output.write((u'%s = %s\n'% (prtdata[index], url[index])))
 
             self.functions.update_counter(counter[0], counter[1], counter[2])
             page = self.functions.get_page(url)
             if page in (None, '', '{}'):
                 self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
                 self.functions.update_counter('fail', counter[1], counter[2])
-                if self.print_searchtree:
-                    print 'No Data'
+                if self.print_roottree:
+                    self.roottree_output.write(u'No Data\n')
+
                 return None
-
-            for subset in self.data_value([ptype, 'text_replace'], list):
-                if not is_data_value(0, subset, str) or not is_data_value(1, subset, str, True):
-                    continue
-
-                page = re.sub(subset[0], subset[1], page)
 
             self.datatrees[ptype].init_data(page)
             if self.datatrees[ptype].searchtree == None:
                 self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
                 self.functions.update_counter('fail', counter[1], counter[2])
-                if self.print_searchtree:
-                    print 'No Data'
+                if self.print_roottree:
+                    self.roottree_output.write(u'No Data\n')
 
                 return None
+
+            if self.print_roottree:
+                self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
 
             # We reset the timezone
             self.datatrees[ptype].set_timezone()
@@ -1724,31 +1717,42 @@ class FetchData(Thread):
                         return None
 
             self.datatrees[ptype].extract_datalist()
-            data = self.datatrees[ptype].result
+            self.data = self.datatrees[ptype].result
+            self.rawdata = self.datatrees[ptype].searchtree.result
             if self.show_result:
-                for p in self.datatrees[ptype].searchtree.result:
-                    if isinstance(p[0], (str, unicode)):
-                        print p[0].encode('utf-8', 'replace')
-                    else:
-                        print p[0]
-                    for v in range(1,len(p)):
-                        if isinstance(p[v], (str, unicode)):
-                            print '    ', p[v].encode('utf-8', 'replace')
+                if self.raw_output == sys.stdout:
+                    for p in self.rawdata:
+                        if isinstance(p[0], (str, unicode)):
+                            self.raw_output.write(p[0].encode('utf-8', 'replace'))
                         else:
-                            print '    ', p[v]
+                            self.raw_output.write(p[0])
+                        for v in range(1,len(p)):
+                            if isinstance(p[v], (str, unicode)):
+                                self.raw_output.write('    "%s"' % p[v].encode('utf-8', 'replace'))
+                            else:
+                                self.raw_output.write('    %s' % p[v])
+
+                else:
+                    for p in self.rawdata:
+                        self.raw_output.write(u'%s\n' % p[0])
+                        for v in range(1,len(p)):
+                            if isinstance(p[v], (str, unicode)):
+                                self.raw_output.write(u'    "%s"\n' % p[v])
+                            else:
+                                self.raw_output.write(u'    %s\n' % p[v])
 
             # we extract a channel list if available
-            if ptype == 'base' and self.is_data_value("base-channels", dict) and len(self.all_channels) == 0:
+            if not self.config.test_modus and ptype == 'base' and self.is_data_value("base-channels", dict) and len(self.all_channels) == 0:
                 self.datatrees[ptype].init_data_def(self.data_value("base-channels", dict))
                 self.datatrees[ptype].extract_datalist()
                 self.get_channels(self.datatrees[ptype].result)
                 self.datatrees[ptype].init_data_def(self.data_value("base", dict))
 
-            if len(data) == 0:
+            if len(self.data) == 0:
                 self.functions.update_counter('fail', counter[1], counter[2])
                 return None
 
-            return data
+            return self.data
 
         except:
             self.config.log([self.config.text('fetch', 29, (ptype, self.source)), traceback.format_exc()], 1)
@@ -1758,6 +1762,7 @@ class FetchData(Thread):
     def get_channels(self, data_list = None):
         """The code for the retreiving a list of supported channels"""
         self.all_channels ={}
+        self.lineup_changes = []
         if data_list == None:
             ptype = "channels"
             if not self.is_data_value([ptype], dict):
@@ -1785,6 +1790,17 @@ class FetchData(Thread):
             channel_list = data_list
 
         if isinstance(channel_list, list):
+            empty_channels = copy(self.empty_channels)
+            chanids = {}
+            for chanid, channel in self.config.channels.items():
+                channelid = channel.get_source_id(self.proc_id)
+                if channelid != '':
+                    chanids[channelid] = chanid
+
+            channelids = {}
+            for chanid, channelid in self.config.source_channels[self.proc_id].items():
+                channelids[channelid] = chanid
+
             for channel in channel_list:
                 # link the data to the right variable, doing any defined adjustments
                 if "inactive_channel" in channel.keys() and channel["inactive_channel"]:
@@ -1798,6 +1814,61 @@ class FetchData(Thread):
                         channelid = unicode(channel['channelid'])
 
                     self.all_channels[channelid] = channel
+                    if self.show_result:
+                        if self.data_output == sys.stdout:
+                            self.data_output.write('%s: %s' % (channelid, channel['name']))
+                            if channelid in empty_channels:
+                                empty_channels.remove(channelid)
+                                if channelid in channelids.keys():
+                                    self.data_output.write('        Marked as empty but still present in "sourcechannels" as "%s"' % channelids[channelid])
+                                    self.lineup_changes.append('Empty channelID "%s" on %s still present in "sourcechannels" as "%s"\n' \
+                                        % (channelid, self.source, channelids[channelid]))
+
+                                else:
+                                    self.data_output.write('        Marked as empty')
+
+                            elif channelid in chanids.keys():
+                                self.data_output.write('        chanid: %s' % (chanids[channelid]))
+                                del chanids[channelid]
+
+                            else:
+                                self.data_output.write('        Without a chanid set in "source_channels"')
+
+                            for k, v in channel.items():
+                                if isinstance(v, (str, unicode)):
+                                    self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
+                                else:
+                                    self.data_output.write('        %s: %s' % (k, v))
+
+                        else:
+                            self.data_output.write('%s: %s\n' % (channelid, channel['name']))
+                            if channelid in empty_channels:
+                                empty_channels.remove(channelid)
+                                if channelid in channelids.keys():
+                                    self.data_output.write('        Marked as empty but still present in "sourcechannels" as "%s"\n' % channelids[channelid])
+                                    self.lineup_changes.append('Empty channelID "%s" on %s still present in "sourcechannels" as "%s"\n' \
+                                        % (channelid, self.source, channelids[channelid]))
+
+                                else:
+                                    self.data_output.write('        Marked as empty\n')
+
+                            elif channelid in chanids.keys():
+                                self.data_output.write('        chanid: %s\n' % (chanids[channelid]))
+                                del chanids[channelid]
+
+                            else:
+                                self.data_output.write('        Without a chanid set in "source_channels"\n')
+
+                            for k, v in channel.items():
+                                if isinstance(v, (str, unicode)):
+                                    self.data_output.write('        %s: "%s"\n' % (k, v))
+                                else:
+                                    self.data_output.write('        %s: %s\n' % (k, v))
+
+                    elif self.config.write_info_files:
+                        if channelid in self.empty_channels and channelid in channelids.keys():
+                            self.lineup_changes.append('Empty channelID "%s" on %s still present in "sourcechannels" as "%s"\n' \
+                                % (channelid, self.source, channelids[channelid]))
 
         else:
             self.config.log(self.config.text('fetch', 30, (self.source, )))
@@ -2694,13 +2765,22 @@ class FetchData(Thread):
                 #~ self.config.genre_list.append((tdict['genre'].lower(), tdict['subgenre'].lower()))
 
                 if self.show_result:
-                    print '    ', channelid, tdict['start-time']
-                    for k, v in tdict.items():
-                        if isinstance(v, (str, unicode)):
-                            vv = ': "%s"' % v
-                            print '        ', k, vv.encode('utf-8', 'replace')
-                        else:
-                            print '        ', k, v
+                    start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
+                    if self.data_output == sys.stdout:
+                        self.data_output.write('%s: %s' % (channelid, start))
+                        for k, v in tdict.items():
+                            if isinstance(v, (str, unicode)):
+                                self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
+                            else:
+                                self.data_output.write('        %s: %s' % (k, v))
+
+                    else:
+                        self.data_output.write('%s: %s\n' % (channelid, start))
+                        for k, v in tdict.items():
+                            if isinstance(v, (str, unicode)):
+                                self.data_output.write('        %s: "%s"\n' % (k, v))
+                            else:
+                                self.data_output.write('        %s: %s\n' % (k, v))
 
             if len(channelids) > 0:
                 for channelid in channelids:
@@ -2709,53 +2789,46 @@ class FetchData(Thread):
 
         return channelids
 
-    def load_detailpage(self, ptype, tdict, parent = None):
+    def load_detailpage(self, ptype, pdata, parent = None):
         """The code for retreiving and processing a detail page"""
-        if tdict['detail_url'] in (None, ''):
+        if pdata['detail_url'] in (None, ''):
             return
 
-        if self.config.test_modus:
-            ddata = {'channel': 'testchannel', 'detailid': tdict['detail_url']}
-
-        else:
-            ddata = {'channel': tdict['chanid'], 'detailid': tdict['detail_url']}
-
+        ddata = {'channel': pdata['chanid'], 'detailid': pdata['detail_url']}
         strdata = self.get_page_data(ptype, ddata)
         if not isinstance(strdata, (list,tuple)) or len(strdata) == 0:
-            #~ self.functions.update_counter('fail', self.proc_id, tdict['chanid'])
-            self.config.log(self.config.text('fetch', 35, (tdict['detail_url'], )), 1)
+            self.config.log(self.config.text('fetch', 35, (pdata['detail_url'], )), 1)
             return
 
         values = strdata[0]
         if not isinstance(values, dict):
             return
 
-        if not 'genre' in values.keys() and 'org-genre' in tdict.keys():
-            values['genre'] = tdict['org-genre']
+        if not 'genre' in values.keys() and 'org-genre' in pdata.keys():
+            values['genre'] = pdata['org-genre']
 
-        if not 'subgenre' in values.keys() and 'org-subgenre' in tdict.keys():
-            values['subgenre'] = tdict['org-subgenre']
-
-        #~ print
-        #~ print 'Resulting values'
-        #~ for k, v in values.items():
-            #~ if isinstance(v, (str, unicode)):
-                #~ vv = ': "%s"' % v
-                #~ print '        ', k, vv.encode('utf-8', 'replace')
-            #~ else:
-                #~ print '        ', k, ': ', v
+        if not 'subgenre' in values.keys() and 'org-subgenre' in pdata.keys():
+            values['subgenre'] = pdata['org-subgenre']
 
         tdict = self.process_values(values)
         if self.show_result:
-        #~ if True:
-            print
-            print 'Resulting tdict'
-            for k, v in tdict.items():
-                if isinstance(v, (str, unicode)):
-                    vv = ': "%s"' % v
-                    print '        ', k, vv.encode('utf-8', 'replace')
-                else:
-                    print '        ', k, ': ', v
+            start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
+            channelid = ''
+            if self.data_output == sys.stdout:
+                self.data_output.write('%s: %s' % (pdata['channelid'], start))
+                for k, v in tdict.items():
+                    if isinstance(v, (str, unicode)):
+                        self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
+                    else:
+                        self.data_output.write('        %s: %s' % (k, v))
+
+            else:
+                self.data_output.write('%s: %s\n' % (pdata['channelid'], start))
+                for k, v in tdict.items():
+                    if isinstance(v, (str, unicode)):
+                        self.data_output.write('        %s: "%s"\n' % (k, v))
+                    else:
+                        self.data_output.write('        %s: %s\n' % (k, v))
 
         return tdict
 

@@ -111,7 +111,7 @@ import os, re, sys, argparse, traceback, datetime, time, codecs, pickle
 import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
-if dtversion()[1:4] < (1,2,3):
+if dtversion()[1:4] < (1,2,5):
     sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.2.3 or higher\n")
     sys.exit(2)
 
@@ -123,8 +123,8 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 3
-api_patchdate = u'2016020160927'
+api_patch = 4
+api_patchdate = u'20160927'
 api_alfa = False
 api_beta = True
 
@@ -205,6 +205,7 @@ class Configure:
         self.api_alfa = api_alfa
         self.api_beta = api_beta
         self.datafile = datafile
+        self.country = 'The Netherlands'
         if name == "":
             # No name was set in the frontend
             self.name ='tv_grab_configure.py'
@@ -305,6 +306,7 @@ class Configure:
         self.opt_dict['max_simultaneous_fetches'] = 5
         self.opt_dict['group_active_channels'] = False
         self.opt_dict['always_use_json'] = True
+        self.opt_dict['only_cache'] = False
         self.opt_dict['quiet'] = False
         self.opt_dict['fast'] = False
         self.opt_dict['offset'] = 0
@@ -354,6 +356,7 @@ class Configure:
         self.load_text(self.lang)
         self.description = self.text('config', 0, type='other')
         self.configversion = None
+        self.APIdata_loaded = False
         self.__CONFIG_SECTIONS__ = { 1: u'Configuration',
                                                             2: u'tvgids.nl Channels',
                                                             3: u'Channels'}
@@ -519,8 +522,6 @@ class Configure:
                 disable_source(sid)
                 return
 
-            #~ dversion = v['version'] if ('version' in v and isinstance(v["version"], int)) else 0
-            #~ jurl = v["json_url"] if ("json_url" in v and isinstance(v["json_url"], (str, unicode))) else self.source_url
             dversion = data_value('version', v, int, 0)
             jurl = data_value("json_url", v, str, self.source_url)
             sdata = self.fetch_func.get_json_data(v['json file'], dversion, sid, jurl, self.opt_dict['sources'])
@@ -529,7 +530,7 @@ class Configure:
                 return
 
             raw_json = self.fetch_func.raw_json[v['json file']]
-            if raw_json != '':
+            if raw_json != '' and not self.test_modus:
                 dv = sdata["version"] if ("version" in sdata and isinstance(sdata["version"], int)) else 0
                 # The file was downloaded. Check if it is already saved locally
                 fle = self.IO_func.open_file('%s/%s.%s.json' % (self.opt_dict['sources'], v['json file'], dv), 'w', 'utf-8')
@@ -537,7 +538,6 @@ class Configure:
                     fle.write(raw_json)
                     fle.close()
 
-            #~ ctype = v["cattrans type"] if ("cattrans type" in v and isinstance(v["cattrans type"], int)) else None
             ctype = data_value('cattrans type', v, int, None)
             self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, sdata, ctype)
             if ctype == None:
@@ -546,7 +546,6 @@ class Configure:
             if not ctype in self.cattranstype.keys():
                 self.cattranstype[ctype] = {}
 
-            #~ if "cattransid" in v and isinstance(v["cattransid"], int):
             if is_data_value("cattransid", v, int):
                 self.__DEFAULT_SECTIONS__[10 + v["cattransid"]] = u'%s genres' % (self.channelsource[sid].source)
                 self.cattranstype[ctype][10 + v["cattransid"]] = sid
@@ -642,6 +641,7 @@ class Configure:
             self.validate_option('disable_detail_source', value = s)
 
         if self.args.only_cache:
+            self.opt_dict['only_cache'] = True
             self.args.fast = True
             self.args.slowdays  = 0
 
@@ -657,8 +657,8 @@ class Configure:
                               (self.args.max_overlap, 'max_overlap')):
             if a != None:
                 self.opt_dict[o] = a
-                for chanid in self.channels.keys():
-                    self.channels[chanid].opt_dict[o] = self.opt_dict[o]
+                #~ for chanid in self.channels.keys():
+                    #~ self.channels[chanid].opt_dict[o] = self.opt_dict[o]
 
         self.offset = self.opt_dict['offset']
         for (a, o) in ((self.args.use_utc, 'use_utc'), \
@@ -765,30 +765,41 @@ class Configure:
                  return('allatonce')
 
         elif option == 'show_sources':
-            if stdoutput:
+            if self.test_modus:
                 print(self.text('config', 1, type='other'))
-                for i, s in self.channelsource.items():
-                    print('  %s: %s' % (i, s.source))
+                for k, s in self.sources.items():
+                    print(' %s: %s' % (str(k).rjust(2), s["json file"][7:]))
+
+            elif stdoutput:
+                print(self.text('config', 1, type='other'))
+                for k, s in self.channelsource.items():
+                    print(' %s: %s' % (str(k).rjust(2), s.source))
 
             else:
                 tdict = {}
-                for i, s in self.channelsource.items():
-                    tdict[i] = s.source
+                for k, s in self.channelsource.items():
+                    tdict[k] = s.source
 
                 return tdict
 
         elif option == 'show_detail_sources':
-            if stdoutput:
+            if self.test_modus:
                 print(self.text('config', 2, type='other'))
-                for i, s in self.channelsource.items():
-                    if i in self.detail_sources:
-                        print('  %s: %s' % (i, s.source))
+                for k, s in self.sources.items():
+                    if k in self.detail_sources:
+                        print(' %s: %s' % (str(k).rjust(2), s["json file"][7:]))
+
+            elif stdoutput:
+                print(self.text('config', 2, type='other'))
+                for k, s in self.channelsource.items():
+                    if k in self.detail_sources:
+                        print(' %s: %s' % (str(k).rjust(2), s.source))
 
             else:
                 tdict = {}
-                for i, s in self.channelsource.items():
+                for k, s in self.channelsource.items():
                     if s.detail_processor:
-                        tdict[i] = s.source
+                        tdict[k] = s.source
 
                 return tdict
         elif option == 'show_logo_sources':
@@ -796,7 +807,7 @@ class Configure:
             if stdoutput:
                 print(self.text('config', 3, type='other'))
                 for k, v in self.xml_output.logo_provider.items():
-                    print('  %s: %s' % (k, v))
+                    print(' %s: %s' % (str(k).rjust(3), v))
 
                 print(self.text('config', 4, type='other'))
 
@@ -1040,10 +1051,13 @@ class Configure:
 
             self.log(self.text('config', 18, (self.opt_dict['config_file'], )))
             # get config if available Overrule if set by commandline
-            if not self.read_config() and not self.args.configure:
+            if not self.read_config() and (self.test_modus or not self.args.configure):
                 self.opt_dict['config_file'] = u'%s/%s.conf' % (self.opt_dict['etc_dir'], self.name)
                 self.log([self.text('config', 19, (self.opt_dict['config_file'], ))])
                 if not self.read_config():
+                    if self.test_modus:
+                        self.infofiles = tv_grab_IO.InfoFiles(self)
+
                     return(1)
 
             if self.write_info_files :
@@ -1343,7 +1357,7 @@ class Configure:
         self.config_dict = {1:[], 2:[], 3:[], 9:{}}
         f = self.IO_func.open_file(self.opt_dict['config_file'])
         if f == None:
-            if not self.args.configure:
+            if self.test_modus or not self.args.configure:
                 self.log(self.text('config', 31))
             return False
 
@@ -1903,70 +1917,72 @@ class Configure:
             if configuring:
                 self.log([self.text('config', 44)], 0)
 
-        try:
-            if not os.path.exists(self.opt_dict['sources']):
-                os.mkdir(self.opt_dict['sources'])
+        if not self.APIdata_loaded:
+            try:
+                if not os.path.exists(self.opt_dict['sources']):
+                    os.mkdir(self.opt_dict['sources'])
 
-        except:
-            pass
+            except:
+                pass
 
-        try:
-            githubdata = self.fetch_func.get_json_data('tv_grab_API', fpath = self.opt_dict['sources'])
-            if not isinstance(githubdata, dict):
+            try:
+                githubdata = self.fetch_func.get_json_data('tv_grab_API', fpath = self.opt_dict['sources'])
+                if not isinstance(githubdata, dict):
+                    log_failure()
+                    return 2
+
+                raw_json = self.fetch_func.raw_json['tv_grab_API']
+                if raw_json != '':
+                    fle = self.IO_func.open_file('%s/%s.json' % (self.opt_dict['sources'], 'tv_grab_API'), 'w', 'utf-8')
+                    if fle != None:
+                        fle.write(raw_json)
+                        fle.close()
+
+                # Check on program updates
+                if is_gitdata_value("program_version", str):
+                    nv = gitdata_value("program_version", str, '1.0.0').split('.')
+                    for index in range(len(nv)):
+                        nv[index] = int(nv[index])
+
+                else:
+                    nv = gitdata_value("program_version", list, [1,0,0])
+
+                pv = [self.api_major, self.api_minor, self.api_patch]
+                if not "data_version" in self.opt_dict:
+                    self.opt_dict["data_version"] = 0
+
+                if pv < nv or (pv == nv and (self.alfa or self.beta)):
+                    loglist = [self.text('config', 8, type = 'other')]
+                    if is_gitdata_value("version_message", str):
+                        loglist.append(githubdata["version_message"])
+
+                    elif is_gitdata_value("version_message", list):
+                        loglist.extend(githubdata["version_message"])
+
+                    loglist.append(self.text('config', 9, (self.api_update_url,  ), type = 'other'))
+                    if show_info:
+                        self.log(loglist, 0)
+
+            except:
                 log_failure()
+                #~ traceback.print_exc()
                 return 2
 
-            raw_json = self.fetch_func.raw_json['tv_grab_API']
-            if raw_json != '':
-                fle = self.IO_func.open_file('%s/%s.json' % (self.opt_dict['sources'], 'tv_grab_API'), 'w', 'utf-8')
-                if fle != None:
-                    fle.write(raw_json)
-                    fle.close()
+            # Read in the tables needed for normal grabbing
+            self.key_values = gitdata_dict("data_keys")
+            self.tuple_values = gitdata_dict("tuple_values")
+            self.xml_output.logo_provider = gitdata_dict("logo_provider", 1)
+            self.xml_output.logo_source_preference = gitdata_value("logo_source_preference", list)
+            self.ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
+            self.coutrytrans = gitdata_dict("coutrytrans")
+            self.notitlesplit = gitdata_value("notitlesplit", list)
+            self.user_agents = gitdata_value("user_agents", list, self.user_agents)
+            self.ttvdb_json = gitdata_dict("ttvdb")
+            for k in self.xml_output.logo_provider.keys():
+                if k not in self.xml_output.logo_source_preference:
+                    self.xml_output.logo_source_preference.append(k)
 
-            # Check on program updates
-            if is_gitdata_value("program_version", str):
-                nv = gitdata_value("program_version", str, '1.0.0').split('.')
-                for index in range(len(nv)):
-                    nv[index] = int(nv[index])
-
-            else:
-                nv = gitdata_value("program_version", list, [1,0,0])
-
-            pv = [self.api_major, self.api_minor, self.api_patch]
-            if not "data_version" in self.opt_dict:
-                self.opt_dict["data_version"] = 0
-
-            if pv < nv or (pv == nv and (self.alfa or self.beta)):
-                loglist = [self.text('config', 8, type = 'other')]
-                if is_gitdata_value("version_message", str):
-                    loglist.append(githubdata["version_message"])
-
-                elif is_gitdata_value("version_message", list):
-                    loglist.extend(githubdata["version_message"])
-
-                loglist.append(self.text('config', 9, (self.api_update_url,  ), type = 'other'))
-                if show_info:
-                    self.log(loglist, 0)
-
-        except:
-            log_failure()
-            #~ traceback.print_exc()
-            return 2
-
-        # Read in the tables needed for normal grabbing
-        self.key_values = gitdata_dict("data_keys")
-        self.tuple_values = gitdata_dict("tuple_values")
-        self.xml_output.logo_provider = gitdata_dict("logo_provider", 1)
-        self.xml_output.logo_source_preference = gitdata_value("logo_source_preference", list)
-        self.ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
-        self.coutrytrans = gitdata_dict("coutrytrans")
-        self.notitlesplit = gitdata_value("notitlesplit", list)
-        self.user_agents = gitdata_value("user_agents", list, self.user_agents)
-        self.ttvdb_json = gitdata_dict("ttvdb")
-        for k in self.xml_output.logo_provider.keys():
-            if k not in self.xml_output.logo_source_preference:
-                self.xml_output.logo_source_preference.append(k)
-
+            self.APIdata_loaded = True
         if grabber_file in (None, ''):
             return 2
 
@@ -1984,47 +2000,48 @@ class Configure:
                     fle.close()
 
             # Check on data updates
-            if is_gitdata_value("program_version", str):
-                nv = gitdata_value("program_version", str, '1.0.0').split('.')
-                for index in range(len(nv)):
-                    nv[index] = int(nv[index])
+            if not self.test_modus:
+                if is_gitdata_value("program_version", str):
+                    nv = gitdata_value("program_version", str, '1.0.0').split('.')
+                    for index in range(len(nv)):
+                        nv[index] = int(nv[index])
 
-            else:
-                nv = gitdata_value("program_version", list, [1,0,0])
+                else:
+                    nv = gitdata_value("program_version", list, [1,0,0])
 
-            pv = [self.major, self.minor, self.patch]
-            dv = gitdata_value("data_version", int, 0)
-            if not "data_version" in self.opt_dict:
-                self.opt_dict["data_version"] = 0
+                pv = [self.major, self.minor, self.patch]
+                dv = gitdata_value("data_version", int, 0)
+                if not "data_version" in self.opt_dict:
+                    self.opt_dict["data_version"] = 0
 
-            if pv < nv or (pv == nv and (self.alfa or self.beta)):
-                loglist = [self.text('config', 10, type = 'other')]
-                if is_gitdata_value("version_message", str):
-                    loglist.append(githubdata["version_message"])
+                if pv < nv or (pv == nv and (self.alfa or self.beta)):
+                    loglist = [self.text('config', 10, type = 'other')]
+                    if is_gitdata_value("version_message", str):
+                        loglist.append(githubdata["version_message"])
 
-                elif is_gitdata_value("version_message", list):
-                    loglist.extend(githubdata["version_message"])
+                    elif is_gitdata_value("version_message", list):
+                        loglist.extend(githubdata["version_message"])
 
-                loglist.append(self.text('config', 9, (self.update_url, ), type = 'other'))
-                if show_info:
-                    self.log(loglist, 0)
+                    loglist.append(self.text('config', 9, (self.update_url, ), type = 'other'))
+                    if show_info:
+                        self.log(loglist, 0)
 
-            elif dv > self.opt_dict["data_version"]:
-                loglist = [self.text('config', 11, type = 'other')]
-                if is_gitdata_value("warning_message", dict):
-                    for v in githubdata["warning_message"].keys():
-                        if int(v) > self.opt_dict["data_version"]:
-                            if is_gitdata_value(["warning_message", v], str):
-                                loglist.append(gitdata_value(["warning_message", v], str))
+                elif dv > self.opt_dict["data_version"]:
+                    loglist = [self.text('config', 11, type = 'other')]
+                    if is_gitdata_value("warning_message", dict):
+                        for v in githubdata["warning_message"].keys():
+                            if int(v) > self.opt_dict["data_version"]:
+                                if is_gitdata_value(["warning_message", v], str):
+                                    loglist.append(gitdata_value(["warning_message", v], str))
 
-                            elif is_gitdata_value(["warning_message", v], list):
-                                loglist.extend(gitdata_value(["warning_message", v], list))
+                                elif is_gitdata_value(["warning_message", v], list):
+                                    loglist.extend(gitdata_value(["warning_message", v], list))
 
-                if not configuring:
-                    loglist.append(self.text('config', 12, type = 'other'))
+                    if not configuring:
+                        loglist.append(self.text('config', 12, type = 'other'))
 
-                if show_info:
-                    self.log(loglist, 0)
+                    if show_info:
+                        self.log(loglist, 0)
 
         except:
             log_failure()
@@ -3349,7 +3366,7 @@ class Configure:
                 self.infofiles.close(self.channels, self.combined_channels, self.channelsource)
 
         except:
-            self.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': 'InfoFiles'})
+            #~ self.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': 'InfoFiles'})
             self.ready = True
 
         if self.program_cache != None and self.program_cache.is_alive():

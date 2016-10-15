@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 # from __future__ import print_function
 
 import codecs, locale, re, os, sys, io, shutil, difflib
-import traceback, smtplib, sqlite3
+import traceback, smtplib, sqlite3, argparse
 import datetime, time, calendar, pytz
 import tv_grab_channel, tv_grab_config, test_json_struct
 from threading import Thread, Lock, RLock
@@ -487,7 +487,7 @@ class Logging(Thread):
                 return
 
             if subject == None:
-                subject = 'Tv_grab_nl_py %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                subject = 'Tv_grab_nl3_py %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
 
             msg = MIMEText(msg, _charset='utf-8')
             msg['Subject'] = subject
@@ -1641,12 +1641,12 @@ class ProgramCache(Thread):
                 return scids
 
             elif 'chanid' in item and 'sourceid' in item:
-                pcursor.execute(u"SELECT scid FROM channelsource WHERE chanid = ? and sourceid = ?", (item['chanid'], item['sourceid']))
-                r = pcursor.fetchone()
-                if r == None:
+                pcursor.execute(u"SELECT scid, fgroup FROM channelsource WHERE chanid = ? and sourceid = ?", (item['chanid'], item['sourceid']))
+                g= pcursor.fetchone()
+                if g == None:
                     return
 
-                return scid
+                return {'channelid': g[0],'group': g[1]}
 
             elif 'fgroup' in item and 'sourceid' in item:
                 pcursor.execute(u"SELECT scid, chanid FROM channelsource WHERE fgroup = ? and sourceid = ?", (item['fgroup'], item['sourceid']))
@@ -2222,8 +2222,8 @@ class InfoFiles():
             self.fetch_list = self.functions.open_file(self.config.opt_dict['xmltv_dir'] + '/fetched-programs3','w')
             self.raw_output =  self.functions.open_file(self.config.opt_dict['xmltv_dir']+'/raw_output3', 'w')
 
-    def check_new_channels(self, source, source_channels):
-        if not self.write_info_files or self.config.args.only_cache:
+    def check_new_channels(self, source, source_channels,):
+        if not self.write_info_files or self.config.opt_dict['only_cache']:
             return
 
         if source.all_channels == {}:
@@ -2243,6 +2243,8 @@ class InfoFiles():
             if not channelid in source.all_channels.keys():
                 #~ print  u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source)
                 self.lineup_changes.append( u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source))
+
+        self.lineup_changes.extend(source.lineup_changes)
 
     def add_url_failure(self, string):
         self.url_failure.append(string)
@@ -2483,12 +2485,11 @@ class InfoFiles():
 # end InfoFiles
 
 class test_JSON(test_json_struct.test_JSON):
-    def __init__(self):
-        self.config = tv_grab_config.Configure('tv_grab_test_json')
+    def __init__(self, name = 'tv_grab_test'):
+        self.config = tv_grab_config.Configure(name)
+        self.config.test_modus = True
         self.config.get_json_datafiles()
         test_json_struct.test_JSON.__init__(self)
-
-        self.check_on_grabber_datafile = False
 
     def log(self, text):
         self.config.log(text)
@@ -2519,3 +2520,435 @@ class test_JSON(test_json_struct.test_JSON):
             else:
                  self.lookup_lists['str-lst-logoid'] = slids
 # end test_JSON
+
+class test_Source():
+    def __init__(self):
+        self.test_json = test_JSON('tv_grab_test')
+        self.config = self.test_json.config
+        self.cache_return = Queue()
+        self.no_config = True
+        self.lineup = None
+        self.opt_dict = {}
+        self.opt_dict['grabber_name'] = ''
+        self.opt_dict['source_dir'] = u'%s/sources' % self.config.opt_dict['xmltv_dir']
+        self.opt_dict['grabber_file_dir'] = ''
+        self.opt_dict['report_dir'] = u'%s/tv_grab_output' % self.config.opt_dict['home_dir']
+        self.opt_dict['tree_file'] = 'datatree.txt'
+        self.opt_dict['parse_file'] = 'dataparse.txt'
+        self.opt_dict['test_modus'] = 'channels'
+        self.opt_dict['sourceid'] = 1
+        self.opt_dict['chanid'] = ''
+        self.opt_dict['offset'] = 0
+        self.opt_dict['detailid'] = ''
+        self.opt_dict['report_level'] = 511
+        self.opt_dict[''] = ''
+
+        self.config.write_info_files = True
+        self.config.only_local_sourcefiles = True
+        self.source = None
+
+    def test_source(self):
+        try:
+            if self.read_commandline() != None:
+                return(0)
+
+            x = self.get_config()
+            if x > 0:
+                self.config.log('Errors were encountered. See %s/test-%s.txt and the log\n' % (self.opt_dict['report_dir'], self.opt_dict['grabber_name']))
+                return(x)
+
+            if self.args.config_file:
+                self.config.log('Creating %s/.json_struct/tv_grab_test.conf\n' % self.config.opt_dict['home_dir'])
+                return(self.make_config())
+
+            if self.args.version:
+                self.config.validate_option('version')
+                return(0)
+
+            self.config.opt_dict['log_level'] = self.config.opt_dict['log_level'] | 98304
+            self.config.get_json_datafiles(self.opt_dict['grabber_name'], False, True)
+            for (a, o) in ((self.args.show_sources, 'show_sources'), \
+                                  (self.args.show_logo_sources, 'show_logo_sources'), \
+                                  (self.args.show_detail_sources, 'show_detail_sources')):
+                if a:
+                    self.config.validate_option(o)
+                    return(0)
+
+            self.config.program_cache = ProgramCache(self.config, self.config.opt_dict['cache_file'])
+            self.config.program_cache.start()
+            if self.opt_dict['test_modus'] == 'lineup':
+                pass
+
+            else:
+                sid = self.opt_dict['sourceid']
+                if not sid in self.config.sources.keys():
+                    self.config.log('Source %d is not defined!\n')
+                    return(1)
+
+                source_name = self.config.sources[sid]["json file"]
+                x = self.test_jsonfile(self.opt_dict['source_dir'], source_name)
+                if x > 0:
+                    self.config.log('Errors were encountered. See %s/test-%s.txt\n' % (self.opt_dict['report_dir'], source_name))
+                    return(x)
+
+                if self.opt_dict['test_modus'] == 'channels':
+                    if not 'channels' in self.test_json.found_data_defs and not 'base-channels' in self.test_json.found_data_defs:
+                        self.config.log('There is no "channels" or "base-channels" data_def found in %s to test with!\n' % source_name)
+                        return(1)
+
+                elif self.opt_dict['test_modus'] == 'base':
+                    if not 'base' in self.test_json.found_data_defs and not 'base_detailed' in self.test_json.found_data_defs:
+                        self.config.log('There is no "base" data_def found in %s to test with!\n' % source_name)
+                        return(1)
+
+                elif self.opt_dict['test_modus'] == 'detail':
+                    if not sid in self.config.detail_sources:
+                        self.config.log('You try to test a detail-page, but the %s source is not listed as a detailsource!\n' % source_name)
+                        return(1)
+
+                    elif not 'detail' in self.test_json.found_data_defs:
+                        self.config.log('There is no "detail" data_def found in %s to test with!\n' % source_name)
+                        return(1)
+
+                elif self.opt_dict['test_modus'] not in ('lineup', ):
+                    self.config.log('Please select a valid test_modus!')
+                    return(0)
+
+                # Load the source
+                self.source = self.config.init_sources(sid)
+                self.config.channelsource[sid] = self.source
+                #~ self.source.print_tags = True
+                self.source.print_roottree = True
+                self.source.show_parsing = True
+                self.source.print_searchtree = True
+                self.source.show_result = True
+
+            self.open_output()
+            if self.opt_dict['test_modus'] == 'channels':
+                return self.test_channels()
+
+            elif self.no_config:
+                self.config.log(['If you want to run the %s test\n' % self.opt_dict['test_modus'],
+                    '  you need an accessible configuration file in %s\n' % self.config.opt_dict['xmltv_dir']])
+                return(1)
+
+            elif self.opt_dict['test_modus'] == 'base':
+                return self.test_base()
+
+            elif self.opt_dict['test_modus'] == 'detail':
+                return self.test_detail()
+
+            elif self.opt_dict['test_modus'] == 'lineup':
+                self.test_lineup()
+
+        except:
+            self.config.log(['Some unexpected error ocurred.\n', traceback.format_exc()])
+            return(1)
+
+    def test_channels(self):
+        self.source.init_channel_source_ids()
+        self.source.get_channels()
+        self.config.infofiles.check_new_channels(self.source, self.config.source_channels)
+        for line in self.config.infofiles.lineup_changes:
+            self.lineup.write(line)
+
+        self.config.infofiles.lineup_changes = []
+        self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
+        return(0)
+
+    def test_base(self):
+        self.config.opt_dict['days'] = 1
+        maxdays = self.source.data_value(["base", "max days"], int, default = 14)
+        if self.opt_dict['offset'] >= maxdays:
+            self.config.log('The given offset is higher then the for the source set maximum.\n  Setting it to 0.\n')
+            self.opt_dict['offset'] = 0
+            self.config.opt_dict['offset'] = 0
+
+        if self.opt_dict['chanid'] not in self.config.channels.keys():
+            self.config.log('The requested chanid "%s" does not exist!\n' % self.opt_dict['chanid'])
+            return(0)
+
+        for chanid, channel in self.config.channels.items():
+            if chanid == self.opt_dict['chanid']:
+                channel.active = True
+                channelid = channel.get_source_id(self.source.proc_id)
+                if channelid == '':
+                    self.config.log('The requested chanid "%s" does not exist on this source!\n' % self.opt_dict['chanid'])
+                    return(0)
+
+            else:
+                channel.active = False
+
+        self.source.init_channel_source_ids()
+        self.config.queues['cache'].put({'task':'query', 'parent': self, 'chan_scid': {'sourceid': self.source.proc_id, 'chanid': self.opt_dict['chanid']}})
+        channelgrp = data_value('group',self.cache_return.get(True), str)
+        pdata = {}
+        pdata['channels'] = self.source.channels
+        pdata['channel'] = channelid
+        pdata['channelgrp'] = channelgrp
+        pdata['offset'] = self.opt_dict['offset']
+        pdata['start'] = self.opt_dict['offset']
+        pdata['end'] = self.opt_dict['offset'] + 1
+        pdata['back'] = -self.opt_dict['offset']
+        pdata['ahead'] = self.opt_dict['offset']
+        data = self.source.get_page_data('base', pdata)
+        self.source.parse_basepage(data, pdata)
+        self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
+        return(0)
+
+    def test_detail(self):
+        if self.opt_dict['detailid'] == '':
+            self.config.log('You did not provide a detailid to test the detail-page with.\n Extracting a base-page.\n\n')
+            if self.test_base() > 0:
+                return(1)
+
+            self.config.log('\nSelect one of the programs to use for testing:\n', log_target = 1)
+            counter = 0
+            detailids = {}
+            for p in self.source.data:
+                for k in ('detail_url', 'name', 'start-time'):
+                    if not k in p.keys():
+                        break
+
+                else:
+                    counter += 1
+                    detailids[counter] = p['detail_url']
+                    self.config.log('[%3.0f] %s: %s\n' % (counter, self.config.in_output_tz(p['start-time']).strftime('%d %b %H:%M'), p['name']), log_target = 1)
+
+            try:
+                while True:
+                    n = ''
+                    k = ''
+                    while k != '\n':
+                        if k in '0123456789':
+                            n+=k
+
+                        k = sys.stdin.read(1)
+
+                    try:
+                        n = int(n)
+                        if 0 < n <= counter:
+                            break
+
+                        self.config.log('Please give a valid value\n', log_target = 1)
+
+                    except:
+                        self.config.log('Please give a valid integer value\n', log_target = 1)
+
+            except:
+                return(1)
+
+            self.opt_dict['detailid'] = detailids[n]
+            self.close_output()
+            self.open_output()
+
+        pdata = {}
+        pdata['chanid'] = self.opt_dict['chanid']
+        pdata['channelid'] = pdata['chanid']
+        if self.opt_dict['chanid'] in self.config.channels.keys():
+            pdata['channelid'] = self.config.channels[self.opt_dict['chanid']].get_source_id(self.source.proc_id)
+
+        pdata['detail_url'] = self.opt_dict['detailid']
+        self.source.load_detailpage('detail', pdata)
+        self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
+        return(0)
+
+    def test_lineup(self):
+        self.config.infofiles.lineup_changes = []
+        for sid, source in self.config.sources.items():
+            source_name = source["json file"]
+            if self.test_jsonfile(self.opt_dict['source_dir'], source_name) > 0:
+                self.config.log('Errors were encountered. See %s/test-%s.txt\n' % (self.opt_dict['report_dir'], source_name))
+                continue
+
+            self.source = self.config.init_sources(sid)
+            self.config.channelsource[sid] = self.source
+            self.source.init_channel_source_ids()
+            self.source.get_channels()
+            self.config.infofiles.check_new_channels(self.source, self.config.source_channels)
+
+        for line in self.config.infofiles.lineup_changes:
+            self.lineup.write(line)
+
+        self.config.infofiles.lineup_changes = []
+        self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
+        return(0)
+
+    def get_config(self):
+        f = self.config.IO_func.open_file('%s/.json_struct/tv_grab_test.conf' % self.config.opt_dict['home_dir'])
+        if f != None:
+            # Read the configuration into the self.config_dict dictionary
+            for byteline in f.readlines():
+                try:
+                    line = self.config.IO_func.get_line(f, byteline)
+                    if not line:
+                        continue
+
+                    a = re.split('=',line)
+                    if len(a) != 2:
+                        continue
+
+                    cfg_option = a[0].lower().strip()
+                    if cfg_option in ('source_dir', 'grabber_file_dir', 'grabber_name', 'test_modus', 'chanid', 'report_dir'):
+                        self.opt_dict[cfg_option] = unicode(a[1]).strip()
+
+                    if cfg_option in ('sourceid', 'offset'):
+                        self.opt_dict[cfg_option] = int(a[1])
+
+                except:
+                    pass
+
+            f.close()
+
+        for (a, o) in ((self.args.source_dir, 'source_dir'), \
+                              (self.args.grabber_name, 'grabber_name'), \
+                              (self.args.test_modus, 'test_modus'), \
+                              (self.args.report_dir, 'report_dir'), \
+                              (self.args.report_level, 'report_level'), \
+                              (self.args.offset, 'offset'), \
+                              (self.args.sourceid, 'sourceid'), \
+                              (self.args.detailid, 'detailid'), \
+                              (self.args.chanid, 'chanid')):
+            if a != None:
+                self.opt_dict[o] = a
+                              #~ (self.args.chanid, 'chanid'), \
+
+        if not os.path.exists(self.opt_dict['report_dir']):
+            os.mkdir(self.opt_dict['report_dir'])
+
+        if self.opt_dict['grabber_name'] in ('', None):
+            return(1)
+
+        if self.opt_dict['grabber_name'] == 'tv_grab_nl':
+            self.config.opt_dict['config_file'] = u'%s/%s3_py.conf' % (self.config.opt_dict['xmltv_dir'], self.opt_dict['grabber_name'])
+
+        else:
+            self.config.opt_dict['config_file'] = u'%s/%s_py.conf' % (self.config.opt_dict['xmltv_dir'], self.opt_dict['grabber_name'])
+
+        self.config.opt_dict['log_file'] = '%s/tv_grab_test.log' % (self.opt_dict['report_dir'])
+        if self.config.validate_option('config_file') == None:
+            self.no_config = False
+
+        if self.opt_dict['grabber_file_dir'] == '':
+            self.opt_dict['grabber_file_dir'] = self.opt_dict['source_dir']
+
+        return self.test_jsonfile(self.opt_dict['grabber_file_dir'], self.opt_dict['grabber_name'])
+
+    def make_config(self):
+        try:
+            # check for the config dir
+            config_dir = '%s/.json_struct' % self.config.opt_dict['home_dir']
+            if (config_dir != '') and not os.path.exists(config_dir):
+                os.mkdir(config_dir)
+
+            else:
+                self.config.IO_func.save_oldfile('%s/tv_grab_test.conf' % config_dir)
+
+        except:
+            traceback.print_exc()
+            return(2)
+
+        try:
+            f = self.config.IO_func.open_file('%s/tv_grab_test.conf' % config_dir, 'w')
+            for n in ('source_dir', 'grabber_file_dir', 'grabber_name', 'test_modus',
+                        'offset', 'sourceid', 'chanid', 'detailid', 'report_dir', 'report_level'):
+                f.write(u'%s = %s\n' % (n, self.opt_dict[n]))
+
+            f.close()
+
+        except:
+            traceback.print_exc()
+            return(2)
+
+    def read_commandline(self):
+        description = u"%s: %s\n" % (self.config.country, self.config.version(True)) + \
+                        u"The Netherlands: %s\n" % self.config.version(True, True) + \
+                        self.config.text('config', 100, (self.config.opt_dict['home_dir'], ),  type = 'help')
+
+        parser = argparse.ArgumentParser(description = description, formatter_class=argparse.RawTextHelpFormatter)
+
+        parser.add_argument('-V', '--version', action = 'store_true', default = False, dest = 'version',
+                        help = self.config.text('config', 5, type='help'))
+
+        parser.add_argument('-C', '--config-file', action = 'store_true', default = False, dest = 'config_file',
+                        help =self.config.text('config', 110, (self.config.opt_dict['home_dir'],), type='help'))
+
+        parser.add_argument('-S', '--source-dir', type = str, default = None, dest = 'source_dir',
+                        metavar = '<directory>', help =self.config.text('config', 103, (self.opt_dict['source_dir'], self.config.opt_dict['home_dir']), type='help'))
+
+        parser.add_argument('-R', '--report-dir', type = str, default = None, dest = 'report_dir',
+                        metavar = '<directory>', help =self.config.text('config', 104, (self.opt_dict['report_dir'], ), type='help'))
+
+        parser.add_argument('-l', '--report-level', type = str, default = None, dest = 'report_level',
+                        metavar = '<integer>', help =self.config.text('config', 109, type='help'))
+
+        parser.add_argument('-g', '--grabber-name', type = str, default = None, dest = 'grabber_name',
+                        metavar = '<name>', help =self.config.text('config', 101, type='help'))
+
+        parser.add_argument('-m', '--test-modus', type = str, default = None, dest = 'test_modus',
+                        metavar = '<name>', help =self.config.text('config', 106, type='help'))
+
+        parser.add_argument('-s', '--source-id', type = int, default = None, dest = 'sourceid',
+                        metavar = '<id>', help =self.config.text('config', 105, type='help'))
+
+        parser.add_argument('-c', '--chanid', type = str, default = None, dest = 'chanid',
+                        metavar = '<id>', help =self.config.text('config', 107, type='help'))
+
+        parser.add_argument('-i', '--detailid', type = str, default = None, dest = 'detailid',
+                        metavar = '<id>', help =self.config.text('config', 108, type='help'))
+
+        parser.add_argument('-o', '--offset', type = int, default = None, dest = 'offset', choices=range(0, 14),
+                        metavar = '<days>', help =self.config.text('config', 102, type='help'))
+
+        parser.add_argument('--show-sources', action = 'store_true', default = False, dest = 'show_sources',
+                        help =self.config.text('config', 10, type='help'))
+
+        parser.add_argument('--show-detail-sources', action = 'store_true', default = False, dest = 'show_detail_sources',
+                        help =self.config.text('config', 12, type='help'))
+
+        parser.add_argument('--show-logo-sources', action = 'store_true', default = False, dest = 'show_logo_sources',
+                        help =self.config.text('config', 13, type='help'))
+
+        # Handle the sys.exit(0) exception on --help more gracefull
+        try:
+            self.args = parser.parse_args()
+
+        except:
+            return(0)
+
+    def test_jsonfile(self, jdir, jname):
+        self.test_json.report_file = self.config.IO_func.open_file('%s/test-%s.txt' % (self.opt_dict['report_dir'], jname), 'w')
+        x = self.test_json.test_file('%s/%s.json' % (jdir, jname), report_level = self.opt_dict['report_level'])
+        self.test_json.report_file.close()
+        self.test_json.report_file = sys.stdout
+        self.config.opt_dict['sources'] = jdir
+        return x
+
+    def open_output(self):
+        if self.opt_dict['test_modus'] in ('channels', 'base', 'detail'):
+            self.source.test_output = self.config.IO_func.open_file('%s/dataparse.txt' % (self.opt_dict['report_dir']), 'w')
+            self.source.roottree_output = self.config.IO_func.open_file('%s/datatree.txt' % (self.opt_dict['report_dir']), 'w')
+            self.source.raw_output = self.config.IO_func.open_file('%s/rawdata.txt' % (self.opt_dict['report_dir']), 'w')
+            self.source.data_output = self.config.IO_func.open_file('%s/output.txt' % (self.opt_dict['report_dir']), 'w')
+
+        if self.opt_dict['test_modus'] in ('channels', 'lineup'):
+            self.lineup = self.config.IO_func.open_file('%s/lineup_changes.txt' % (self.opt_dict['report_dir']), 'w')
+
+    def close_output(self):
+        if self.source != None:
+            for f in (self.source.test_output, self.source.roottree_output, self.source.raw_output, self.source.data_output):
+                try:
+                    f.close()
+
+                except:
+                    pass
+
+        if self.lineup != None:
+            self.lineup.close()
+            self.lineup = None
+
+    def close(self):
+        self.close_output()
+        self.config.close()
+
+# end test_Source()
