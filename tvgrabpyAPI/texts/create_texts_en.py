@@ -197,7 +197,7 @@ def load_texts():
                 },
             u'confighelp':{
                 0: u'# DO NOT CHANGE THIS VALUE!\n',
-                1: u'# See: https://github.com/tvgrabbers/tvgrabnlpy/wiki/Over_de_configuratie\n',
+                1: u'# See: https://github.com/tvgrabbers/tvgrabpyAPI/wiki/configuration\n',
                 2: u'# This is a list with default options set on running with --configure (-C)\n',
                 3: u'# Many can be overruled on the commandline.\n',
                 4: u'# Be carefull with manually editing. Invalid options will be\n',

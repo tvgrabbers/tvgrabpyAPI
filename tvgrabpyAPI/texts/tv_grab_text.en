@@ -108,7 +108,7 @@ I0
 V# DO NOT CHANGE THIS VALUE!\u000a
 p42
 sI1
-V# See: https://github.com/tvgrabbers/tvgrabnlpy/wiki/Over_de_configuratie\u000a
+V# See: https://github.com/tvgrabbers/tvgrabpyAPI/wiki/configuration\u000a
 p43
 sI2
 V# This is a list with default options set on running with --configure (-C)\u000a
