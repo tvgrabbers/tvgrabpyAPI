@@ -1213,7 +1213,7 @@ class Configure:
         parser.add_argument('-h', '--help', action = 'store_true', default = False, dest = 'help',
                         help = self.text('config', 3, type='help'))
 
-        parser.add_argument('-l', '--language', type = check_lang, default = 'en', dest = 'language',
+        parser.add_argument('-l', '--language', type = check_lang, default = None, dest = 'language',
                         metavar = '<lang code>', help =self.text('config', 47, type='help'))
 
         parser.add_argument('-V', '--version', action = 'store_true', default = False, dest = 'version',
@@ -1443,7 +1443,7 @@ class Configure:
                 # Strip the name from the value
                 a = re.split('=',line)
                 cfg_option = a[0].lower().strip()
-                if cfg_option == 'language' and len(a) == 2:
+                if cfg_option == 'language' and len(a) == 2 and self.args.language == None:
                     self.load_text(a[1].lower().strip())
 
                 # Boolean Values
@@ -3175,7 +3175,7 @@ class Configure:
             f.write(string)
 
         f.write(u'\n')
-        for i in range(154, 159):
+        for i in range(154, 161):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3195,9 +3195,9 @@ class Configure:
 
             slist = u'%s genres\n' % (slist[0:-2])
             f.write(u'\n')
-            f.write(self.text('config', 160, type = 'confighelp'))
+            f.write(self.text('config', 162, type = 'confighelp'))
             f.write(slist)
-            for i in range(161, 163):
+            for i in range(163, 165):
                 line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
                 if line != '':
                     f.write(line)
@@ -3245,9 +3245,9 @@ class Configure:
                 slist = u'%s%s, ' % (slist, self.channelsource[s].source)
 
             f.write(u'\n')
-            f.write(self.text('config', 164, type = 'confighelp'))
-            f.write(self.text('config', 165, (slist[0:-2], ), type = 'confighelp'))
-            for i in range(166, 168):
+            f.write(self.text('config', 166, type = 'confighelp'))
+            f.write(self.text('config', 167, (slist[0:-2], ), type = 'confighelp'))
+            for i in range(168, 170):
                 line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
                 if line != '':
                     f.write(line)
@@ -3274,15 +3274,15 @@ class Configure:
                     f.write(string)
 
         f.write(u'\n')
-        f.write(self.text('config', 169, type = 'confighelp'))
+        f.write(self.text('config', 171, type = 'confighelp'))
         f.write(u'# \n')
-        for i in range(170, 175):
+        for i in range(172, 177):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
 
         f.write(u'# \n')
-        for i in range(176, 184):
+        for i in range(178, 186):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)

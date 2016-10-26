@@ -292,13 +292,7 @@ class Channel_Config(Thread):
                                 self.add_tuple_values(fetched_detail['data'], pn, src_id)
                                 pn.add_detail_data(fetched_detail['data'], src_id)
                                 # and do a ttvdb check
-                                if not self.get_opt('disable_ttvdb'):
-                                    pngenre = pn.get_value('genre').lower()
-                                    pneptitle = pn.get_value('episode title')
-                                    pnseason = pn.get_value('season')
-                                    if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
-                                        self.functions.update_counter('queue', -1, self.chanid)
-                                        self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
+                                self.check_ttvdb(pn)
 
                         # It's a ttvdb request return
                         if src_id == -1:
@@ -449,19 +443,15 @@ class Channel_Config(Thread):
 
             pngenre = pn.get_value('genre').lower()
             # Check if its genre is in the allow detailfetch list
-            if not ('all' in self.config.detailed_genres \
-                or pngenre in self.config.detailed_genres \
-                or ('none' in self.config.detailed_genres \
-                    and not pn.is_set('genre'))):
+            if ('all' in self.config.detailed_genres \
+                    and (pngenre in self.config.detailed_genres \
+                        or ('none' in self.config.detailed_genres and not pn.is_set('genre')))) \
+                or (not 'all' in self.config.detailed_genres \
+                    and (not pngenre in self.config.detailed_genres \
+                        or not ('none' in self.config.detailed_genres and not pn.is_set('genre')))):
                 self.functions.update_counter('exclude', -99, self.chanid)
                 # Check ttvdb
-                if not self.get_opt('disable_ttvdb'):
-                    pneptitle = pn.get_value('episode title')
-                    pnseason = pn.get_value('season')
-                    if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
-                        self.functions.update_counter('queue', -1, self.chanid)
-                        self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
-
+                self.check_ttvdb(pn)
                 continue
 
             # No details to fetch
@@ -471,13 +461,7 @@ class Channel_Config(Thread):
                     self.config.log(self.config.text('fetch', 34, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
 
                 # Check ttvdb
-                if not self.get_opt('disable_ttvdb'):
-                    pneptitle = pn.get_value('episode title')
-                    pnseason = pn.get_value('season')
-                    if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
-                        self.functions.update_counter('queue', -1, self.chanid)
-                        self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
-
+                self.check_ttvdb(pn)
                 continue
 
             # Do the detail requests
@@ -503,6 +487,14 @@ class Channel_Config(Thread):
         else:
             self.detail_return.put({'source': None,'last_one': True})
 
+
+    def check_ttvdb(self, pn):
+        if not self.get_opt('disable_ttvdb'):
+            pngenre = pn.get_value('genre').lower()
+            pneptitle = pn.get_value('episode title')
+            if pngenre in self.config.series_genres and pneptitle != '':
+                self.functions.update_counter('queue', -1, self.chanid)
+                self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
 
     def log_results(self):
         with self.functions.count_lock:
