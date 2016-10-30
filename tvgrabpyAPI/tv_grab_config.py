@@ -175,6 +175,9 @@ def grabber_main(config):
             if channel.is_alive():
                 channel.join()
 
+        if config.errorstate != 0:
+            return(config.errorstate)
+
         # produce the results and wrap-up
         config.write_defaults_list()
         config.xml_output.print_string()
@@ -197,6 +200,7 @@ class Configure:
     def __init__(self, name="", datafile=""):
         log_array = []
         # Version info as returned by the version function
+        self.errorstate = 0
         self.api_name = api_name
         self.api_major = api_major
         self.api_minor = api_minor
@@ -3366,18 +3370,14 @@ class Configure:
                 self.infofiles.close(self.channels, self.combined_channels, self.channelsource)
 
         except:
-            #~ self.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': 'InfoFiles'})
             self.ready = True
 
-        if self.program_cache != None and self.program_cache.is_alive():
-            self.program_cache.cache_request.put({'task':'quit'})
-            self.program_cache = None
+        #Let the log thread handle the other threads
+        self.logging.log_queue.put('Closing down\n')
+        if self.logging.is_alive():
+            self.logging.join()
 
-        if self.ttvdb != None and self.ttvdb.is_alive():
-            self.ttvdb.detail_request.put({'task':'quit'})
-            self.ttvdb = None
-
-        # close everything neatly
+        # close files neatly
         if self.opt_dict['output_file'] != None:
             try:
                 self.output.close()
@@ -3385,12 +3385,12 @@ class Configure:
             except:
                 pass
 
-        self.logging.log_queue.put('Closing down\n')
-        if self.logging.is_alive():
-            self.logging.join()
-
         if self.log_output != None:
-            self.log_output.close()
+            try:
+                self.log_output.close()
+
+            except:
+                pass
 
     # end close()
 

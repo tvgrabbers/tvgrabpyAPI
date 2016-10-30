@@ -432,7 +432,8 @@ def load_texts():
                 26: u'Database Error\n'
                 },
             u'other':{
-                1: u'Verifying the database\n'}},
+                1: u'Verifying the database\n',
+                2: u'Sending all remaining threads a signal to finish\n'}},
         u'fetch':{
             u'error':{
                 1: u'get_page timed out on (>%s s): %s\n',
@@ -514,7 +515,8 @@ def load_texts():
                 u'': u''}},
         u'merge':{
             u'error':{
-                1: u'Adjusting gap/overlap of %s min. at %s on channel %s.\n'
+                1: u'Adjusting gap/overlap of %s min. at %s on channel %s.\n',
+                2: u'Removing program %s on %s with equal start and stop time.\n'
                 },
             u'stats':{
                 1: u'Now adding %s programs from %s to %s\n',

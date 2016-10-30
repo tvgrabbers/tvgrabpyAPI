@@ -440,7 +440,8 @@ def load_texts():
                 26: u'Database Fout\n'
                 },
             u'other':{
-                1: u'De Database controleren.\n'}},
+                1: u'De Database wordt gecontroleerd.\n',
+                1: u'Aan alle overgebleven programma-threads wordt een signaal om te stoppen gestuurd.\n'}},
         u'fetch':{
             u'error':{
                 1: u'get_page duurt te lang (>%s s): %s\n',
@@ -522,7 +523,8 @@ def load_texts():
                 u'': u''}},
         u'merge':{
             u'error':{
-                1: u'Het gat/overlap van %s min. om %s op zender %s wordt gecorrigeerd.\n'
+                1: u'Het gat/overlap van %s min. om %s op zender %s wordt gecorrigeerd.\n',
+                2: u'Het programma %s op %s met gelijke start en stop tijd wordt verwijderd.\n'
                 },
             u'stats':{
                 1: u'Nu worden %s programma\'s van %s aan %s toegevoegd\n',

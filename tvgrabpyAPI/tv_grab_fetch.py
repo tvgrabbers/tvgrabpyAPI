@@ -746,7 +746,7 @@ class theTVDB_v1(Thread):
         # The queue to receive requests for detail fetches
         self.detail_request = Queue()
         self.config.queues['ttvdb'] = self.detail_request
-        self.thread_type = 'ttvdb'
+        self.thread_type = 'lookup'
         self.test_output = sys.stdout
         self.print_tags = False
         self.print_searchtree = False
@@ -781,7 +781,7 @@ class theTVDB_v1(Thread):
         if self.config.opt_dict['disable_ttvdb']:
             return
         try:
-            self.state = 2
+            self.state = 4
             while True:
                 if self.quit and self.detail_request.empty():
                     self.state = 0
@@ -790,8 +790,10 @@ class theTVDB_v1(Thread):
                 try:
                     crequest = self.detail_request.get(True, 5)
                     self.lastrequest = datetime.datetime.now()
+                    #~ print crequest
 
                 except Empty:
+                    #~ print 'Empty Queue'
                     continue
 
                 if (not isinstance(crequest, dict)) or (not 'task' in crequest):
@@ -802,13 +804,17 @@ class theTVDB_v1(Thread):
                         continue
 
                     if 'pn' in crequest:
+                        self.state = 3
+                        #~ print crequest['pn'].get_start_stop(True), crequest['pn'].get_title(True)
                         qanswer = self.get_season_episode(crequest['parent'], crequest['pn'])
+                        #~ print qanswer
                         if qanswer == -1:
                             crequest['parent'].detail_return.put('quit')
                             self.quit = True
                             continue
 
                         crequest['parent'].detail_return.put({'source': -1, 'data': qanswer, 'pn': crequest['pn']})
+                        self.state = 4
 
                     self.functions.update_counter('queue', -1,  crequest['parent'].chanid, False)
                     continue
@@ -869,7 +875,12 @@ class theTVDB_v1(Thread):
         return data
 
     def get_cache_return(self):
+        if self.quit:
+            return -1
+
+        self.state += 8
         value = self.cache_return.get(True)
+        self.state -= 8
         if value == 'quit':
             self.ready = True
             return -1
@@ -1253,6 +1264,11 @@ class FetchData(Thread):
     The output is a list of programming in order where each row
     contains a dictionary with program information.
     It runs as a separate thread for every source
+    self.state =
+    0: Thread not running or not looping
+    1: Thread running waiting on base pages
+    4: Thread running waiting on detail pages
+    8: Thread running waiting on database return
     """
     def __init__(self, config, proc_id, source_data, cattrans_type = None):
         self.source_data = source_data
@@ -1402,7 +1418,15 @@ class FetchData(Thread):
 
             self.lastrequest = datetime.datetime.now()
             try:
-                return self.detail_request.get()
+                if self.quit:
+                    return -1
+
+                qval = self.detail_request.get()
+                if qval['task'] == 'quit':
+                    return -1
+
+                else:
+                    return qval
 
             except Empty:
                 return 0
@@ -1421,7 +1445,11 @@ class FetchData(Thread):
             else:
                 # Load and proccess al the program pages
                 self.state = 1
-                self.load_pages()
+                if self.load_pages() == -1:
+                    self.set_loaded('channel')
+                    self.state = 0
+                    self.ready = True
+                    return
 
             self.state = 0
             if self.config.write_info_files:
@@ -1447,7 +1475,7 @@ class FetchData(Thread):
                 rev_testlist = testlist[:]
                 rev_testlist.reverse()
                 # We process detail requests, so we loop till we are finished
-                self.state = 2
+                self.state = 4
                 self.lastrequest = datetime.datetime.now()
                 while True:
                     if self.quit:
@@ -1466,7 +1494,7 @@ class FetchData(Thread):
                     tdict = queue_val
                     parent = tdict['parent']
                     # Is this the closing item for the channel?
-                    if ('last_one' in tdict) and tdict['last_one']:
+                    if tdict[ 'task'] == 'last_one':
                         for q_no in rev_testlist:
                             if self.proc_id == q_no[1] and self.config.channelsource[q_no[0]].is_alive():
                                 self.config.queues['source'][q_no[0]].put(tdict)
@@ -2038,10 +2066,9 @@ class FetchData(Thread):
             # Retrieve what is in the cache with a day earlier and later added
             cache_range = range( first_day - 1 , min(max_days, last_day) +1)
             self.config.queues['cache'].put({'task':'query', 'parent': self, 'sourceprograms': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': cache_range}})
-            cache_programs = self.cache_return.get(True)
-            if cache_programs =='quit':
-                self.ready = True
-                return
+            cache_programs = self.get_cache_return()
+            if cache_programs == -1:
+                return -1
 
             # And add in the cached programs
             if len(good_programs) > 0:
@@ -2213,9 +2240,15 @@ class FetchData(Thread):
         for channelid, chanid in self.chanids.items():
             self.program_data[channelid] = []
             self.config.queues['cache'].put({'task':'query', 'parent': self, 'fetcheddays': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': list(full_range)}})
-            cached[channelid] = self.cache_return.get(True)
+            cached[channelid] = self.get_cache_return()
+            if cached[channelid] == -1:
+                return -1
+
             self.config.queues['cache'].put({'task':'query', 'parent': self, 'laststop': {'sourceid': self.proc_id, 'channelid': channelid}})
-            ls = self.cache_return.get(True)
+            ls = self.get_cache_return()
+            if ls == -1:
+                return -1
+
             laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and isinstance(ls['laststop'], datetime.datetime) else None
 
         url_type = self.data_value(["base", "url-type"], int, default = 2)
@@ -2228,7 +2261,10 @@ class FetchData(Thread):
             fgroup = {}
             for channelgrp in changroups:
                 self.config.queues['cache'].put({'task':'query', 'parent': self, 'chan_scid': {'sourceid': self.proc_id, 'fgroup': channelgrp}})
-                fgroup[channelgrp] = self.cache_return.get(True)
+                fgroup[channelgrp] = self.get_cache_return()
+                if fgroup[channelgrp] == -1:
+                    return -1
+
                 for chan in fgroup[channelgrp][:]:
                     if not chan['channelid'] in self.chanids.keys():
                         fgroup[channelgrp].remove(chan)
@@ -2237,15 +2273,22 @@ class FetchData(Thread):
         for channelid, chanid in self.chanids.items():
             self.program_data[channelid] = []
             self.config.queues['cache'].put({'task':'query', 'parent': self, 'fetcheddays': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': list(full_range)}})
-            cached[channelid] = self.cache_return.get(True)
+            cached[channelid] = self.get_cache_return()
+            if cached[channelid] == -1:
+                return
+
             self.config.queues['cache'].put({'task':'query', 'parent': self, 'laststop': {'sourceid': self.proc_id, 'channelid': channelid}})
-            ls = self.cache_return.get(True)
+            ls = self.get_cache_return()
+            if ls == -1:
+                return -1
+
             laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and isinstance(ls['laststop'], datetime.datetime) else None
 
         # Determine which days to fetch
         if self.config.args.only_cache:
             for channelid, chanid in self.chanids.items():
-                do_final_processing(channelid)
+                if do_final_processing(channelid) == -1:
+                    return -1
 
             return
 
@@ -2526,7 +2569,8 @@ class FetchData(Thread):
 
 
                         if failure_count == 0 or retry == 1:
-                            do_final_processing(channelid)
+                            if do_final_processing(channelid) == -1:
+                                return -1
 
             # We fetch all channels in one
             if (url_type & 3) == 2:
@@ -2576,7 +2620,8 @@ class FetchData(Thread):
 
                     if failure_count == 0 or retry == 1:
                         for channelid, chanid in self.chanids.items():
-                            do_final_processing(channelid)
+                            if do_final_processing(channelid) == -1:
+                                return -1
 
                         break
 
@@ -2643,7 +2688,8 @@ class FetchData(Thread):
 
                     if failure_count == 0 or retry == 1:
                         for channelid, chanid in self.chanids.items():
-                            do_final_processing(channelid)
+                            if do_final_processing(channelid) == -1:
+                                return -1
 
                         break
 
@@ -2833,6 +2879,20 @@ class FetchData(Thread):
         return tdict
 
     # Helper functions
+    def get_cache_return(self):
+        if self.quit:
+            return -1
+
+        self.state += 8
+        cr = self.cache_return.get(True)
+        self.state -= 8
+        if cr == 'quit':
+            self.quit = True
+            return -1
+
+        else:
+            return cr
+
     def is_data_value(self, searchpath, dtype = None, empty_is_false = True):
         return is_data_value(searchpath, self.source_data, dtype, empty_is_false)
 

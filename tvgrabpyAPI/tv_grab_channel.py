@@ -18,6 +18,13 @@ from DataTreeGrab import is_data_value, data_value
 class Channel_Config(Thread):
     """
     Class that holds the Channel definitions and manages the data retrieval and processing
+    self.state =
+    0: Thread not running or not looping
+    1: Thread running waiting on base pages
+    2: Thread running waiting on child channels
+    3: Thread running selecting detail pages
+    4: Thread running waiting on detail pages
+    8: Thread running waiting on database return
     """
     def __init__(self, config, chanid = 0, name = '', group = 99):
         Thread.__init__(self, name = ('channel-%s'% name).encode('utf-8', 'replace'))
@@ -410,7 +417,9 @@ class Channel_Config(Thread):
                 if is_data_value(['prog_ID'], detailids, str, True):
                     self.config.queues['cache'].put({'task':'query', 'parent': self, \
                                 'programdetails': {'sourceid': src_id, 'channelid': channelid, 'prog_ID': detailids['prog_ID']}})
+                    self.state += 8
                     cache_detail = self.cache_return.get(True)
+                    self.state -= 8
                     if cache_detail =='quit':
                         self.ready = True
                         return
@@ -472,7 +481,7 @@ class Channel_Config(Thread):
                         break
 
                     self.functions.update_counter('queue',src_id, self.chanid)
-                    self.config.channelsource[src_id].detail_request.put({'detail_ids': sources, 'logstring': logstring, 'counter': counter, 'parent': self})
+                    self.config.channelsource[src_id].detail_request.put({'task':'get_details','detail_ids': sources, 'logstring': logstring, 'counter': counter, 'parent': self})
                     if is_data_value([src_id, 'detail_url'], sources, str, True):
                         self.requested_details[src_id].append(data_value([src_id, 'detail_url'], sources, str))
 
@@ -481,7 +490,7 @@ class Channel_Config(Thread):
         # Place terminator items in the queue
         for src_id in self.config.detail_sources:
             if self.config.channelsource[src_id].is_alive():
-                self.config.channelsource[src_id].detail_request.put({'last_one': True, 'parent': self})
+                self.config.channelsource[src_id].detail_request.put({'task':'last_one', 'parent': self})
                 break
 
         else:
@@ -492,7 +501,8 @@ class Channel_Config(Thread):
         if not self.get_opt('disable_ttvdb'):
             pngenre = pn.get_value('genre').lower()
             pneptitle = pn.get_value('episode title')
-            if pngenre in self.config.series_genres and pneptitle != '':
+            pnseason = pn.get_value('season')
+            if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
                 self.functions.update_counter('queue', -1, self.chanid)
                 self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
 
@@ -960,8 +970,8 @@ class ChannelNode():
                         # This is a negative gap
                         continue
 
-                    if pgap.start <= pp['start-time'] <= pgap.stop \
-                      or pgap.start <= pp['stop-time'] <= pgap.stop:
+                    if (pgap.start <= pp['start-time'] <= pgap.stop) \
+                      or (pgap.start <= pp['stop-time'] <= pgap.stop):
                         # It falls into a gap
                         add_to_list(pgap.gap_detail, pp, is_groupslot)
                         break
@@ -1079,30 +1089,35 @@ class ChannelNode():
                     for check in self.checkrange:
                         mstart = programs[index]['start-time'] + datetime.timedelta(0, 0, 0, 0, check)
                         if mstart in self.programs_by_start.keys():
-                            pn = self.programs_by_start[mstart]
-                            mname = programs[index]['mname']
-                            mgname = programs[index]['mgname']
-                            if pn.match_title(mname) or (mgname != None and pn.match_title(mgname)):
-                                # ### Check on split episodes
-                                #~ l_diff = programs[index]['length'].total_seconds()/ pn.length.total_seconds()
-                                #~ if l_diff >1.2 or l_diff < 1.2:
-                                    #~ pass
+                            for pn in self.programs_by_start[mstart]:
+                                mname = programs[index]['mname']
+                                mgname = programs[index]['mgname']
+                                if pn.match_title(mname) or (mgname != None and pn.match_title(mgname)):
+                                    # ### Check on split episodes
+                                    #~ l_diff = programs[index]['length'].total_seconds()/ pn.length.total_seconds()
+                                    #~ if l_diff >1.2 or l_diff < 1.2:
+                                        #~ pass
 
-                                self.add_match_stat(4, pn, programs[index])
-                                if pn in self.current_list:
-                                    self.current_list.remove(pn)
+                                    self.add_match_stat(4, pn, programs[index])
+                                    if pn in self.current_list:
+                                        self.current_list.remove(pn)
 
-                                pn.add_source_data(programs[index], source)
-                                if 'prog_ID' in programs[index].keys() and programs[index]['prog_ID'] not in (None, ''):
-                                    prog_ID = programs[index]['prog_ID']
-                                    if not prog_ID in self.programs_by_prog_ID[source].keys():
-                                        self.programs_by_prog_ID[source][prog_ID] = [pn]
+                                    pn.add_source_data(programs[index], source)
+                                    if 'prog_ID' in programs[index].keys() and programs[index]['prog_ID'] not in (None, ''):
+                                        prog_ID = programs[index]['prog_ID']
+                                        if not prog_ID in self.programs_by_prog_ID[source].keys():
+                                            self.programs_by_prog_ID[source][prog_ID] = [pn]
 
-                                    else:
-                                        self.programs_by_prog_ID[source][prog_ID].append(pn)
+                                        elif not pn in self.programs_by_prog_ID[source][prog_ID]:
+                                            self.programs_by_prog_ID[source][prog_ID].append(pn)
 
-                                self.add_stat()
-                                break
+                                    self.add_stat()
+                                    break
+
+                            else:
+                                continue
+
+                            break
 
                     else:
                         check_gaps(programs[index])
@@ -1300,35 +1315,40 @@ class ChannelNode():
                     for check in self.checkrange:
                         mstart = programs[index].start + datetime.timedelta(0, 0, 0, 0, check)
                         if mstart in self.programs_by_start.keys():
-                            pn = self.programs_by_start[mstart]
-                            mname = programs[index].match_name
-                            mgname = programs[index].match_group_name
-                            if pn.match_title(mname) or (mgname != None and pn.match_title(mgname)):
-                                # ### Check on split episodes
-                                #~ l_diff = programs[index].length.total_seconds()/ pn.length.total_seconds()
-                                #~ if l_diff >1.2 or l_diff < 1.2:
-                                    #~ pass
+                            for pn in self.programs_by_start[mstart]:
+                                mname = programs[index].match_name
+                                mgname = programs[index].match_group_name
+                                if pn.match_title(mname) or (mgname != None and pn.match_title(mgname)):
+                                    # ### Check on split episodes
+                                    #~ l_diff = programs[index].length.total_seconds()/ pn.length.total_seconds()
+                                    #~ if l_diff >1.2 or l_diff < 1.2:
+                                        #~ pass
 
-                                self.add_match_stat(4, pn, programs[index])
-                                if pn in self.current_list:
-                                    self.current_list.remove(pn)
+                                    self.add_match_stat(4, pn, programs[index])
+                                    if pn in self.current_list:
+                                        self.current_list.remove(pn)
 
-                                pn.add_node_data(programs[index])
-                                for s in self.config.source_order:
-                                    prog_ID = pn.get_value('prog_ID', s)
-                                    if prog_ID not in ('', None):
-                                        if not s in self.programs_by_prog_ID.keys():
-                                            self.programs_by_prog_ID[s] = {}
-                                            self.programs_by_prog_ID[s][prog_ID] = [pn]
+                                    pn.add_node_data(programs[index])
+                                    for s in self.config.source_order:
+                                        prog_ID = pn.get_value('prog_ID', s)
+                                        if prog_ID not in ('', None):
+                                            if not s in self.programs_by_prog_ID.keys():
+                                                self.programs_by_prog_ID[s] = {}
+                                                self.programs_by_prog_ID[s][prog_ID] = [pn]
 
-                                        elif not prog_ID in self.programs_by_prog_ID[s].keys():
-                                            self.programs_by_prog_ID[s][prog_ID] = [pn]
+                                            elif not prog_ID in self.programs_by_prog_ID[s].keys():
+                                                self.programs_by_prog_ID[s][prog_ID] = [pn]
 
-                                        else:
-                                            self.programs_by_prog_ID[s][prog_ID].append(pn)
+                                            elif not pn in self.programs_by_prog_ID[s][prog_ID]:
+                                                self.programs_by_prog_ID[s][prog_ID].append(pn)
 
-                                self.add_stat()
-                                break
+                                    self.add_stat()
+                                    break
+
+                            else:
+                                continue
+
+                            break
 
                     else:
                         check_gaps(programs[index], True)
@@ -1365,6 +1385,15 @@ class ChannelNode():
 
     def check_lineup(self, overlap_strategy = None):
         with self.node_lock:
+            # Remove any program of zero length
+            pn = self.first_node
+            while isinstance(pn, ProgramNode):
+                if abs(pn.stop - pn.start) < datetime.timedelta(minutes = 1):
+                    self.config.log(self.config.text('merge', 2, ('%s: %s' % (pn.get_title(), pn.get_start_stop()), self.name)), 4, 3)
+                    self.remove_node(pn)
+
+                pn = pn.next
+
             # We check overlap
             if overlap_strategy in ['average', 'stop', 'start']:
                 for gap in self.program_gaps[:]:
@@ -1388,7 +1417,7 @@ class ChannelNode():
 
                     self.remove_gap(gap)
 
-            # Also check if a genric genre does aply
+            # Also check if a genric genre does apply
             for g, chlist in self.config.generic_channel_genres.items():
                 if self.chanid in chlist:
                     gen_genre = g
@@ -1493,7 +1522,7 @@ class ChannelNode():
                 self.remove_gap(pgrp)
 
             elif gtype == 'gs':
-                self.remove_gs(pgrp)
+                self.remove_node(pgrp)
                 self.remove_gap(pgrp.previous_gap)
                 self.remove_gap(pgrp.next_gap)
 
@@ -1513,28 +1542,10 @@ class ChannelNode():
             if stop_gap != None:
                 self.program_gaps.append(stop_gap)
 
-    def remove_gs(self, gs):
-        if not isinstance(gs, ProgramNode):
-            return
-
-        with self.node_lock:
-            if isinstance(gs.next, ProgramNode):
-                gs.next.previous = None
-                gs.next = None
-                gs.next_gap = None
-
-            if isinstance(gs.previous, ProgramNode):
-                gs.previous.next = None
-                gs.previous = None
-                gs.previous_gap = None
-
-            if gs in self.group_slots:
-                self.group_slots.remove(gs)
-
-            if gs in self.programs:
-                self.programs.remove(gs)
-
     def remove_gap(self, pgap):
+        if isinstance(pgap, ProgramNode):
+            self.remove_node(pn)
+
         if not isinstance(pgap, GapNode):
             return
 
@@ -1550,6 +1561,88 @@ class ChannelNode():
             if pgap in self.program_gaps:
                 self.program_gaps.remove(pgap)
 
+    def remove_node(self, pn):
+        if  isinstance(pn, GapNode):
+            self.remove_gap(pn)
+
+        if not isinstance(pn, ProgramNode):
+            return
+
+        with self.node_lock:
+            pnode = pn.previous
+            nnode = pn.next
+            pgap = pn.previous_gap
+            ngap = pn.next_gap
+            if isinstance(pgap, GapNode):
+                self.remove_gap(pgap)
+
+            if isinstance(ngap, GapNode):
+                self.remove_gap(ngap)
+
+            gap = self.link_nodes(pnode, nnode)
+            if isinstance(pnode, ProgramNode):
+                pnode.next_gap = gap
+
+            if isinstance(nnode, ProgramNode):
+                nnode.previous_gap = gap
+
+            pn.previous = None
+            pn.next = None
+            if pn in self.programs:
+                self.programs.remove(pn)
+
+            if pn in self.group_slots:
+                self.group_slots.remove(pn)
+
+            for pnkey, pnlist in self.programs_by_start.items()[:]:
+                if pn in pnlist:
+                    if len(pnlist) == 1:
+                        del self.programs_by_start[pnkey]
+
+                    else:
+                        pnlist.remove(pn)
+
+            for pnkey, pnlist in self.programs_by_stop.items()[:]:
+                if pn in pnlist:
+                    if len(pnlist) == 1:
+                        del self.programs_by_stop[pnkey]
+
+                    else:
+                        pnlist.remove(pn)
+
+            for pnkey, pnlist in self.programs_by_name.items()[:]:
+                if pn in pnlist:
+                    if len(pnlist) == 1:
+                        del self.programs_by_name[pnkey]
+
+                    else:
+                        pnlist.remove(pn)
+
+            for pnkey, pnlist in self.programs_by_matchname.items()[:]:
+                if pn in pnlist:
+                    if len(pnlist) == 1:
+                        del self.programs_by_matchname[pnkey]
+
+                    else:
+                        pnlist.remove(pn)
+
+            for pnkey, pnlist in self.programs_with_no_genre.items()[:]:
+                if pn in pnlist:
+                    if len(pnlist) == 1:
+                        del self.programs_with_no_genre[pnkey]
+
+                    else:
+                        pnlist.remove(pn)
+
+            for source in self.programs_by_prog_ID.keys():
+                for pnkey, pnlist in self.programs_by_prog_ID[source].items()[:]:
+                    if pn in pnlist:
+                        if len(pnlist) == 1:
+                            del self.programs_by_prog_ID[source][pnkey]
+
+                        else:
+                            pnlist.remove(pn)
+
     def add_new_program(self,pn, source = None):
         with self.node_lock:
             if not pn in self.programs:
@@ -1563,8 +1656,18 @@ class ChannelNode():
                 pn.is_groupslot = True
                 return
 
-            self.programs_by_start[pn.start] = pn
-            self.programs_by_stop[pn.stop] = pn
+            if pn.start in self.programs_by_start.keys():
+                self.programs_by_start[pn.start].append(pn)
+
+            else:
+                self.programs_by_start[pn.start] = [pn]
+
+            if pn.stop in self.programs_by_stop.keys():
+                self.programs_by_stop[pn.stop].append(pn)
+
+            else:
+                self.programs_by_stop[pn.stop] = [pn]
+
             if pn.name in self.programs_by_name.keys():
                 self.programs_by_name[pn.name].append(pn)
 
@@ -1592,7 +1695,7 @@ class ChannelNode():
                 if not prog_ID in self.programs_by_prog_ID[source].keys():
                     self.programs_by_prog_ID[source][prog_ID] = [pn]
 
-                else:
+                elif not pn in self.programs_by_prog_ID[source][prog_ID]:
                     self.programs_by_prog_ID[source][prog_ID].append(pn)
 
     def check_on_missing_genres(self):
@@ -1783,11 +1886,20 @@ class ProgramNode():
 
     def adjust_start(self, pstart):
         with self.node_lock:
-            if self.start in self.channode.programs_by_start.keys():
-                del self.channode.programs_by_start[self.start]
+            if self.start in self.channode.programs_by_start.keys() and self in self.channode.programs_by_start[self.start]:
+                if len(self.channode.programs_by_start[self.start]) == 1:
+                    del self.channode.programs_by_start[self.start]
+
+                else:
+                    self.channode.programs_by_start[self.start].remove(self)
 
             self.start = copy(pstart).replace(second = 0, microsecond = 0)
-            self.channode.programs_by_start[self.start] = self
+            if self.start in self.channode.programs_by_start.keys():
+                self.channode.programs_by_start[self.start].append(self)
+
+            else:
+                self.channode.programs_by_start[self.start] = [self]
+
             self.tdict['start-time']['prime'] = self.start
             self.length = self.stop - self.start
             self.tdict['length']['prime'] = self.length
@@ -1796,11 +1908,19 @@ class ProgramNode():
 
     def adjust_stop(self, pstop):
         with self.node_lock:
-            if self.stop in self.channode.programs_by_stop.keys():
-                del self.channode.programs_by_stop[self.stop]
+            if self.stop in self.channode.programs_by_stop.keys() and self in self.channode.programs_by_stop[self.stop]:
+                if len(self.channode.programs_by_stop[self.stop]) == 1:
+                    del self.channode.programs_by_stop[self.stop]
+
+                else:
+                    self.channode.programs_by_stop[self.stop].remove(self)
 
             self.stop = copy(pstop).replace(second = 0, microsecond = 0)
-            self.channode.programs_by_stop[self.stop] = self
+            if self.stop in self.channode.programs_by_stop.keys():
+                self.channode.programs_by_stop[self.stop].append(self)
+
+            else:
+                self.channode.programs_by_stop[self.stop] = [self]
             self.tdict['stop-time']['prime'] = self.stop
             self.length = self.stop - self.start
             self.tdict['length']['prime'] = self.length
@@ -2852,6 +2972,11 @@ class XMLoutput():
             return
         program = channel_node.first_node
         while isinstance(program, ProgramNode):
+            if abs(program.stop - program.start) < datetime.timedelta(minutes = 1):
+                self.config.log(self.config.text('merge', 2, ('%s: %s' % (program.get_title(), program.get_start_stop()), channel_node.name)), 4, 3)
+                program = program.next
+                continue
+
             xml = []
 
             # Start/Stop

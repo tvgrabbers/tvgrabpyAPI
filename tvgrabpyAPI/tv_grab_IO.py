@@ -225,6 +225,7 @@ class Logging(Thread):
         self.log_output = None
         self.log_string = []
         self.all_at_details = False
+        self.print_alive = True
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -239,6 +240,50 @@ class Logging(Thread):
     # end init()
 
     def run(self):
+        def close_all_threads():
+            self.quit = True
+            dbthread = None
+            # Send the threads a quit signal
+            self.writelog('Closing all Threads\n')
+            for t in enumthreads():
+                try:
+                    if t.is_alive() and t.thread_type == 'channel':
+                        if t.state in (1, 2, 3):
+                            t.quit = True
+
+                        t.detail_return.put('quit')
+
+                    if t.is_alive() and t.thread_type in ('lookup', 'source'):
+                        t.detail_request.put({'task': 'quit'})
+
+                    if t.is_alive() and t.thread_type == 'cache':
+                        dbthread = t
+                        t.cache_request.put({'task': 'quit'})
+
+                except:
+                    continue
+
+            if dbthread != None:
+                dbthread.join()
+
+            # Re-check and send any living thread in state 8 a dummy DB return
+            for t in enumthreads():
+                try:
+                    if t.is_alive() and t.thread_type in ('lookup', 'source', 'channel'):
+                        t.quit = True
+                        if t.is_alive() and t.thread_type == 'channel':
+                            t.detail_return.put('quit')
+
+                        if t.is_alive() and t.thread_type in ('lookup', 'source'):
+                            t.detail_request.put({'task': 'quit'})
+
+                        while t.state & 8:
+                            t.cache_return.put('quit')
+                            t.join(1)
+
+                except:
+                    continue
+
         self.log_output = self.config.log_output
         lastcheck = datetime.datetime.now()
         checkinterfall = 60
@@ -250,6 +295,25 @@ class Logging(Thread):
             try:
                 if self.quit and self.log_queue.empty():
                     # We close down after mailing the log
+                    if self.print_alive:
+                        while True:
+                            alive = False
+                            for t in enumthreads():
+                                tn = None
+                                try:
+                                    tn = unicode(t.name)
+
+                                except:
+                                    tn = None
+
+                                if tn not in ('logging', 'MainThread') and t.is_alive():
+                                    alive = True
+                                    print '%s is still alive in state %s'.encode('utf-8', 'replace') % (t.name, t.state)
+                                    time.sleep(5)
+
+                            if alive == False:
+                                break
+
                     if self.config.opt_dict['mail_log']:
                         self.send_mail(self.log_string, self.config.opt_dict['mail_log_address'])
 
@@ -270,6 +334,7 @@ class Logging(Thread):
 
                 elif isinstance(message, dict) and 'fatal' in message:
                     # A fatal Error has been received, after logging we send all threads the quit signal
+                    self.config.errorstate = 99
                     if 'name'in message and message['name'] != None:
                         mm =  ['\n', self.config.text('IO', 11, (message['name'], ))]
 
@@ -287,28 +352,12 @@ class Logging(Thread):
                         if isinstance(m, (str, unicode)):
                             self.writelog(m, 0)
 
-                    for t in self.config.threads:
-                        if t.is_alive():
-                            if t.thread_type == 'cache':
-                                t.cache_request.put({'task': 'quit'})
-
-                            if t.thread_type in ('ttvdb', 'source', 'channel'):
-                                t.cache_return.put('quit')
-
-                            if t.thread_type in ('ttvdb', 'source'):
-                                t.detail_request.put({'task': 'quit'})
-
-                            if t.thread_type == 'channel':
-                                t.detail_return.put('quit')
-
-                            t.quit = True
-
-                    self.log_queue.put('Closing down\n')
+                    close_all_threads()
                     continue
 
                 elif isinstance(message, (str, unicode)):
                     if message == 'Closing down\n':
-                        self.quit=True
+                        close_all_threads()
 
                     elif message[:12].lower() == 'datatreegrab':
                         self.writelog(message, 256)
@@ -325,7 +374,7 @@ class Logging(Thread):
                         continue
 
                     if message[0] == 'Closing down\n':
-                        self.quit = True
+                        close_all_threads()
 
                     elif message[0][:12] == 'DataTreeGrab':
                         if ltarget == 1:
@@ -379,36 +428,44 @@ class Logging(Thread):
             chan_count[t] = 0
 
         for t in enumthreads():
-            if t.name[:8] == 'channel-':
-                state = t.state
-                chan_count[-1] += 1
-                chan_count[state] += 1
-                if state in (0, 3):
-                    continue
-
-                elif state == 1:
-                    # Waiting for a basepage
-                    s = t.source
-                    if not isinstance(s, int):
+            try:
+                if t.thread_type == 'channel':
+                    state = t.state & 7
+                    chan_count[-1] += 1
+                    chan_count[state] += 1
+                    if state in (0, 3):
                         continue
 
-                    sc = self.config.channelsource[s]
-                    if sc.is_alive() and sc.state < 2:
-                        continue
+                    elif state == 1:
+                        # Waiting for a basepage
+                        s = t.source
+                        if not isinstance(s, int):
+                            continue
 
-                    t.source_data[s].set()
+                        sc = self.config.channelsource[s]
+                        if sc.is_alive() and sc.state < 2:
+                            continue
 
-                elif state == 2:
-                    # Waiting for a child channel
-                    s = t.source
-                    if not s in self.config.channels.keys():
-                        continue
+                        t.source_data[s].set()
 
-                    sc = self.config.channels[s]
-                    if sc.is_alive() and sc.state < 3:
-                        continue
+                    elif state == 2:
+                        # Waiting for a child channel
+                        s = t.source
+                        if not s in self.config.channels.keys():
+                            continue
 
-                    sc.child_data.set()
+                        sc = self.config.channels[s]
+                        if sc.is_alive() and sc.state < 3:
+                            continue
+
+                        sc.child_data.set()
+
+                    elif state == 4:
+                        # Waiting for details
+                        pass
+
+            except:
+                continue
 
         if not self.all_at_details and chan_count[-1] == chan_count[4]:
             # All channels are at least waiting for details
@@ -416,20 +473,28 @@ class Logging(Thread):
 
         if self.all_at_details:
             for t in enumthreads():
-                if t.name[:7] == 'source-':
-                    waittime = None
-                    if isinstance(t.lastrequest, datetime.datetime):
-                        waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
+                try:
+                    if t.thread_type == 'source':
+                        waittime = None
+                        if isinstance(t.lastrequest, datetime.datetime):
+                            waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
 
-                    if waittime == None or waittime < idle_timeout:
-                        break
+                        if waittime == None or waittime < idle_timeout:
+                            break
+
+                except:
+                    continue
 
             else:
                 # All sources are waiting more then idle_timeout
                 # So we tell all channels nothing more is coming
                 for t in enumthreads():
-                    if t.name[:8] == 'channel-':
-                        t.detail_data.set()
+                    try:
+                        if t.thread_type == 'channel':
+                            t.detail_data.set()
+                    except:
+                        continue
+
     # end check_thread_sanity()
 
     def writelog(self, message, log_level = 1, log_target = 3):
@@ -791,6 +856,7 @@ class ProgramCache(Thread):
         self.cache_request = Queue()
         self.config.queues['cache'] = self.cache_request
         self.thread_type = 'cache'
+        self.state = 0
         self.config.threads.append(self)
         self.request_list = {}
         self.request_list['query_id'] = ('chan_group', 'ttvdb', 'ttvdb_alias', 'tdate')
@@ -1200,11 +1266,14 @@ class ProgramCache(Thread):
 
     def run(self):
         time.sleep(1)
+        self.state = 1
         self.open_db()
+        self.state = 4
         try:
             while True:
                 if self.quit and self.cache_request.empty():
                     self.pconn.close()
+                    self.state = 0
                     break
 
                 try:
@@ -1228,9 +1297,11 @@ class ProgramCache(Thread):
                         for t in self.request_list[crequest['task']]:
                             if t in crequest:
                                 if crequest['task'] == 'query':
+                                    self.state = 3
                                     qanswer = self.query(t, crequest[t])
 
                                 if crequest['task'] == 'query_id':
+                                    self.state = 3
                                     qanswer = self.query_id(t, crequest[t])
 
                                 # Because of queue count integrety you can do only one query per call
@@ -1240,6 +1311,7 @@ class ProgramCache(Thread):
                                 qanswer = None
 
                     crequest['parent'].cache_return.put(qanswer)
+                    self.state = 4
                     continue
 
                 if self.filename == None:
@@ -1249,25 +1321,30 @@ class ProgramCache(Thread):
                 if crequest['task'] == 'add':
                     for t in self.request_list[crequest['task']]:
                         if t in crequest:
+                            self.state = 3
                             self.add(t, crequest[t])
 
                 if crequest['task'] == 'delete':
                     for t in self.request_list[crequest['task']]:
                         if t in crequest:
+                            self.state = 3
                             self.delete(t, crequest[t])
 
                 if crequest['task'] == 'clear':
                     if 'table' in crequest:
                         for t in crequest['table']:
+                            self.state = 3
                             self.clear(t)
 
                     else:
                         for t in self.request_list[crequest['task']]:
+                            self.state = 3
                             self.clear(t)
 
                     continue
 
                 if crequest['task'] == 'clean':
+                    self.state = 3
                     self.clean()
                     continue
 
@@ -1275,9 +1352,12 @@ class ProgramCache(Thread):
                     self.quit = True
                     continue
 
+                self.state = 4
+
         except:
             self.config.queues['log'].put({'fatal': [traceback.format_exc(), '\n'], 'name': 'ProgramCache'})
             self.ready = True
+            self.state = 0
             return(98)
 
     def query(self, table='sourceprograms', item=None):
