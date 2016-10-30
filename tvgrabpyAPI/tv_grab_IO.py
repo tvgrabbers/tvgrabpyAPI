@@ -225,7 +225,7 @@ class Logging(Thread):
         self.log_output = None
         self.log_string = []
         self.all_at_details = False
-        self.print_alive = True
+        self.print_live_threads = False
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -295,7 +295,7 @@ class Logging(Thread):
             try:
                 if self.quit and self.log_queue.empty():
                     # We close down after mailing the log
-                    if self.print_alive:
+                    if self.print_live_threads:
                         while True:
                             alive = False
                             for t in enumthreads():
