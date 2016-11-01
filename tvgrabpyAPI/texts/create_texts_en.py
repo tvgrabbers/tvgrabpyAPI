@@ -433,7 +433,7 @@ def load_texts():
                 },
             u'other':{
                 1: u'Verifying the database\n',
-                2: u'Sending all remaining threads a signal to finish\n'}},
+                2: u'Waiting for all remaining threads to finish\n'}},
         u'fetch':{
             u'error':{
                 1: u'get_page timed out on (>%s s): %s\n',
@@ -443,7 +443,8 @@ def load_texts():
                 5: u'The url: %s gave JSON error: %s\n',
                 11: u'Error processing %s-function %s for source %s\n',
                 12: u'The supplied data was: %s\n',
-                21: u'Channel %s seems to be waiting for %s lost detail requests from %s.\n',
+                20: u'Channel %s seems to be waiting for %s lost ttvdb requests.\n',
+                21: u'Channel %s seems to be waiting for %s lost detail requests.\n',
                 22: u'Setting it to ready\n',
                 23: u'Error processing the detailpage: %s\n',
                 24: u'Error processing the detail2page: %s\n',
@@ -464,6 +465,7 @@ def load_texts():
                 51: u'No Data from %s for channel: %s\n',
                 52: u'Detail sources: %s died.\n',
                 53: u'So we stop waiting for the pending details for channel %s\n',
+                54: u' and %s'
                 },
             u'report':{
                 1: u'Now fetching %s(xmltvid=%s%s) from %s\n',
@@ -516,7 +518,7 @@ def load_texts():
         u'merge':{
             u'error':{
                 1: u'Adjusting gap/overlap of %s min. at %s on channel %s.\n',
-                2: u'Removing program %s on %s with equal start and stop time.\n'
+                2: u'Removing program %s on %s\n    with equal start and stop time.\n'
                 },
             u'stats':{
                 1: u'Now adding %s programs from %s to %s\n',

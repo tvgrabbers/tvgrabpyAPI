@@ -225,7 +225,7 @@ class Logging(Thread):
         self.log_output = None
         self.log_string = []
         self.all_at_details = False
-        self.print_live_threads = False
+        self.print_live_threads = True
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -244,7 +244,7 @@ class Logging(Thread):
             self.quit = True
             dbthread = None
             # Send the threads a quit signal
-            self.writelog('Closing all Threads\n')
+            self.writelog(self.config.text('IO', 2, type = 'other'))
             for t in enumthreads():
                 try:
                     if t.is_alive() and t.thread_type == 'channel':
@@ -294,25 +294,26 @@ class Logging(Thread):
         while True:
             try:
                 if self.quit and self.log_queue.empty():
-                    # We close down after mailing the log
-                    if self.print_live_threads:
-                        while True:
-                            alive = False
-                            for t in enumthreads():
+                    # We close down after mailing the log and seeing all threads closed
+                    while True:
+                        alive = False
+                        for t in enumthreads():
+                            tn = None
+                            try:
+                                tn = unicode(t.name)
+
+                            except:
                                 tn = None
-                                try:
-                                    tn = unicode(t.name)
 
-                                except:
-                                    tn = None
-
-                                if tn not in ('logging', 'MainThread') and t.is_alive():
-                                    alive = True
+                            if tn not in ('logging', 'MainThread') and t.is_alive():
+                                alive = True
+                                if self.print_live_threads:
                                     print '%s is still alive in state %s'.encode('utf-8', 'replace') % (t.name, t.state)
-                                    time.sleep(5)
 
-                            if alive == False:
-                                break
+                                time.sleep(5)
+
+                        if alive == False:
+                            break
 
                     if self.config.opt_dict['mail_log']:
                         self.send_mail(self.log_string, self.config.opt_dict['mail_log_address'])
@@ -422,9 +423,21 @@ class Logging(Thread):
     # end now()
 
     def check_thread_sanity(self):
+        #Thread.state =                        Cache           Source          theTVdb         Channel
+        #0: Thread not looping or waiting        x               x               x               x
+        #1: Thread base page loop/Init           x               x               -               x
+        #2: Thread child channel loop            -               -               -               x
+        #3: Thread selecting/processing lookup   x               -               x               x
+        #4: Thread detail pages loop             x               x               x               x
+        #5: Thread waiting for ttvdb             -               -               -               x
+        #8: Thread waiting on db return          -               x               x               x
+
+        # The time the source may be idle before canceling
         idle_timeout = 180
+        # The time since the last request ttvdb will quit
+        idle_timeout2 = 1800
         chan_count = {}
-        for t in range(-1, 5):
+        for t in range(-1, 6):
             chan_count[t] = 0
 
         for t in enumthreads():
@@ -437,7 +450,7 @@ class Logging(Thread):
                         continue
 
                     elif state == 1:
-                        # Waiting for a basepage
+                        # Waiting for a basepage from source
                         s = t.source
                         if not isinstance(s, int):
                             continue
@@ -446,10 +459,11 @@ class Logging(Thread):
                         if sc.is_alive() and sc.state < 2:
                             continue
 
+                        # The source already finished the basepages
                         t.source_data[s].set()
 
                     elif state == 2:
-                        # Waiting for a child channel
+                        # Waiting for a child channel source
                         s = t.source
                         if not s in self.config.channels.keys():
                             continue
@@ -458,6 +472,7 @@ class Logging(Thread):
                         if sc.is_alive() and sc.state < 3:
                             continue
 
+                        # The child already produced the data
                         sc.child_data.set()
 
                     elif state == 4:
@@ -467,10 +482,10 @@ class Logging(Thread):
             except:
                 continue
 
-        if not self.all_at_details and chan_count[-1] == chan_count[4]:
-            # All channels are at least waiting for details
+        if not self.all_at_details and chan_count[-1] == chan_count[4] + chan_count[5]:
             self.all_at_details = True
 
+        # All channels are at least waiting for details
         if self.all_at_details:
             for t in enumthreads():
                 try:
@@ -491,9 +506,42 @@ class Logging(Thread):
                 for t in enumthreads():
                     try:
                         if t.thread_type == 'channel':
-                            t.detail_data.set()
+                            if t.state == 4:
+                                d = 0
+                                for s in self.config.detail_sources:
+                                    d += self.functions.get_counter('queue', s, t.chanid)
+
+                                if d > 0:
+                                    self.config.log([self.config.text('fetch', 21, (channel.chan_name, d)), self.config.text('fetch', 22)])
+
+                                t.detail_data.set()
+                                t.detail_return.put('last_detail')
+
                     except:
                         continue
+
+            t = self.config.ttvdb
+            waittime = -1
+            if t != None and t.is_alive() and isinstance(t.lastrequest, datetime.datetime):
+                 waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
+                 # And the same with ttvdb, but we let it wait longer
+                 if waittime > idle_timeout2:
+                    ttvdb_cnt = 0
+                    for t in enumthreads():
+                        try:
+                            if t.thread_type == 'channel':
+                                if t.state == 5:
+                                    ttvdb_cnt += t.ttvdb_counter
+                                    if t.ttvdb_counter > 0:
+                                        self.config.log([self.config.text('fetch', 20, (channel.chan_name, t.ttvdb_counter)), self.config.text('fetch', 22)])
+
+                                    t.ttvdb_counter = 0
+
+                        except:
+                            continue
+
+                    #~ if ttvdb_cnt > 0:
+                        #~ self.config.log('ttvdb has the following IDs pending: %s' % self.config.ttvdb.pending_tids.keys())
 
     # end check_thread_sanity()
 

@@ -111,7 +111,7 @@ import os, re, sys, argparse, traceback, datetime, time, codecs, pickle
 import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
-if dtversion()[1:4] < (1,2,5):
+if dtversion()[1:4] < (1,2,6):
     sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.2.3 or higher\n")
     sys.exit(2)
 
@@ -123,7 +123,7 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 4
+api_patch = 5
 api_patchdate = u'20160927'
 api_alfa = False
 api_beta = True

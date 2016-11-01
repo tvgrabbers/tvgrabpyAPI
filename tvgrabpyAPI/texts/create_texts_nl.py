@@ -441,7 +441,7 @@ def load_texts():
                 },
             u'other':{
                 1: u'De Database wordt gecontroleerd.\n',
-                1: u'Aan alle overgebleven programma-threads wordt een signaal om te stoppen gestuurd.\n'}},
+                2: u'We wachten op alle overgebleven programma-threads om af te sluiten.\n'}},
         u'fetch':{
             u'error':{
                 1: u'get_page duurt te lang (>%s s): %s\n',
@@ -451,8 +451,9 @@ def load_texts():
                 5: u'De url: %s gaf een JSON fout: %s\n',
                 11: u'Fout bij het verwerken van de %s-functie %s voor bron %s\n',
                 12: u'De geleverde data was: %s\n',
-                21: u'Zender %s lijkt op %s verloren detail verzoeken van %s te wachten.\n',
-                22: u'We annuleren en stellen het als klaar\n',
+                20: u'Zender %s lijkt op %s verloren ttvdb verzoeken te wachten.\n',
+                21: u'Zender %s lijkt op %s verloren detail verzoeken te wachten.\n',
+                22: u'We annuleren en stellen het als klaar.\n',
                 23: u'Fout bij het verwerken van de detail-pagina: %s\n',
                 24: u'Fout bij het verwerken van de detail2-pagina: %s\n',
                 25: u'Fout bij het ophalen van de URL voor bron: %s uit de json data_def\n',
@@ -472,6 +473,7 @@ def load_texts():
                 51: u'Geen data van %s voor zender: %s\n',
                 52: u'De detail bron: %s is gestopt.\n',
                 53: u'Dus we stoppen met wachten voor de onderhanden detailverzoeken voor %s\n',
+                54: u' en %s'
                 },
             u'report':{
                 1: u'Nu wordt %s(xmltvid=%s%s) van %s opgehaald\n',
@@ -524,7 +526,7 @@ def load_texts():
         u'merge':{
             u'error':{
                 1: u'Het gat/overlap van %s min. om %s op zender %s wordt gecorrigeerd.\n',
-                2: u'Het programma %s op %s met gelijke start en stop tijd wordt verwijderd.\n'
+                2: u'Het programma %s op %s\n    met gelijke start en stop tijd wordt verwijderd.\n'
                 },
             u'stats':{
                 1: u'Nu worden %s programma\'s van %s aan %s toegevoegd\n',

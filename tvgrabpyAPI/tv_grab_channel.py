@@ -18,13 +18,6 @@ from DataTreeGrab import is_data_value, data_value
 class Channel_Config(Thread):
     """
     Class that holds the Channel definitions and manages the data retrieval and processing
-    self.state =
-    0: Thread not running or not looping
-    1: Thread running waiting on base pages
-    2: Thread running waiting on child channels
-    3: Thread running selecting detail pages
-    4: Thread running waiting on detail pages
-    8: Thread running waiting on database return
     """
     def __init__(self, config, chanid = 0, name = '', group = 99):
         Thread.__init__(self, name = ('channel-%s'% name).encode('utf-8', 'replace'))
@@ -58,6 +51,7 @@ class Channel_Config(Thread):
         self.virtual_end = None
         self.child_programs = []
         self.counter = 0
+        self.ttvdb_counter = 0
         self.chanid = chanid
         self.xmltvid = self.chanid
         self.chan_name = name
@@ -122,6 +116,7 @@ class Channel_Config(Thread):
 
             return
 
+        self.state = 1
         if not self.is_child:
             self.child_data.set()
 
@@ -153,7 +148,6 @@ class Channel_Config(Thread):
             for index in self.merge_order:
                 channelid = self.get_source_id(index)
                 self.source = index
-                self.state = 1
                 while not self.source_ready(index).is_set():
                     # Wait till the event is set by the source, but check every 5 seconds for an unexpected break or wether the source is still alive
                     self.source_ready(index).wait(5)
@@ -266,31 +260,31 @@ class Channel_Config(Thread):
                         return
 
                     if self.detail_return.empty():
-                        if self.detail_data.is_set():
+                        if self.state == 5 and self.ttvdb_counter == 0:
                             break
 
                         time.sleep(1)
 
                     else:
-                        # We are getting back a detail fetch
+                        # We are getting back a detail/ttvdb fetch
                         fetched_detail = self.detail_return.get(True)
                         if fetched_detail =='quit':
                             self.ready = True
                             return
 
-                        if data_value(['last_one'], fetched_detail, bool, False):
-                            if self.get_opt('disable_ttvdb'):
-                                self.detail_data.set()
-
-                            else:
-                                self.config.ttvdb.detail_request.put({'task':'last_one', 'parent': self})
-
-                        if not is_data_value('data', fetched_detail, dict):
+                        if fetched_detail =='last_detail':
+                            self.state = 5
                             continue
 
-                        # it's a fetch return
                         src_id = fetched_detail['source']
-                        if src_id in self.config.detail_sources:
+                        # It's a ttvdb request return
+                        if src_id == -1:
+                            self.ttvdb_counter -= 1
+                            if is_data_value('data', fetched_detail, dict):
+                                fetched_detail['pn'].add_detail_data(fetched_detail['data'], src_id)
+
+                        # it's a fetch return
+                        if src_id in self.config.detail_sources and is_data_value('data', fetched_detail, dict):
                             # Add it to the cache
                             self.config.queues['cache'].put({'task':'add', 'parent': self, 'programdetails': fetched_detail['data']})
                             # Add it to the program
@@ -300,11 +294,6 @@ class Channel_Config(Thread):
                                 pn.add_detail_data(fetched_detail['data'], src_id)
                                 # and do a ttvdb check
                                 self.check_ttvdb(pn)
-
-                        # It's a ttvdb request return
-                        if src_id == -1:
-                            if isinstance(fetched_detail['data'], dict):
-                                fetched_detail['pn'].add_detail_data(fetched_detail['data'], src_id)
 
                     # Check if the sources are still alive
                     s_cnt = 0
@@ -317,12 +306,18 @@ class Channel_Config(Thread):
                             log_string = self.config.channelsource[s].source
 
                         elif s_cnt == len(self.config.detail_sources):
-                            log_string += u' and %s' % self.config.channelsource[s].source
+                            log_string += self.config.text('fetch', 54, (self.config.channelsource[s].source, ))
 
                         else:
                             log_string += u', %s' % self.config.channelsource[s].source
 
                     else:
+                        if not self.get_opt('disable_ttvdb'):
+                            if self.config.ttvdb.is_alive():
+                                continue
+
+                            log_string += self.config.text('fetch', 54, ('theTVdb.com', ))
+
                         self.config.log([self.config.text('fetch', 52, (log_string, )), self.config.text('fetch', 53, (self.chan_name,))])
                         break
 
@@ -487,7 +482,7 @@ class Channel_Config(Thread):
 
                     break
 
-        # Place terminator items in the queue
+        # Place terminator items in the first still active queue
         for src_id in self.config.detail_sources:
             if self.config.channelsource[src_id].is_alive():
                 self.config.channelsource[src_id].detail_request.put({'task':'last_one', 'parent': self})
@@ -502,8 +497,10 @@ class Channel_Config(Thread):
             pngenre = pn.get_value('genre').lower()
             pneptitle = pn.get_value('episode title')
             pnseason = pn.get_value('season')
-            if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
+            #~ if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
+            if pngenre in self.config.series_genres and pneptitle != '':
                 self.functions.update_counter('queue', -1, self.chanid)
+                self.ttvdb_counter += 1
                 self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
 
     def log_results(self):

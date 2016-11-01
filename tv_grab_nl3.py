@@ -122,7 +122,7 @@ if sys.version_info[:2] >= (3,0):
 
 locale.setlocale(locale.LC_ALL, '')
 
-if tvgrabpyAPI.version()[1:4] < (1,0,4):
+if tvgrabpyAPI.version()[1:4] < (1,0,5):
     sys.stderr.write("tv_grab_nl3_py requires tv_grab_py_API 1.0.1 or higher\n")
     sys.exit(2)
 

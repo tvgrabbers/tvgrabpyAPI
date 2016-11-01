@@ -288,6 +288,8 @@ class FetchURL(Thread):
     """
     def __init__ (self, config, url, txtdata = None, txtheaders = None, encoding = None, is_json = False):
         Thread.__init__(self, name = 'fetching')
+        self.thread_type = 'fetching'
+        self.state = 0
         self.config = config
         self.url = url
         self.txtdata = txtdata
@@ -369,18 +371,37 @@ class FetchURL(Thread):
 
 # end FetchURL
 
-class DataTree(DataTreeShell):
+class DataTree(DataTreeShell, Thread):
     def __init__(self, source, data_def, warnaction = "default", caller_id = 0):
+        Thread.__init__(self, name = 'DataTree')
+        self.thread_type = 'DataTree'
         self.source = source
+        self.export = False
+        self.rundata = {}
+        self.state = 0
         self.config = self.source.config
         self.fetch_string_parts = re.compile("(.*?[.?!:]+ |.*?\Z)")
         DataTreeShell.__init__(self, data_def, warnaction = warnaction, warngoal = self.config.logging.log_queue, caller_id = caller_id)
         self.print_tags = source.print_tags
-        #~ self.print_searchtree = source.print_searchtree
         self.show_result = source.show_parsing
         self.fle = source.test_output
         #~ sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, message = 'Regex "\\\d\*/\?\(\\\d\*\)\.\*" in: .*?', caller_id = caller_id)
         #~ sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, message = 'Regex "\(\\\d\*\)/\.\*" in: .*?', caller_id = caller_id)
+
+    def run(self):
+        if data_value('task',self.rundata, str) == 'epdata':
+            self.searchtree.show_progress = True
+            self.extract_datalist()
+            if self.export:
+                chanid = data_value('chanid',self.rundata, str)
+                tid = data_value('tid',self.rundata, int, 0)
+                queryid = data_value('queryid',self.rundata, int, -1)
+                if len(self.result) == 0:
+                    self.source.functions.update_counter('fail', -1, chanid)
+                    self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
+
+                self.config.queues['cache'].put({'task':'add', 'episodes': self.source.process_data(self.result, tid, 'en')})
+                self.source.detail_request.put({'task': 'process_ep_info', 'queryid': queryid})
 
     def get_string_parts(self, sstring, header_items = None):
         if not isinstance(header_items, (list, tuple)):
@@ -739,6 +760,7 @@ class theTVDB_v1(Thread):
         self.state = 0
         self.active = True
         self.lastrequest = None
+        self.pending_tids = {}
         self.api_key = "0BB856A59C51D607"
         self.source_lock = RLock()
         # The queue to receive answers on database queries
@@ -767,6 +789,8 @@ class theTVDB_v1(Thread):
             self.config.detail_keys['episodes'] = self.detail_keys['episodes']
             self.site_tz = pytz.timezone(self.data_value('site-timezone', str, default = 'utc'))
             self.datatrees = {}
+            self.episodetrees = {}
+            self.queryid = 0
             for ptype in ("seriesid", "seriesname", "episodes"):
                 if not self.is_data_value([ptype, 'timezone'], str):
                     self.source_data[ptype]['timezone'] = self.data_value('site-timezone', str, default = 'utc')
@@ -780,6 +804,7 @@ class theTVDB_v1(Thread):
     def run(self):
         if self.config.opt_dict['disable_ttvdb']:
             return
+        pending_requests = {}
         try:
             self.state = 4
             while True:
@@ -790,10 +815,13 @@ class theTVDB_v1(Thread):
                 try:
                     crequest = self.detail_request.get(True, 5)
                     self.lastrequest = datetime.datetime.now()
-                    #~ print crequest
+                    if self.quit:
+                        if 'parent' in crequest:
+                            crequest['parent'].detail_return.put('quit')
+
+                        continue
 
                 except Empty:
-                    #~ print 'Empty Queue'
                     continue
 
                 if (not isinstance(crequest, dict)) or (not 'task' in crequest):
@@ -803,27 +831,99 @@ class theTVDB_v1(Thread):
                     if not 'parent' in crequest:
                         continue
 
+                    parent = crequest['parent']
                     if 'pn' in crequest:
+                        pn = crequest['pn']
                         self.state = 3
-                        #~ print crequest['pn'].get_start_stop(True), crequest['pn'].get_title(True)
-                        qanswer = self.get_season_episode(crequest['parent'], crequest['pn'])
-                        #~ print qanswer
-                        if qanswer == -1:
-                            crequest['parent'].detail_return.put('quit')
+                        qanswer = self.get_season_episode(parent, pn)
+                        if not is_data_value('state', qanswer, int):
+                            qanswer = {'state': 0, 'data': None}
+
+                        if qanswer['state'] == -1:
+                            parent.detail_return.put('quit')
                             self.quit = True
+                            self.state = 4
                             continue
 
-                        crequest['parent'].detail_return.put({'source': -1, 'data': qanswer, 'pn': crequest['pn']})
-                        self.state = 4
+                        elif qanswer['state'] in (0, 1):
+                            # Failed / Finished
+                            parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
+                            self.functions.update_counter('queue', -1,  parent.chanid, False)
 
-                    self.functions.update_counter('queue', -1,  crequest['parent'].chanid, False)
+                        elif qanswer['state'] == 2:
+                            # Answer is pending
+                            #{'state': 2, 'tid': tid, 'queryid':queryid,'name': series_name, 'tdate': datetime.date.today()}
+                            queryid = qanswer['queryid']
+                            tid = qanswer['tid']
+                            chanid = parent.chanid
+                            self.pending_tids[tid] = queryid
+                            pending_requests[queryid] = {'tid': tid, 'requests': [{'pn': pn, 'parent': parent}]}
+
+                        elif qanswer['state'] == 3:
+                            # There is a request for this tid pending
+                            #{'state': 3, 'tid': tid}
+                            queryid = self.pending_tids[qanswer['tid']]
+                            pending_requests[queryid]['requests'].append({'pn': pn, 'parent': parent})
+
+                    self.state = 4
                     continue
 
-                if crequest['task'] == 'last_one':
-                    crequest['parent'].detail_data.set()
+                if crequest['task'] == 'process_ep_info':
+                    queryid = crequest['queryid']
+                    tid = pending_requests[queryid]['tid']
+                    prequests = pending_requests[queryid]['requests']
+                    self.state = 3
+                    for r in prequests:
+                        parent = r['parent']
+                        pn = r['pn']
+                        qanswer = self.get_season_episode(parent, pn, tid)
+                        if not is_data_value('state', qanswer, int):
+                            qanswer = {'state': 0, 'data': None}
+
+                        if qanswer['state'] == -1:
+                            parent.detail_return.put('quit')
+                            self.quit = True
+                            self.state = 4
+                            continue
+
+                        parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
+                        self.functions.update_counter('queue', -1,  parent.chanid, False)
+
+                    del self.pending_tids[tid]
+                    del pending_requests[queryid]
+                    self.state = 4
+                    continue
+
+                if crequest['task'] == 'fail_ep_info':
+                    queryid = crequest['queryid']
+                    tid = pending_requests[queryid]['tid']
+                    prequests = pending_requests[queryid]['requests']
+                    for r in prequests:
+                        parent = r['parent']
+                        pn = r['pn']
+                        parent.detail_return.put({'source': -1, 'data': None, 'pn': pn})
+                        self.functions.update_counter('queue', -1,  parent.chanid, False)
+
+                    del self.pending_tids[tid]
+                    del pending_requests[queryid]
+                    continue
 
                 if crequest['task'] == 'quit':
                     self.quit = True
+                    for dt in self.datatrees.values():
+                        try:
+                            dt.searchtree.quit = True
+
+                        except:
+                            continue
+
+                    for dt in self.episodetrees.values():
+                        try:
+                            dt.searchtree.quit = True
+
+                        except:
+                            continue
+
                     continue
 
         except:
@@ -832,7 +932,7 @@ class theTVDB_v1(Thread):
             self.state = 0
             return(98)
 
-    def query_ttvdb(self, ptype, pdata, chanid = None):
+    def query_ttvdb(self, ptype, pdata, chanid = None, background = False):
         if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
             return
 
@@ -849,13 +949,22 @@ class theTVDB_v1(Thread):
 
         pdata['api-key'] = self.api_key
         if (not pdata['lang'] in self.lang_list) and not (pdata['lang'] == 'all' and ptype == 'seriesid'):
-             pdata['lang']  = 'en'
+            pdata['lang'] = 'en'
 
-        url = self.datatrees[ptype].get_url(pdata)
+        if background:
+            self.queryid += 1
+            queryid = self.queryid
+            self.episodetrees[queryid] = DataTree(self, self.data_value("episodes", dict), 'always', -1)
+            dtree = self.episodetrees[queryid]
+            dtree.rundata = {'task':'epdata', 'queryid': queryid, 'tid': pdata['ttvdbid'], 'lang': pdata['lang'], 'chanid': chanid}
+
+        else:
+            dtree = self.datatrees[ptype]
+
+        url = dtree.get_url(pdata)
         if self.print_searchtree:
             print '(url, encoding, accept_header, url_data, is_json)'
             print url
-
 
         self.functions.update_counter('detail', -1, chanid)
         page = self.functions.get_page(url)
@@ -863,9 +972,15 @@ class theTVDB_v1(Thread):
             self.functions.update_counter('fail', -1, chanid)
             return None
 
-        self.datatrees[ptype].init_data(page)
-        self.datatrees[ptype].extract_datalist()
-        data = self.datatrees[ptype].result
+        dtree.init_data(page)
+        if background:
+            dtree.start()
+            return queryid
+
+        else:
+            dtree.extract_datalist()
+            data = dtree.result
+
         if len(data) == 0:
             self.functions.update_counter('fail', -1, chanid)
             return None
@@ -953,26 +1068,27 @@ class theTVDB_v1(Thread):
             return tid
 
         self.last_updated = None
+        tid = 0
         if search_db:
             tid = get_id_from_db()
             if tid == -1:
                 self.ready = True
-                return -1
+                return {'state': -1, 'tid': None}
 
             if isinstance(self.last_updated, datetime.date) and (datetime.date.today() - self.last_updated).days <= 30:
                 # The last check is less then 30 days old
                 # We'll  use the episode info in the database (or signal not found if tid == 0)
                 if tid == 0:
-                    return 0
+                    return {'state': 0, 'tid': None}
 
-                return {'tid': tid, 'tdate': self.last_updated, 'name': name}
+                return {'state': 1, 'tid': tid, 'tdate': self.last_updated, 'name': name}
 
             elif tid > 0 and isinstance(self.last_updated, datetime.date) and (datetime.date.today() - self.last_updated).days > 30 and not self.config.args.only_cache:
                 data = self.query_ttvdb('seriesname', { 'ttvdbid': tid, 'lang': lang})
                 if is_data_value([0, 'last updated'], data, datetime.datetime) and \
                     data_value([0, 'last updated'], data, datetime.datetime).date() < self.last_updated:
                         # No updates on theTVDB
-                        return {'tid': tid, 'tdate': self.last_updated, 'name': name}
+                        return {'state': 1, 'tid': tid, 'tdate': self.last_updated, 'name': name}
 
         # First we look for a known alias
         series_name = check_alias()
@@ -986,7 +1102,10 @@ class theTVDB_v1(Thread):
 
             if tid == 0:
                 # No data
-                return 0
+                return {'state': 0, 'tid': None}
+
+            if tid in self.pending_tids.keys():
+                return {'state': 3, 'tid': tid}
 
             #We look for other languages
             data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': 'all'}, chanid)
@@ -1001,20 +1120,35 @@ class theTVDB_v1(Thread):
 
         except:
             self.config.log([self.config.text('ttvdb', 11), traceback.format_exc()])
-            return 0
+            return {'state': 0, 'tid': None}
 
         # And we retreive the episodes
-        if self.get_all_episodes(tid, lang, chanid) == -1:
-            return -1
+        epdata = self.get_all_episodes(tid, lang, chanid)
+        if epdata['state'] == -1:
+            return {'state': -1, 'tid': None}
 
-        return {'tid': int(tid), 'tdate': datetime.date.today(), 'name': series_name}
+        epdata['tdate'] = datetime.date.today()
+        epdata['name'] = series_name
+        return epdata
 
     def get_all_episodes(self, tid, lang='en', chanid=None):
         try:
             eps = []
-            langs = self.config.ttvdb_langs
+            langs = self.config.ttvdb_langs[:]
             if lang not in self.config.ttvdb_langs and lang in self.lang_list:
                 langs.append(lang)
+
+            while 'en' in langs:
+                langs.remove('en')
+
+            queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en'}, chanid, True)
+            dtree = self.episodetrees[queryid]
+
+            keycount = dtree.searchtree.progress_queue.get(True)
+            dtree.searchtree.show_progress = False
+            if keycount[1] > 500:
+                dtree.export = True
+                return {'state': 2, 'tid': tid, 'queryid':queryid}
 
             for l in langs:
                 data = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l}, chanid)
@@ -1022,81 +1156,102 @@ class theTVDB_v1(Thread):
                     # No data
                     continue
 
-                for ep in data:
-                    if not isinstance(ep, dict):
-                        continue
+                eps.extend(self.process_data(data, tid, l))
 
-                    sid = data_value('sid', ep, int, -1)
-                    eid = data_value('eid', ep, int, -1)
-                    if sid == -1 or eid == -1:
-                        continue
+            dtree.join()
+            data = dtree.result
+            if len(data) == 0:
+                self.functions.update_counter('fail', -1, chanid)
 
-                    title = data_value('episode title', ep, str, 'Episode %s' % eid)
-                    desc = data_value('description', ep, str, None)
-                    airdate = data_value('airdate', ep, datetime.date, None)
-                    rating = data_value('star-rating', ep, float, None)
-                    eps.append({'tid': int(tid),
-                                        'sid': int(sid),
-                                        'eid': int(eid),
-                                        'episode title': title,
-                                        'airdate': airdate,
-                                        'lang': l,
-                                        'star-rating': rating,
-                                        'description': desc})
+            else:
+                eps.extend(self.process_data(data, tid, 'en'))
 
         except:
             self.config.log([self.config.text('ttvdb', 12), traceback.format_exc()])
-            return
+            return {'state': 0, 'tid': tid}
 
         self.config.queues['cache'].put({'task':'add', 'episodes': eps})
+        return {'state': 1, 'tid': tid}
 
-    def get_season_episode(self, parent = None, data = None):
+    def process_data(self, data, tid, lang):
+        eps = []
+        for ep in data:
+            if not isinstance(ep, dict):
+                continue
+
+            sid = data_value('sid', ep, int, -1)
+            eid = data_value('eid', ep, int, -1)
+            if sid == -1 or eid == -1:
+                continue
+
+            title = data_value('episode title', ep, str, 'Episode %s' % eid)
+            desc = data_value('description', ep, str, None)
+            airdate = data_value('airdate', ep, datetime.date, None)
+            rating = data_value('star-rating', ep, float, None)
+            eps.append({'tid': int(tid),
+                                'sid': int(sid),
+                                'eid': int(eid),
+                                'episode title': title,
+                                'airdate': airdate,
+                                'lang': lang,
+                                'star-rating': rating,
+                                'description': desc})
+
+        return eps
+
+    def get_season_episode(self, parent = None, data = None, tid = None):
         def prepare_return(rdata, tid, lang):
             if data_value('lang', rdata, str) != lang:
                 self.config.queues['cache'].put({'task':'query', 'parent': self, \
                         'ep_by_id': {'tid': tid, 'sid': data_value('sid', rdata, int, 0), 'eid':data_value('eid', rdata, int, 0) , 'lang': lang}})
                 r = self.get_cache_return()
                 if r == -1:
-                    return -1
+                    return {'state': -1, 'data': None}
 
                 if is_data_value(0, r, dict):
                     rdata = r[0]
 
-            return {'ttvdbid': tid,
+            return {'state': 1, 'data':{'ttvdbid': tid,
                     'season': data_value('sid', rdata, int, 0),
                     'episode': data_value('eid', rdata, int, 0),
                     'airdate': data_value('airdate', rdata, datetime.date, None),
                     'episode title': data_value('episode title', rdata, str),
                     'description': data_value('description', rdata, str),
-                    'star-rating': data_value('star-rating', rdata, float, None)}
+                    'star-rating': data_value('star-rating', rdata, float, None)}}
 
         if self.config.opt_dict['disable_ttvdb'] or parent.opt_dict['disable_ttvdb'] or not isinstance(data, ProgramNode):
-            return 0
+            return {'state': 0, 'data': None}
 
         if parent == None:
             parent = data.channel_config
 
         if parent.group in self.config.ttvdb_disabled_groups:
             # We do not lookup for regional channels and radio
-            return 0
+            return {'state': 0, 'data': None}
 
         lang = self.config.group_language[parent.group]
-        tid = self.get_ttvdb_id(data.get_value('name'), lang, chanid = parent.chanid)
-        if tid == -1:
-            return -1
+        if tid == None:
+            tid = self.get_ttvdb_id(data.get_value('name'), lang, chanid = parent.chanid)
+            if not isinstance(tid, dict) or tid['state'] == 0:
+                self.functions.update_counter('lookup_fail', -1, parent.chanid)
+                self.config.log(self.config.text('ttvdb', 13, (data.get_value('name'), parent.chan_name)), 128)
+                return {'state': 0, 'data': None}
 
-        if tid in (None, 0) or not isinstance(tid, dict):
-            self.functions.update_counter('lookup_fail', -1, parent.chanid)
-            self.config.log(self.config.text('ttvdb', 13, (data.get_value('name'), parent.chan_name)), 128)
-            return 0
+            elif tid['state'] == -1:
+                return {'state': -1, 'data': None}
+
+            elif tid['state'] in (2, 3):
+                #Request pending
+                return tid
+
+            tid = tid['tid']
 
         # First we just look for a matching subtitle
-        tid = tid['tid']
         self.config.queues['cache'].put({'task':'query', 'parent': self, \
                 'ep_by_title': {'tid': tid, 'episode title': data.get_value('episode title')}})
         eid = self.get_cache_return()
         if eid == -1:
-            return -1
+            return {'state': -1, 'data': None}
 
         if eid != None:
             self.functions.update_counter('lookup', -1, parent.chanid)
@@ -1108,7 +1263,7 @@ class theTVDB_v1(Thread):
                 'ep_by_id': {'tid': tid, 'sid': data.get_value('season'), 'eid': data.get_value('episode')}})
         eps = self.get_cache_return()
         if eps == -1:
-            return -1
+            return {'state': -1, 'data': None}
 
         subt = re.sub('[-,. ]', '', self.functions.remove_accents(data.get_value('episode title')).lower())
         ep_dict = {}
@@ -1132,7 +1287,7 @@ class theTVDB_v1(Thread):
 
         self.functions.update_counter('lookup_fail', -1, parent.chanid)
         self.config.log(self.config.text('ttvdb', 15, (data.get_value('name'), data.get_value('episode title'), parent.chan_name)), 128)
-        return 0
+        return {'state': 0, 'data': None}
 
     def check_ttvdb_title(self, series_name, lang=None):
         if self.config.opt_dict['disable_ttvdb']:
@@ -1264,11 +1419,6 @@ class FetchData(Thread):
     The output is a list of programming in order where each row
     contains a dictionary with program information.
     It runs as a separate thread for every source
-    self.state =
-    0: Thread not running or not looping
-    1: Thread running waiting on base pages
-    4: Thread running waiting on detail pages
-    8: Thread running waiting on database return
     """
     def __init__(self, config, proc_id, source_data, cattrans_type = None):
         self.source_data = source_data
@@ -1379,42 +1529,31 @@ class FetchData(Thread):
 
     def run(self):
         """The grabing thread"""
+        # First some generic initiation that couldn't be done earlier in __init__
+        self.state = 1
+        detail_ids = {}
+        idle_timeout = 900
+        self.lastrequest = None
+        if self.detail_processor:
+            detail_idx = self.config.detail_sources.index(self.proc_id)
+
         def check_queue():
             # If the queue is empty
             if self.detail_request.empty():
                 time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
-                # and if we are not the last detail source we wait for followup requests from other sources failing
-                for q_no in testlist:
-                    if (self.proc_id == q_no[0]) and self.config.channelsource[q_no[1]].is_alive():
+                # if one of the previous detail sources in the order is still alive we wait for potential followup requests
+                for ds in range(detail_idx):
+                    if self.config.channelsource[self.config.detail_sources[ds]].is_alive():
                         return 0
 
                 # Check if all channels are ready
                 for channel in self.config.channels.values():
                     if channel.is_alive() and not channel.ready:
-                        break
+                        return 0
 
                 # All channels are ready, so if there is nothing in the queue
-                else:
-                    self.ready = True
-                    return -1
-
-                # OK we have been sitting idle for 30 minutes, So we tell all channels they won get anything more!
-                if (datetime.datetime.now() - self.lastrequest).total_seconds() > idle_timeout:
-                    if self.proc_id == self.config.detail_sources[-1]:
-                        for chanid, channel in self.config.channels.items():
-                            if channel.is_alive() and not channel.ready:
-                                d = 0
-                                for s in self.config.detail_sources:
-                                    d += self.functions.get_counter('queue', s, channelid)
-
-                                channel.detail_return.put({'source': self.proc_id,'last_one': True})
-                                self.config.log([self.config.text('fetch', 21, (channel.chan_name, d, self.source)), self.config.text('fetch', 22)])
-
-                    self.ready = True
-                    return -1
-
-                else:
-                    return 0
+                self.ready = True
+                return -1
 
             self.lastrequest = datetime.datetime.now()
             try:
@@ -1425,16 +1564,26 @@ class FetchData(Thread):
                 if qval['task'] == 'quit':
                     return -1
 
+                # Is this the closing item for the channel?
+                elif qval[ 'task'] == 'last_one':
+                    for ds in range(detail_idx + 1, len(self.config.detail_sources)):
+                        ds_id = self.config.detail_sources[ds]
+                        if self.config.channelsource[ds_id].is_alive():
+                            self.config.queues['source'][ds_id].put(qval)
+                            break
+
+                    else:
+                        qval['parent'].detail_return.put('last_detail')
+                        qval['parent'].detail_data.set()
+
+                    return 0
+
                 else:
                     return qval
 
             except Empty:
                 return 0
 
-        # First some generic initiation that couldn't be done earlier in __init__
-        detail_ids = {}
-        idle_timeout = 1800
-        self.lastrequest = None
         try:
             self.init_channel_source_ids()
             # Check if the source is not deactivated and if so set them all loaded
@@ -1444,7 +1593,6 @@ class FetchData(Thread):
 
             else:
                 # Load and proccess al the program pages
-                self.state = 1
                 if self.load_pages() == -1:
                     self.set_loaded('channel')
                     self.state = 0
@@ -1466,14 +1614,6 @@ class FetchData(Thread):
 
         try:
             if self.detail_processor and  not self.proc_id in self.config.opt_dict['disable_detail_source']:
-                detail_idx = self.config.detail_sources.index(self.proc_id)
-                testlist = []
-                for s1 in range(len(self.config.detail_sources) -1):
-                    for s0 in range(len(self.config.detail_sources) -1, s1, -1):
-                        testlist.append((self.config.detail_sources[s0], self.config.detail_sources[s1]))
-
-                rev_testlist = testlist[:]
-                rev_testlist.reverse()
                 # We process detail requests, so we loop till we are finished
                 self.state = 4
                 self.lastrequest = datetime.datetime.now()
@@ -1493,18 +1633,6 @@ class FetchData(Thread):
 
                     tdict = queue_val
                     parent = tdict['parent']
-                    # Is this the closing item for the channel?
-                    if tdict[ 'task'] == 'last_one':
-                        for q_no in rev_testlist:
-                            if self.proc_id == q_no[1] and self.config.channelsource[q_no[0]].is_alive():
-                                self.config.queues['source'][q_no[0]].put(tdict)
-                                break
-
-                        else:
-                            parent.detail_return.put({'source': self.proc_id,'last_one': True})
-
-                        continue
-
                     detail_ids = tdict['detail_ids']
                     logstring = tdict['logstring']
                     # be nice to the source site
@@ -1527,10 +1655,11 @@ class FetchData(Thread):
 
                     # It failed! We check for alternative detail sources
                     if detailed_program == None:
-                        for q_no in rev_testlist:
-                            if self.proc_id == q_no[1] and q_no[0] in detail_ids.keys():
-                                self.config.queues['source'][q_no[0]].put(queue_val)
-                                self.functions.update_counter('queue', q_no[0],  parent.chanid)
+                        for ds in range(detail_idx + 1, len(self.config.detail_sources)):
+                            ds_id = self.config.detail_sources[ds]
+                            if self.config.channelsource[ds_id].is_alive() and ds_id in detail_ids.keys():
+                                self.config.queues['source'][ds_id].put(queue_val)
+                                self.functions.update_counter('queue', ds_id,  parent.chanid)
                                 break
 
                         else:
@@ -1540,7 +1669,6 @@ class FetchData(Thread):
                         continue
 
                     # Success
-                    #~ detailed_program[self.config.channelsource[self.proc_id].detail_check] = True
                     self.config.log(self.config.text('fetch', 32, (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
                     detailed_program['sourceid'] = self.proc_id
                     detailed_program['name'] = detail_ids[self.proc_id]['name']

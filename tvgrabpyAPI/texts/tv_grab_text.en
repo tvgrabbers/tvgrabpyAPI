@@ -99,7 +99,7 @@ I1
 VAdjusting gap/overlap of %s min. at %s on channel %s.\u000a
 p37
 sI2
-VRemoving program %s on %s with equal start and stop time.\u000a
+VRemoving program %s on %s\u000a    with equal start and stop time.\u000a
 p38
 sssVconfig
 p39
@@ -1216,205 +1216,211 @@ p396
 sI12
 VThe supplied data was: %s\u000a
 p397
-sI21
-VChannel %s seems to be waiting for %s lost detail requests from %s.\u000a
+sI20
+VChannel %s seems to be waiting for %s lost ttvdb requests.\u000a
 p398
+sI21
+VChannel %s seems to be waiting for %s lost detail requests.\u000a
+p399
 sI22
 VSetting it to ready\u000a
-p399
+p400
 sI23
 VError processing the detailpage: %s\u000a
-p400
+p401
 sI24
 VError processing the detail2page: %s\u000a
-p401
+p402
 sI25
 VError retrieving the URL for source: %s from the json data_def\u000a
-p402
+p403
 sI26
 VError reading the %s-page: %s\u000a
-p403
+p404
 sI27
 VUnable to veryfy the right offset for the basepage: %s.\u000a
-p404
+p405
 sI28
 VSkip channel=%s on %s!, day=%d. Wrong date!\u000a
-p405
+p406
 sI29
 VUnexpected Error retrieving a %s-page from: %s\u000a
-p406
+p407
 sI30
 VUnable to get channel info from %s\u000a
-p407
+p408
 sI31
 VFatal Error processing the basepages from %s\u000a
-p408
+p409
 sI32
 VSetting them all to being loaded, to let the other sources finish the job\u000a
-p409
+p410
 sI33
 VCan not determine program title for "%s" on channel: %s, source: %s\u000a
-p410
+p411
 sI34
 VCan not determine timings for "%s" on channel: %s, source: %s\u000a
-p411
+p412
 sI35
 VPage %s returned no data\u000a
-p412
+p413
 sI36
 VRemoving "%s" from "%s"\u000a
-p413
+p414
 sI37
 VSplitting title "%s"\u000a
-p414
+p415
 sI38
 VRenaming "%s" to "%s"\u000a
-p415
+p416
 sI51
 VNo Data from %s for channel: %s\u000a
-p416
+p417
 sI52
 VDetail sources: %s died.\u000a
-p417
+p418
 sI53
 VSo we stop waiting for the pending details for channel %s\u000a
-p418
-sssVIO
 p419
-(dp420
+sI54
+V and %s
+p420
+sssVIO
+p421
+(dp422
 g251
-(dp421
+(dp423
 I1
 VVerifying the database\u000a
-p422
+p424
 sI2
-VSending all remaining threads a signal to finish\u000a
-p423
+VWaiting for all remaining threads to finish\u000a
+p425
 ssg35
-(dp424
+(dp426
 I1
 VFile: "%s" not found or could not be accessed.\u000a
-p425
+p427
 sI2
 V%s is not encoded in %s.\u000a
-p426
+p428
 sI3
 V%s has invalid encoding %s.\u000a
-p427
+p429
 sI10
 VIf you want assistence, please attach your configuration and log files!\u000a
-p428
+p430
 sI11
 VAn unexpected error has occured in the %s thread:\u000a
-p429
+p431
 sI12
 VAn unexpected error has occured:\u000a
-p430
+p432
 sI13
 VUnrecognized log-message: %s of type %s\u000a
-p431
+p433
 sI14
 VWhile fetching the base pages\u000a
-p432
+p434
 sI15
 VThe current detail url is: %s\u000a
-p433
+p435
 sI16
 VWhile fetching the detail pages\u000a
-p434
+p436
 sI20
 VNo cachefile given. Cache function disabled!\u000a
-p435
+p437
 sI21
 VThe cache directory is not accesible. Cache function disabled!\u000a
-p436
+p438
 sI22
 VError loading the database: %s.db (possibly corrupt)\u000a
-p437
+p439
 sI23
 VTrying to load a backup copy
-p438
+p440
 sI24
 VFailed to load the database: %s.db\u000a
-p439
+p441
 sI25
 VDisableing Cache function
-p440
+p442
 sI26
 VDatabase Error\u000a
-p441
+p443
 sssVttvdb
-p442
-(dp443
-Vfrontend
 p444
 (dp445
+Vfrontend
+p446
+(dp447
 I0
 g34
 sI1
 VThe series "%s" is already saved under ttvdbID: %s -> %s
-p446
+p448
 sI2
 V    for the languages: (%s)\u000a
-p447
+p449
 sI3
 VThe series "%s" is not jet known!\u000a
-p448
+p450
 sI4
 VNo match for %s is found on theTVDB.com
-p449
+p451
 sI5
 VtheTVDB Search Results:
-p450
+p452
 sI6
 VEnter choice (first number, q to abort):
-p451
+p453
 sI7
 VRemoving old instance
-p452
+p454
 sI8
 VAdding "%s" under aliasses "%s" and "%s" as ttvdbID: %s to the database for lookups!
-p453
+p455
 sI9
 VAdding "%s" under alias "%s" as ttvdbID: %s to the database for lookups!
-p454
+p456
 sI10
 VAdding "%s" ttvdbID: %s to the database for lookups!
-p455
+p457
 ssg35
-(dp456
+(dp458
 I1
 VSorry, thetvdb.com lookup is disabled!\u000a
-p457
+p459
 sI2
 VPlease supply a series title!\u000a
-p458
+p460
 sI3
 VInvalid language code: "%s" supplied falling back to "en"\u000a
-p459
+p461
 sI11
 VError retreiving an ID from theTVdb.com\u000a
-p460
+p462
 sI12
 VError retreiving episodes from theTVDB.com\u000a
-p461
+p463
 sI13
 V  No ttvdb id for "%s" on channel %s\u000a
-p462
+p464
 sI14
 Vttvdb lookup for "%s: %s"\u000a
-p463
+p465
 sI15
 Vttvdb failure for "%s: %s" on channel %s\u000a
-p464
+p466
 ssssVversion
-p465
+p467
 (I1
 I0
 I0
-tp466
+tp468
 sVlanguage
-p467
+p469
 VEnglish
-p468
+p470
 s.
