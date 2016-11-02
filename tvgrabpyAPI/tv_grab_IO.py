@@ -527,6 +527,9 @@ class Logging(Thread):
                  # And the same with ttvdb, but we let it wait longer
                  if waittime > idle_timeout2:
                     ttvdb_cnt = 0
+                    if len(t.pending_tids) > 0:
+                        self.config.log([self.config.text('fetch', 19, (t.pending_tids, ))])
+
                     for t in enumthreads():
                         try:
                             if t.thread_type == 'channel':

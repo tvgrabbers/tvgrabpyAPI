@@ -778,6 +778,7 @@ class theTVDB_v1(Thread):
         self.show_result = False
         self.config.threads.append(self)
         self.local_encoding = self.config.logging.local_encoding
+        self.show_progres = False
         try:
             self.source_data = source_data
             self.source = self.data_value('name', str)
@@ -870,42 +871,44 @@ class theTVDB_v1(Thread):
 
                 if crequest['task'] == 'process_ep_info':
                     queryid = crequest['queryid']
-                    tid = pending_requests[queryid]['tid']
-                    prequests = pending_requests[queryid]['requests']
-                    self.state = 3
-                    for r in prequests:
-                        parent = r['parent']
-                        pn = r['pn']
-                        qanswer = self.get_season_episode(parent, pn, tid)
-                        if not is_data_value('state', qanswer, int):
-                            qanswer = {'state': 0, 'data': None}
+                    if queryid in pending_requests:
+                        tid = pending_requests[queryid]['tid']
+                        prequests = pending_requests[queryid]['requests']
+                        self.state = 3
+                        for r in prequests:
+                            parent = r['parent']
+                            pn = r['pn']
+                            qanswer = self.get_season_episode(parent, pn, tid)
+                            if not is_data_value('state', qanswer, int):
+                                qanswer = {'state': 0, 'data': None}
 
-                        if qanswer['state'] == -1:
-                            parent.detail_return.put('quit')
-                            self.quit = True
-                            self.state = 4
-                            continue
+                            if qanswer['state'] == -1:
+                                parent.detail_return.put('quit')
+                                self.quit = True
+                                self.state = 4
+                                continue
 
-                        parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
-                        self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
+                            self.functions.update_counter('queue', -1,  parent.chanid, False)
 
-                    del self.pending_tids[tid]
-                    del pending_requests[queryid]
-                    self.state = 4
+                        del self.pending_tids[tid]
+                        del pending_requests[queryid]
+                        self.state = 4
                     continue
 
                 if crequest['task'] == 'fail_ep_info':
                     queryid = crequest['queryid']
-                    tid = pending_requests[queryid]['tid']
-                    prequests = pending_requests[queryid]['requests']
-                    for r in prequests:
-                        parent = r['parent']
-                        pn = r['pn']
-                        parent.detail_return.put({'source': -1, 'data': None, 'pn': pn})
-                        self.functions.update_counter('queue', -1,  parent.chanid, False)
+                    if queryid in pending_requests:
+                        tid = pending_requests[queryid]['tid']
+                        prequests = pending_requests[queryid]['requests']
+                        for r in prequests:
+                            parent = r['parent']
+                            pn = r['pn']
+                            parent.detail_return.put({'source': -1, 'data': None, 'pn': pn})
+                            self.functions.update_counter('queue', -1,  parent.chanid, False)
 
-                    del self.pending_tids[tid]
-                    del pending_requests[queryid]
+                        del self.pending_tids[tid]
+                        del pending_requests[queryid]
                     continue
 
                 if crequest['task'] == 'quit':
@@ -1143,28 +1146,46 @@ class theTVDB_v1(Thread):
 
             queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en'}, chanid, True)
             dtree = self.episodetrees[queryid]
-
             keycount = dtree.searchtree.progress_queue.get(True)
-            dtree.searchtree.show_progress = False
-            if keycount[1] > 500:
-                dtree.export = True
-                return {'state': 2, 'tid': tid, 'queryid':queryid}
 
-            for l in langs:
-                data = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l}, chanid)
-                if not isinstance(data, list):
-                    # No data
-                    continue
+            if self.show_progres:
+                self.config.log([self.config.text('ttvdb', 11, ('en', keycount[1]), type = 'frontend')])
+                for i in range(keycount[1]):
+                    keycount = dtree.searchtree.progress_queue.get(True)
+                    self.config.log([self.config.text('ttvdb', 12, keycount, type = 'frontend')])
 
-                eps.extend(self.process_data(data, tid, l))
+                for l in langs:
+                    queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l}, chanid, True)
+                    dtree = self.episodetrees[queryid]
+                    keycount = dtree.searchtree.progress_queue.get(True)
+                    self.config.log([self.config.text('ttvdb', 11, (l, keycount[1]), type = 'frontend')])
+                    for i in range(keycount[1]):
+                        keycount = dtree.searchtree.progress_queue.get(True)
+                        self.config.log([self.config.text('ttvdb', 12, keycount, type = 'frontend')])
 
-            dtree.join()
-            data = dtree.result
-            if len(data) == 0:
-                self.functions.update_counter('fail', -1, chanid)
+                dtree.join()
 
             else:
-                eps.extend(self.process_data(data, tid, 'en'))
+                dtree.searchtree.show_progress = False
+                if keycount[1] > 500:
+                    dtree.export = True
+                    return {'state': 2, 'tid': tid, 'queryid':queryid}
+
+                for l in langs:
+                    data = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l}, chanid)
+                    if not isinstance(data, list):
+                        # No data
+                        continue
+
+                    eps.extend(self.process_data(data, tid, l))
+
+                dtree.join()
+                data = dtree.result
+                if len(data) == 0:
+                    self.functions.update_counter('fail', -1, chanid)
+
+                else:
+                    eps.extend(self.process_data(data, tid, 'en'))
 
         except:
             self.config.log([self.config.text('ttvdb', 12), traceback.format_exc()])
@@ -1293,6 +1314,7 @@ class theTVDB_v1(Thread):
         if self.config.opt_dict['disable_ttvdb']:
             return(-1)
 
+        self.show_progres = True
         if lang == None:
             lang = self.config.xml_language
 
@@ -1327,7 +1349,7 @@ class theTVDB_v1(Thread):
                 langs.append(l)
 
         else:
-            # Invalid language
+            # It's not jet in the database
             print(self.config.text('ttvdb', 3,(series_name, ) , type = 'frontend').encode(self.local_encoding, 'replace'))
             old_tid = -1
 
@@ -1400,7 +1422,8 @@ class theTVDB_v1(Thread):
             traceback.print_exc()
             return(-1)
 
-        if self.get_all_episodes(int(tid['tid']), langs) == -1:
+        epdata = self.get_all_episodes(int(tid['tid']), langs)
+        if epdata['state'] in (0,-1):
             return(-1)
 
         return(0)

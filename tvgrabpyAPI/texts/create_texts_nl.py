@@ -451,6 +451,7 @@ def load_texts():
                 5: u'De url: %s gaf een JSON fout: %s\n',
                 11: u'Fout bij het verwerken van de %s-functie %s voor bron %s\n',
                 12: u'De geleverde data was: %s\n',
+                19: u'De verwerking van de IDs: %s op TheTVDB duurt te lang.\n',
                 20: u'Zender %s lijkt op %s verloren ttvdb verzoeken te wachten.\n',
                 21: u'Zender %s lijkt op %s verloren detail verzoeken te wachten.\n',
                 22: u'We annuleren en stellen het als klaar.\n',
@@ -580,6 +581,8 @@ def load_texts():
                 8: u'"%s" met de aliassen "%s" en "%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
                 9: u'"%s" met alias "%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
                 10: u'"%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
+                11: u'\nHet "%s" bestand met %s episodes wordt opgehaald!\n',
+                12: u'  Episode %4.0f van %s wordt verwerkt\n'
                 }}}
     return texts
 

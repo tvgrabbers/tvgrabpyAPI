@@ -1216,211 +1216,220 @@ p396
 sI12
 VThe supplied data was: %s\u000a
 p397
+sI19
+VTheTVDB processing of IDs: %s is taking to long.\u000a
+p398
 sI20
 VChannel %s seems to be waiting for %s lost ttvdb requests.\u000a
-p398
+p399
 sI21
 VChannel %s seems to be waiting for %s lost detail requests.\u000a
-p399
+p400
 sI22
 VSetting it to ready\u000a
-p400
+p401
 sI23
 VError processing the detailpage: %s\u000a
-p401
+p402
 sI24
 VError processing the detail2page: %s\u000a
-p402
+p403
 sI25
 VError retrieving the URL for source: %s from the json data_def\u000a
-p403
+p404
 sI26
 VError reading the %s-page: %s\u000a
-p404
+p405
 sI27
 VUnable to veryfy the right offset for the basepage: %s.\u000a
-p405
+p406
 sI28
 VSkip channel=%s on %s!, day=%d. Wrong date!\u000a
-p406
+p407
 sI29
 VUnexpected Error retrieving a %s-page from: %s\u000a
-p407
+p408
 sI30
 VUnable to get channel info from %s\u000a
-p408
+p409
 sI31
 VFatal Error processing the basepages from %s\u000a
-p409
+p410
 sI32
 VSetting them all to being loaded, to let the other sources finish the job\u000a
-p410
+p411
 sI33
 VCan not determine program title for "%s" on channel: %s, source: %s\u000a
-p411
+p412
 sI34
 VCan not determine timings for "%s" on channel: %s, source: %s\u000a
-p412
+p413
 sI35
 VPage %s returned no data\u000a
-p413
+p414
 sI36
 VRemoving "%s" from "%s"\u000a
-p414
+p415
 sI37
 VSplitting title "%s"\u000a
-p415
+p416
 sI38
 VRenaming "%s" to "%s"\u000a
-p416
+p417
 sI51
 VNo Data from %s for channel: %s\u000a
-p417
+p418
 sI52
 VDetail sources: %s died.\u000a
-p418
+p419
 sI53
 VSo we stop waiting for the pending details for channel %s\u000a
-p419
+p420
 sI54
 V and %s
-p420
-sssVIO
 p421
-(dp422
-g251
+sssVIO
+p422
 (dp423
+g251
+(dp424
 I1
 VVerifying the database\u000a
-p424
+p425
 sI2
 VWaiting for all remaining threads to finish\u000a
-p425
+p426
 ssg35
-(dp426
+(dp427
 I1
 VFile: "%s" not found or could not be accessed.\u000a
-p427
+p428
 sI2
 V%s is not encoded in %s.\u000a
-p428
+p429
 sI3
 V%s has invalid encoding %s.\u000a
-p429
+p430
 sI10
 VIf you want assistence, please attach your configuration and log files!\u000a
-p430
+p431
 sI11
 VAn unexpected error has occured in the %s thread:\u000a
-p431
+p432
 sI12
 VAn unexpected error has occured:\u000a
-p432
+p433
 sI13
 VUnrecognized log-message: %s of type %s\u000a
-p433
+p434
 sI14
 VWhile fetching the base pages\u000a
-p434
+p435
 sI15
 VThe current detail url is: %s\u000a
-p435
+p436
 sI16
 VWhile fetching the detail pages\u000a
-p436
+p437
 sI20
 VNo cachefile given. Cache function disabled!\u000a
-p437
+p438
 sI21
 VThe cache directory is not accesible. Cache function disabled!\u000a
-p438
+p439
 sI22
 VError loading the database: %s.db (possibly corrupt)\u000a
-p439
+p440
 sI23
 VTrying to load a backup copy
-p440
+p441
 sI24
 VFailed to load the database: %s.db\u000a
-p441
+p442
 sI25
 VDisableing Cache function
-p442
+p443
 sI26
 VDatabase Error\u000a
-p443
-sssVttvdb
 p444
-(dp445
+sssVttvdb
+p445
+(dp446
 Vfrontend
-p446
-(dp447
+p447
+(dp448
 I0
 g34
 sI1
 VThe series "%s" is already saved under ttvdbID: %s -> %s
-p448
+p449
 sI2
 V    for the languages: (%s)\u000a
-p449
+p450
 sI3
 VThe series "%s" is not jet known!\u000a
-p450
+p451
 sI4
 VNo match for %s is found on theTVDB.com
-p451
+p452
 sI5
 VtheTVDB Search Results:
-p452
+p453
 sI6
 VEnter choice (first number, q to abort):
-p453
+p454
 sI7
 VRemoving old instance
-p454
+p455
 sI8
 VAdding "%s" under aliasses "%s" and "%s" as ttvdbID: %s to the database for lookups!
-p455
+p456
 sI9
 VAdding "%s" under alias "%s" as ttvdbID: %s to the database for lookups!
-p456
+p457
 sI10
 VAdding "%s" ttvdbID: %s to the database for lookups!
-p457
+p458
+sI11
+V\u000aFetching the "%s" file with %s episodes!\u000a
+p459
+sI12
+V  Processing episode %4.0f of %s\u000a
+p460
 ssg35
-(dp458
+(dp461
 I1
 VSorry, thetvdb.com lookup is disabled!\u000a
-p459
+p462
 sI2
 VPlease supply a series title!\u000a
-p460
+p463
 sI3
 VInvalid language code: "%s" supplied falling back to "en"\u000a
-p461
+p464
 sI11
 VError retreiving an ID from theTVdb.com\u000a
-p462
+p465
 sI12
 VError retreiving episodes from theTVDB.com\u000a
-p463
+p466
 sI13
 V  No ttvdb id for "%s" on channel %s\u000a
-p464
+p467
 sI14
 Vttvdb lookup for "%s: %s"\u000a
-p465
+p468
 sI15
 Vttvdb failure for "%s: %s" on channel %s\u000a
-p466
+p469
 ssssVversion
-p467
+p470
 (I1
 I0
 I0
-tp468
+tp471
 sVlanguage
-p469
+p472
 VEnglish
-p470
+p473
 s.

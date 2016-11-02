@@ -443,6 +443,7 @@ def load_texts():
                 5: u'The url: %s gave JSON error: %s\n',
                 11: u'Error processing %s-function %s for source %s\n',
                 12: u'The supplied data was: %s\n',
+                19: u'TheTVDB processing of IDs: %s is taking to long.\n',
                 20: u'Channel %s seems to be waiting for %s lost ttvdb requests.\n',
                 21: u'Channel %s seems to be waiting for %s lost detail requests.\n',
                 22: u'Setting it to ready\n',
@@ -571,7 +572,9 @@ def load_texts():
                 7: u'Removing old instance',
                 8: u'Adding "%s" under aliasses "%s" and "%s" as ttvdbID: %s to the database for lookups!',
                 9: u'Adding "%s" under alias "%s" as ttvdbID: %s to the database for lookups!',
-                10: u'Adding "%s" ttvdbID: %s to the database for lookups!'
+                10: u'Adding "%s" ttvdbID: %s to the database for lookups!',
+                11: u'\nFetching the "%s" file with %s episodes!\n',
+                12: u'  Processing episode %4.0f of %s\n'
                 }}}
     return texts
 

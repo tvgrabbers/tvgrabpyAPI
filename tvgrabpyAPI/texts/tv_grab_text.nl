@@ -1218,211 +1218,220 @@ p398
 sI12
 VDe geleverde data was: %s\u000a
 p399
+sI19
+VDe verwerking van de IDs: %s op TheTVDB duurt te lang.\u000a
+p400
 sI20
 VZender %s lijkt op %s verloren ttvdb verzoeken te wachten.\u000a
-p400
+p401
 sI21
 VZender %s lijkt op %s verloren detail verzoeken te wachten.\u000a
-p401
+p402
 sI22
 VWe annuleren en stellen het als klaar.\u000a
-p402
+p403
 sI23
 VFout bij het verwerken van de detail-pagina: %s\u000a
-p403
+p404
 sI24
 VFout bij het verwerken van de detail2-pagina: %s\u000a
-p404
+p405
 sI25
 VFout bij het ophalen van de URL voor bron: %s uit de json data_def\u000a
-p405
+p406
 sI26
 VFout bij het lezen van de %s-pagina: %s\u000a
-p406
+p407
 sI27
 VDe juiste datum van de: %s pagina kan niet worden vastgesteld.\u000a
-p407
+p408
 sI28
 VSla zender %s op %s!, dag=%d over. Verkeerde datum!\u000a
-p408
+p409
 sI29
 VEen onverwachte fout bij het ophalen van de %s-pagina van: %s\u000a
-p409
+p410
 sI30
 VHet is onmogelijk om zender informatie van %s te verkrijgen\u000a
-p410
+p411
 sI31
 VEen fatale fout bij het verwerken van de basis-pagina's van %s\u000a
-p411
+p412
 sI32
 VWe stellen dat ze allemaal binnen zijn en laten de andere bronnen de taak voltooien.\u000a
-p412
+p413
 sI33
 VKan de programma titel van "%s" op zender: %s, van bron: %s niet bepalen.\u000a
-p413
+p414
 sI34
 VKan de programma tijd van "%s" op zender: %s, van bron: %s niet bepalen.\u000a
-p414
+p415
 sI35
 VDe pagina %s leverde geen data op\u000a
-p415
+p416
 sI36
 VVerwijder "%s" van "%s"\u000a
-p416
+p417
 sI37
 VDe titel "%s" wordt gesplitst\u000a
-p417
+p418
 sI38
 VHernoem "%s" naar "%s"\u000a
-p418
+p419
 sI51
 VGeen data van %s voor zender: %s\u000a
-p419
+p420
 sI52
 VDe detail bron: %s is gestopt.\u000a
-p420
+p421
 sI53
 VDus we stoppen met wachten voor de onderhanden detailverzoeken voor %s\u000a
-p421
+p422
 sI54
 V en %s
-p422
-sssVIO
 p423
-(dp424
-g253
+sssVIO
+p424
 (dp425
+g253
+(dp426
 I1
 VDe Database wordt gecontroleerd.\u000a
-p426
+p427
 sI2
 VWe wachten op alle overgebleven programma-threads om af te sluiten.\u000a
-p427
+p428
 ssg35
-(dp428
+(dp429
 I1
 VHet bestand: "%s" is niet gevonden of kon niet worden geopend.\u000a
-p429
+p430
 sI2
 V%s is niet met %s gecodeerd.\u000a
-p430
+p431
 sI3
 V%s heeft een ongeldige codering %s.\u000a
-p431
+p432
 sI10
 VWanneer je hulp wilt, voeg dan ajb je configuratie en log bestanden bij!\u000a
-p432
+p433
 sI11
 VEen onverwachte fout is opgetreden in de %s thread:\u000a
-p433
+p434
 sI12
 VEen onverwachte fout is opgetreden:\u000a
-p434
+p435
 sI13
 VEen onbekend log-bericht: %s van type %s\u000a
-p435
+p436
 sI14
 Vbij het verzamelen van de basis-pagina's\u000a
-p436
+p437
 sI15
 VDe huidige detail url is: %s\u000a
-p437
+p438
 sI16
 Vbij het ophalen van de detail pagina's\u000a
-p438
+p439
 sI20
 VEr is geen cache bestand opgegeven. De cache functionaliteit wordt uitgeschakeld!\u000a
-p439
+p440
 sI21
 VDe cache folder is niet toegankelijk. De cache functionaliteit wordt uitgeschakeld!\u000a
-p440
+p441
 sI22
 VEen fout bij het laden van de database: %s.db (mogelijke corruptie)\u000a
-p441
+p442
 sI23
 VWe proberen de backup te laden
-p442
+p443
 sI24
 VHet laden van de database: %s.db is mislukt\u000a
-p443
+p444
 sI25
 VDe cache functionaliteit wordt uitgeschakeld
-p444
+p445
 sI26
 VDatabase Fout\u000a
-p445
-sssVttvdb
 p446
-(dp447
+sssVttvdb
+p447
+(dp448
 Vfrontend
-p448
-(dp449
+p449
+(dp450
 I0
 g34
 sI1
 VDe serie "%s" is al opgeslagen met ttvdbID: %s -> %s
-p450
+p451
 sI2
 V    voor de talen: (%s)\u000a
-p451
+p452
 sI3
 VDe serie "%s" is nog niet bekend!\u000a
-p452
+p453
 sI4
 VEr is geen verwijzing voor %s gevonden op theTVDB.com
-p453
+p454
 sI5
 VtheTVDB Zoek resultaten:
-p454
+p455
 sI6
 VGeef een keuze (eerste nummer, q om te annuleren):
-p455
+p456
 sI7
 VVerwijder het oude record
-p456
+p457
 sI8
 V"%s" met de aliassen "%s" en "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p457
+p458
 sI9
 V"%s" met alias "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p458
+p459
 sI10
 V"%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p459
+p460
+sI11
+V\u000aHet "%s" bestand met %s episodes wordt opgehaald!\u000a
+p461
+sI12
+V  Episode %4.0f van %s wordt verwerkt\u000a
+p462
 ssg35
-(dp460
+(dp463
 I1
 VSorry, thetvdb.com is uitgeschakeld!\u000a
-p461
+p464
 sI2
 VSvp geef een serie titel!\u000a
-p462
+p465
 sI3
 VOngeldige taalcode: "%s" gegeven. "en" wordt gebruikt\u000a
-p463
+p466
 sI11
 VFout bij het ophalen van een ID van theTVdb.com\u000a
-p464
+p467
 sI12
 VFout bij het ophalen van de afleveringen van theTVDB.com\u000a
-p465
+p468
 sI13
 V  Geen ttvdb id voor "%s" op zender %s\u000a
-p466
+p469
 sI14
 Vttvdb verwijzing voor "%s: %s"\u000a
-p467
+p470
 sI15
 Vttvdb mislukking voor "%s: %s" op zender %s\u000a
-p468
+p471
 ssssVversion
-p469
+p472
 (I1
 I0
 I0
-tp470
+tp473
 sVlanguage
-p471
+p474
 VNederlands
-p472
+p475
 s.
