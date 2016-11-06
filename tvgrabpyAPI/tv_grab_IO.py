@@ -225,7 +225,7 @@ class Logging(Thread):
         self.log_output = None
         self.log_string = []
         self.all_at_details = False
-        self.print_live_threads = True
+        self.print_live_threads = False
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -802,13 +802,20 @@ class ProgramCache(Thread):
                 "fields":{"tid": {"type": "INTEGER", "default": 0},
                                    "sid": {"type": "INTEGER", "default": -1},
                                    "eid": {"type": "INTEGER", "default": -1},
+                                   "abseid": {"type": "INTEGER", "default": 0},
                                    "lang": {"type": "TEXT", "default": ""},
                                    "episode title": {"type": "TEXT", "default": ""},
                                    "description": {"type": "TEXT", "null": True},
                                    "airdate": {"type": "date", "null": True}},
                 "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
                                     "fields": ["tid", "sid", "eid", "lang"]},
-                    "eptitle": {"fields": ["episode title"]}}}}
+                    "eptitle": {"fields": ["episode title"]}}},
+            "epcount": {"name": "epcount", "no rowid": True,
+                "fields":{"tid": {"type": "INTEGER", "default": 0},
+                                   "sid": {"type": "INTEGER", "default": -1},
+                                   "count": {"type": "INTEGER", "default": -1}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["tid", "sid"]}}}}
 
         for key in self.config.key_values['text']:
             if key not in self.get_fields("sourceprograms"):
@@ -917,7 +924,7 @@ class ProgramCache(Thread):
                                     'ep_by_id', 'ep_by_title')
         self.request_list['add'] = ('channelsource', 'channel', 'icon',
                                     'laststop', 'fetcheddays', 'sourceprograms', 'programdetails',
-                                    'ttvdb', 'ttvdb_alias', 'episodes')
+                                    'ttvdb', 'ttvdb_alias', 'episodes', 'epcount')
         self.request_list['delete'] = ('sourceprograms', 'programdetails', 'ttvdb')
         self.request_list['clear'] = ('fetcheddays', 'fetcheddata', 'sourceprograms', 'credits', 'programdetails', 'creditdetails')
 
@@ -1403,6 +1410,13 @@ class ProgramCache(Thread):
                     self.quit = True
                     continue
 
+                if 'confirm' in crequest:
+                    if 'queue' in crequest:
+                        crequest['queue'].put(crequest['confirm'])
+
+                    elif 'parent' in crequest:
+                        crequest['parent'].cache_return.put(crequest['confirm'])
+
                 self.state = 4
 
         except:
@@ -1663,6 +1677,10 @@ class ProgramCache(Thread):
                 qstring += u" and eid = ?"
                 qlist.append(item['eid'])
 
+            if data_value(['abseid'], item, int, -1) >= 0:
+                qstring += u" and abseid = ?"
+                qlist.append(item['abseid'])
+
             if 'lang' in item:
                 qstring += u" and lang = ?"
                 qlist.append(item['lang'])
@@ -1694,6 +1712,7 @@ class ProgramCache(Thread):
                 series.append({'tid': int(s[str('tid')]),
                                           'sid': int(s[str('sid')]),
                                           'eid': int(s[str('eid')]),
+                                          'abseid': int(s[str('abseid')]),
                                           'episode title': s[str('episode title')],
                                           'airdate': s[str('airdate')],
                                           'lang': s[str('lang')],
@@ -1703,19 +1722,19 @@ class ProgramCache(Thread):
 
         elif table == 'ep_by_title':
             pcursor.execute(u"SELECT * FROM episodes WHERE tid = ? and lower(`episode title`) = ?", (item['tid'], item['episode title'].lower(), ))
-            s = pcursor.fetchone()
-            if s == None:
-                return
-
-            serie = {'tid': int(s[str('tid')]),
+            r = pcursor.fetchall()
+            series = []
+            for s in r:
+                series.append({'tid': int(s[str('tid')]),
                                           'sid': int(s[str('sid')]),
                                           'eid': int(s[str('eid')]),
+                                          'abseid': int(s[str('abseid')]),
                                           'episode title': s[str('episode title')],
                                           'airdate': s[str('airdate')],
                                           'lang': s[str('lang')],
                                           'star-rating': s[str('star-rating')],
-                                          'description': s[str('description')]}
-            return serie
+                                          'description': s[str('description')]})
+            return series
         elif table == 'icon':
             if item == None:
                 pcursor.execute(u"SELECT chanid, sourceid, icon FROM iconsource")
@@ -2204,6 +2223,20 @@ class ProgramCache(Thread):
             self.execute(add_string, rec)
             self.execute(add_string2, rec2)
 
+        elif table == 'epcount':
+            if isinstance(item, dict):
+                item = [item]
+
+            add_string = u"INSERT INTO epcount (`tid`, `sid`, `count`) VALUES (?, ?, ?)"
+            for p in item:
+                if not isinstance(p, dict) or not 'tid' in p.keys() or not 'sid' in p.keys() or not 'count' in p.keys():
+                    continue
+
+                sql_vals = (p['tid'], p['sid'], p['count'])
+                rec.append(sql_vals)
+
+            self.execute(add_string, rec)
+
     def delete(self, table='ttvdb', item=None):
         if table == 'sourceprograms':
             if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
@@ -2242,7 +2275,7 @@ class ProgramCache(Thread):
                     self.execute(delete_string, rec)
                     self.execute(delete_string2, rec)
 
-        if table == 'programdetails':
+        elif table == 'programdetails':
             if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
                 return
 
@@ -2281,6 +2314,7 @@ class ProgramCache(Thread):
             with self.pconn:
                 self.pconn.execute(u"DELETE FROM ttvdb WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM episodes WHERE tid = ?",  (int(item['tid']), ))
+                self.pconn.execute(u"DELETE FROM epcount WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdbcredits WHERE tid = ?",  (int(item['tid']), ))
 
     def clear(self, table):

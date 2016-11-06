@@ -112,7 +112,7 @@ import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
 if dtversion()[1:4] < (1,2,6):
-    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.2.3 or higher\n")
+    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.2.6 or higher\n")
     sys.exit(2)
 
 try:
@@ -319,6 +319,8 @@ class Configure:
         self.opt_dict['disable_source'] = []
         self.opt_dict['disable_detail_source'] = []
         self.opt_dict['disable_ttvdb'] = False
+        self.opt_dict['ttvdb_lookup_level'] = 1
+        self.max_ttv_level = 3
         self.opt_dict['compat'] = False
         self.opt_dict['legacy_xmltvids'] = False
         self.opt_dict['max_overlap'] = 10
@@ -370,7 +372,10 @@ class Configure:
                                                              2: u'no title split list',
                                                              3: u'remove groupname list',
                                                              4: u'rename title list',
-                                                             5: u'genres to get detail pages for'}
+                                                             5: u'genres to get detail pages for',
+                                                             6: u'genres to treat as series',
+                                                             7: u'genres to treat as movies',
+                                                             8: u'genres to treat as sports'}
 
     # end Init()
 
@@ -832,6 +837,7 @@ class Configure:
                 self.log(self.text('ttvdb', 2))
                 return(-2)
 
+            self.opt_dict['ttvdb_lookup_level'] = self.max_ttv_level
             series_title = unicode(self.args.ttvdb_title[0], 'utf-8')
             lang = self.xml_language
             if len(self.args.ttvdb_title) >1:
@@ -1491,7 +1497,7 @@ class Configure:
                     # Integer Values
                     elif cfg_option in ('log_level', 'match_log_level', 'offset', 'days', 'slowdays', 'mailport', \
                       'max_overlap', 'desc_length', 'disable_source', 'disable_detail_source', 'data_version', \
-                      'max_simultaneous_fetches', 'global_timeout'):
+                      'max_simultaneous_fetches', 'global_timeout', 'ttvdb_lookup_level'):
                         try:
                             cfg_value = int(cfg_value)
 
@@ -1504,6 +1510,9 @@ class Configure:
                                 self.validate_option(cfg_option, value = cfg_value)
 
                             else:
+                                if cfg_option == 'ttvdb_lookup_level' and not (0 <= cfg_value <= self.max_ttv_level):
+                                    cfg_option = 1
+
                                 self.opt_dict[cfg_option] = cfg_value
 
             except:
@@ -1703,7 +1712,7 @@ class Configure:
                             self.channels[chanid].opt_dict[cfg_option] = 'none'
 
                     # Integer Values
-                    elif cfg_option in ('slowdays', 'max_overlap', 'desc_length'):
+                    elif cfg_option in ('slowdays', 'max_overlap', 'desc_length', 'ttvdb_lookup_level'):
                         try:
                             cfg_value = int(cfg_value)
 
@@ -1712,6 +1721,9 @@ class Configure:
                                 self.channels[chanid].opt_dict[cfg_option] = None
 
                         else:
+                            if cfg_option == 'ttvdb_lookup_level' and not (0 <= cfg_value <= self.max_ttv_level):
+                                cfg_option = 1
+
                             self.channels[chanid].opt_dict[cfg_option] = cfg_value
 
                     # Source Values
@@ -1829,6 +1841,21 @@ class Configure:
                     line = line.lower()
                     if not line in self.detailed_genres:
                         self.detailed_genres.append(line)
+
+                elif type == 6:
+                    line = line.lower()
+                    if not line in self.series_genres:
+                        self.series_genres.append(line)
+
+                elif type == 7:
+                    line = line.lower()
+                    if not line in self.movie_genres:
+                        self.movie_genres.append(line)
+
+                elif type == 8:
+                    line = line.lower()
+                    if not line in self.sports_genres:
+                        self.sports_genres.append(line)
 
                 elif type in self.cattranstype[1].keys():
                     # split of the translation (if present) or supply an empty one
@@ -2541,6 +2568,7 @@ class Configure:
         log_array.append(u'cache_file = %s.db' % (self.opt_dict['cache_file']))
         log_array.append(u'clean_cache = %s' % (self.args.clean_cache))
         log_array.append(u'disable_ttvdb = %s' % (self.opt_dict['disable_ttvdb']))
+        log_array.append(u'ttvdb_lookup_level = %s' % (self.opt_dict['ttvdb_lookup_level']))
         log_array.append(u'quiet = %s' % (self.opt_dict['quiet']))
         log_array.append(u'output_file = %s' % (self.opt_dict['output_file']))
         log_array.append(u'output_tz = %s' % (self.opt_dict['output_tz']))
@@ -2607,7 +2635,7 @@ class Configure:
                 log_array.append(u'  slowdays = %s' % (chan_def.get_opt('slowdays')))
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
-              'logos', 'desc_length', 'cattrans', 'disable_ttvdb', 'use_split_episodes'):
+              'logos', 'desc_length', 'cattrans', 'disable_ttvdb', 'use_split_episodes', 'ttvdb_lookup_level'):
                 if chan_def.get_opt(val) != self.opt_dict[val]:
                     log_array.append(u'  %s = %s\n' % (val, chan_def.get_opt(val)))
 
@@ -2698,7 +2726,13 @@ class Configure:
             elif index in self.opt_dict['disable_detail_source']:
                 f.write(u'disable_detail_source = %s\n' % index)
 
+        for i in range(191, 197):
+            line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
+            if line != '':
+                f.write(line)
+
         f.write(u'disable_ttvdb = %s\n' % self.opt_dict['disable_ttvdb'])
+        f.write(u'ttvdb_lookup_level = %s\n' % self.opt_dict['ttvdb_lookup_level'])
         f.write(u'compat = %s\n' % self.opt_dict['compat'])
         f.write(u'legacy_xmltvids = %s\n' % self.opt_dict['legacy_xmltvids'])
         f.write(u'logos = %s\n' % self.opt_dict['logos'])
@@ -3111,7 +3145,7 @@ class Configure:
                 f.write(u'disable_ttvdb = True\n')
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
-              'logos', 'desc_length', 'cattrans', 'mark_hd', 'use_split_episodes'):
+              'logos', 'desc_length', 'cattrans', 'mark_hd', 'use_split_episodes', 'ttvdb_lookup_level'):
                 if chan_def.get_opt(val) != self.opt_dict[val]:
                     if not chan_name_written:
                         f.write(u'\n')
@@ -3191,6 +3225,33 @@ class Configure:
         self.detailed_genres.sort()
         for dg in self.detailed_genres:
              f.write(u'%s\n' % dg)
+
+        f.write(u'\n')
+        for i in range(201, 205):
+            line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
+            if line != '':
+                f.write(line)
+
+        f.write(u'\n')
+        f.write(u'[%s]\n' % self.__DEFAULT_SECTIONS__[6])
+
+        self.series_genres.sort()
+        for t in self.series_genres:
+             f.write(u'%s\n' % t)
+
+        f.write(u'\n')
+        f.write(u'[%s]\n' % self.__DEFAULT_SECTIONS__[7])
+
+        self.movie_genres.sort()
+        for t in self.movie_genres:
+             f.write(u'%s\n' % t)
+
+        f.write(u'\n')
+        f.write(u'[%s]\n' % self.__DEFAULT_SECTIONS__[8])
+
+        self.sports_genres.sort()
+        for t in self.sports_genres:
+             f.write(u'%s\n' % t)
 
         if len(self.cattranstype[1]) > 0:
             slist = u'# '

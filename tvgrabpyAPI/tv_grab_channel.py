@@ -447,12 +447,12 @@ class Channel_Config(Thread):
 
             pngenre = pn.get_value('genre').lower()
             # Check if its genre is in the allow detailfetch list
-            if ('all' in self.config.detailed_genres \
-                    and (pngenre in self.config.detailed_genres \
+            if not(('all' in self.config.detailed_genres \
+                    and not (pngenre in self.config.detailed_genres \
                         or ('none' in self.config.detailed_genres and not pn.is_set('genre')))) \
                 or (not 'all' in self.config.detailed_genres \
-                    and (not pngenre in self.config.detailed_genres \
-                        or not ('none' in self.config.detailed_genres and not pn.is_set('genre')))):
+                    and (pngenre in self.config.detailed_genres \
+                        or ('none' in self.config.detailed_genres and not pn.is_set('genre'))))):
                 self.functions.update_counter('exclude', -99, self.chanid)
                 # Check ttvdb
                 self.check_ttvdb(pn)
@@ -497,11 +497,14 @@ class Channel_Config(Thread):
             pngenre = pn.get_value('genre').lower()
             pneptitle = pn.get_value('episode title')
             pnseason = pn.get_value('season')
-            #~ if pngenre in self.config.series_genres and pneptitle != '' and pnseason == 0:
-            if pngenre in self.config.series_genres and pneptitle != '':
-                self.functions.update_counter('queue', -1, self.chanid)
-                self.ttvdb_counter += 1
-                self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
+            tllevel = self.get_opt('ttvdb_lookup_level')
+            if pngenre in self.config.series_genres and \
+                ((tllevel == 1 and pneptitle != '' and pnseason == 0) or \
+                (tllevel == 2 and pneptitle != '') or \
+                (tllevel == 3)):
+                    self.functions.update_counter('queue', -1, self.chanid)
+                    self.ttvdb_counter += 1
+                    self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
 
     def log_results(self):
         with self.functions.count_lock:
@@ -548,7 +551,7 @@ class Channel_Config(Thread):
                 return False
 
         if opt == 'disable_ttvdb':
-            if self.config.opt_dict[opt] or self.opt_dict[opt]:
+            if self.config.opt_dict[opt] or self.opt_dict[opt] or self.get_opt('ttvdb_lookup_level') == 0:
                 return True
 
             else:

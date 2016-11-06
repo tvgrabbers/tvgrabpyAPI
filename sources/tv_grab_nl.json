@@ -1432,9 +1432,9 @@
 		"inspector banks": "DCI Banks"},
 	"groupnameremove":["kro detectives", "detectives", "premiére"],
 	"episode exclude genres": ["sport","sports","movie","film"],
-	"detailed_genres":["serie/soap","movie","film","sport","sports"],
+	"detailed_genres":["serie/soap","movie","film","korte film","sport","sports"],
 	"series_genres":["serie/soap"],
-	"movie_genres":["movie","film"],
+	"movie_genres":["movie","film","korte film"],
 	"sports_genres":["sport","sports"],
 	"cattrans_unknown":"Overige",
 	"cattrans": {

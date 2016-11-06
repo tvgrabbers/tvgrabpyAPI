@@ -368,7 +368,19 @@ def load_texts():
                 183: u'# gebruikt. Het is verstandig om regelmatig op nieuwe hoofd categorieën\n',
                 184: u'# te controleren, zodat deze niet naar "Unknown" vertaald worden.\n',
                 185: u'',
-                186: u''
+                186: u'',
+                191: u'# ttvdb_lookup_level is een integer waarde tussen 0 en 3\n',
+                192: u'# Bij een hoger waarde zal voor meer programma\'s een ttvdbid opgezocht worden\n',
+                193: u'# 0 is gelijk aan "disable_ttvdb" = True, maar het laat je wel nog voor\n',
+                194: u'# aparte zenders een hogere waarde instellen, want de module wordt wel geladen.\n',
+                195: u'',
+                196: u'',
+                197: u'',
+                201: u'# Dit zijn lijsten van de genres die als een serie, film en sport genre gezien worden\n',
+                202: u'# Het wordt bijv. gebruikt om programma\'s aan te merken om ze op thetvdb op te zoeken\n',
+                203: u'# en voor naam manipulaties om een episode titel te vinden.\n',
+                204: u'# De door de beheerder toegevoegde standaard kun je niet verwijderen.\n',
+                205: u''
                 },
             u'mergeinfo':{
                 1: u'%s is samengevoegd met %s\n',
@@ -581,7 +593,7 @@ def load_texts():
                 8: u'"%s" met de aliassen "%s" en "%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
                 9: u'"%s" met alias "%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
                 10: u'"%s" wordt onder ttvdbID: %s aan de database toegevoegd!',
-                11: u'\nHet "%s" bestand met %s episodes wordt opgehaald!\n',
+                11: u'\nHet "%s" bestand voor "%s" id = %s met %s episodes wordt opgehaald!\n',
                 12: u'  Episode %4.0f van %s wordt verwerkt\n'
                 }}}
     return texts

@@ -360,7 +360,19 @@ def load_texts():
                 183: u'# You should regualary check on new main categories\n',
                 184: u'# so they don\'t get translated to "Unknown"\n',
                 185: u'',
-                186: u''
+                186: u'',
+                191: u'# ttvdb_lookup_level is an integer value between 0 and 3\n',
+                192: u'# The higher the number the more programmes will qualify\n',
+                193: u'# 0 is equivalant to "disable_ttvdb" = True, but it still lets you set\n',
+                194: u'# a higher number for individual channels as it will still load the module.\n',
+                195: u'',
+                196: u'',
+                197: u'',
+                201: u'# These are lists list of the genres to treat as series, movie and sports genre\n',
+                202: u'# It is used f.i. to identify a programme for ttvdb lookup and for name manipulations\n',
+                203: u'# like title spliting to get an episode title.\n',
+                204: u'# Some defaults are added by the maintainer, you can not delete.\n',
+                205: u''
                 },
             u'mergeinfo':{
                 1: u'We merged %s into %s\n',
@@ -573,7 +585,7 @@ def load_texts():
                 8: u'Adding "%s" under aliasses "%s" and "%s" as ttvdbID: %s to the database for lookups!',
                 9: u'Adding "%s" under alias "%s" as ttvdbID: %s to the database for lookups!',
                 10: u'Adding "%s" ttvdbID: %s to the database for lookups!',
-                11: u'\nFetching the "%s" file with %s episodes!\n',
+                11: u'\nFetching the "%s" file for "%s" id = %s with %s episodes!\n',
                 12: u'  Processing episode %4.0f of %s\n'
                 }}}
     return texts
