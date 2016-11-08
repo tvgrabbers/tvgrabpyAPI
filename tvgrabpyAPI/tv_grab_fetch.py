@@ -762,7 +762,9 @@ class theTVDB_v1(Thread):
         self.state = 0
         self.active = True
         self.lastrequest = None
+        self.lastquery = None
         self.pending_tids = {}
+        self.queried_titles = {}
         self.api_key = "0BB856A59C51D607"
         self.source_lock = RLock()
         # The queue to receive answers on database queries
@@ -807,6 +809,7 @@ class theTVDB_v1(Thread):
     def run(self):
         if self.config.opt_dict['disable_ttvdb']:
             return
+
         pending_requests = {}
         try:
             self.state = 4
@@ -830,19 +833,31 @@ class theTVDB_v1(Thread):
                 if (not isinstance(crequest, dict)) or (not 'task' in crequest):
                     continue
 
-                if crequest['task'] == 'update_ep_info':
+                if crequest['task'] == 'request_ep_info':
                     if not 'parent' in crequest:
                         continue
 
                     parent = crequest['parent']
                     if 'pn' in crequest:
                         pn = crequest['pn']
+                        if self.config.write_info_files:
+                            self.config.infofiles.write_raw_string('query ttvdb %s' % ( pn.get_title()))
+
                         self.state = 3
                         qanswer = self.get_season_episode(parent, pn)
                         if not is_data_value('state', qanswer, int):
                             qanswer = {'state': 0, 'data': None}
 
                         if qanswer['state'] == -1:
+                            if self.config.write_info_files:
+                                self.config.infofiles.write_raw_string('  state %s' % (qanswer['state']))
+
+                                for ti, qi in pending_requests.items():
+                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
+
+                                for ti, qi in self.pending_tids.items():
+                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
+
                             parent.detail_return.put('quit')
                             self.quit = True
                             self.state = 4
@@ -850,6 +865,10 @@ class theTVDB_v1(Thread):
 
                         elif qanswer['state'] in (0, 1):
                             # Failed / Finished
+                            if self.config.write_info_files:
+                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
+                                    (qanswer['state'], data_value(['data','ttvdbid'], qanswer), qanswer['data']))
+
                             parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
                             self.functions.update_counter('queue', -1,  parent.chanid, False)
 
@@ -861,18 +880,39 @@ class theTVDB_v1(Thread):
                             chanid = parent.chanid
                             self.pending_tids[tid] = queryid
                             pending_requests[queryid] = {'tid': tid, 'requests': [{'pn': pn, 'parent': parent}]}
+                            if self.config.write_info_files:
+                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
+                                    (qanswer['state'], qanswer['tid'], qanswer['queryid']))
+
+                                for ti, qi in pending_requests.items():
+                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
+
+                                for ti, qi in self.pending_tids.items():
+                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
 
                         elif qanswer['state'] == 3:
                             # There is a request for this tid pending
                             #{'state': 3, 'tid': tid}
                             queryid = self.pending_tids[qanswer['tid']]
                             pending_requests[queryid]['requests'].append({'pn': pn, 'parent': parent})
+                            if self.config.write_info_files:
+                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
+                                    (qanswer['state'], qanswer['tid'], queryid))
+
+                                for ti, qi in pending_requests.items():
+                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
+
+                                for ti, qi in self.pending_tids.items():
+                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
 
                     self.state = 4
                     continue
 
                 if crequest['task'] == 'process_ep_info':
                     queryid = crequest['queryid']
+                    if self.config.write_info_files:
+                        self.config.infofiles.write_raw_string('process: %s %s' % (queryid, crequest))
+
                     if queryid in pending_requests:
                         tid = pending_requests[queryid]['tid']
                         prequests = pending_requests[queryid]['requests']
@@ -900,6 +940,9 @@ class theTVDB_v1(Thread):
 
                 if crequest['task'] == 'fail_ep_info':
                     queryid = crequest['queryid']
+                    if self.config.write_info_files:
+                        self.config.infofiles.write_raw_string('fail: %s %s' % (queryid, crequest))
+
                     if queryid in pending_requests:
                         tid = pending_requests[queryid]['tid']
                         prequests = pending_requests[queryid]['requests']
@@ -938,12 +981,20 @@ class theTVDB_v1(Thread):
             return(98)
 
     def query_ttvdb(self, ptype, pdata, chanid = None, background = False):
-        if self.config.write_info_files:
-            self.config.infofiles.write_raw_string('query ttvdb %s, %s' % ( ptype, pdata))
+        '''
+        Make a request on theTVDB.com and return the queryID or any return data from DataTree
+        '''
+        if self.lastquery != None and datetime.datetime.now() - self.lastquery < datetime.timedelta(seconds = 1):
+            time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+
+        self.lastquery = datetime.datetime.now()
+        #~ if self.config.write_info_files:
+            #~ self.config.infofiles.write_raw_string('query ttvdb %s, %s' % ( ptype, pdata))
 
         if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
             return
 
+        # A request must either contain a name or an ID
         if 'ttvdbid' in pdata:
             if isinstance(pdata['ttvdbid'], (int, str)):
                 pdata['ttvdbid'] = unicode(pdata['ttvdbid'])
@@ -956,19 +1007,22 @@ class theTVDB_v1(Thread):
             return
 
         pdata['api-key'] = self.api_key
+        # A language must be valid
         if (not pdata['lang'] in self.lang_list) and not (pdata['lang'] == 'all' and ptype == 'seriesid'):
             pdata['lang'] = 'en'
 
+        # Do we start an independent DataTree thread?
         if background:
             self.queryid += 1
             queryid = self.queryid
-            self.episodetrees[queryid] = DataTree(self, self.data_value("episodes", dict), 'always', -1)
+            self.episodetrees[queryid] = DataTree(self, self.data_value(ptype, dict), 'always', -1)
             dtree = self.episodetrees[queryid]
             dtree.rundata = {'task':'epdata', 'queryid': queryid, 'tid': pdata['ttvdbid'], 'lang': pdata['lang'], 'chanid': chanid}
 
         else:
             dtree = self.datatrees[ptype]
 
+        # Get the page
         url = dtree.get_url(pdata)
         if self.print_searchtree:
             print '(url, encoding, accept_header, url_data, is_json)'
@@ -985,19 +1039,19 @@ class theTVDB_v1(Thread):
             dtree.start()
             return queryid
 
-        else:
-            dtree.extract_datalist()
-            data = dtree.result
-
+        dtree.extract_datalist()
+        data = dtree.result
         if len(data) == 0:
             self.functions.update_counter('fail', -1, chanid)
             return None
 
-        # be nice to the source site
-        time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
         return data
 
     def store_data(self, task, data, confirm = None):
+        '''
+        Store any fetched data in the Database
+        Optionally ask the database to confirm storing the data
+        '''
         if isinstance(data, list) and len(data) == 0:
             return
 
@@ -1026,6 +1080,10 @@ class theTVDB_v1(Thread):
         self.config.queues['cache'].put(dbdata)
 
     def get_cache_return(self, task = None, name = None, data = None):
+        '''
+        Wait for any returned data from the database
+        If task is set perform the query
+        '''
         if self.quit:
             return -1
 
@@ -1039,6 +1097,7 @@ class theTVDB_v1(Thread):
             self.config.queues['cache'].put({'task':task, 'parent': self, name: data})
 
         elif task != None:
+            # Unknown query
             return
 
         self.state += 8
@@ -1050,7 +1109,13 @@ class theTVDB_v1(Thread):
 
         return value
 
-    def get_ttvdb_id(self, name, lang='en', search_db=True, chanid=None):
+    def get_ttvdb_id(self, name, lang='en', chanid=None):
+        '''
+        Search the database and/or theTVDB for an ID
+        If it is not found on theTVDB store it to not check again for a 30 days
+        If it is found on the TVDB retrieve and store the episode data
+        Check self.pending_tids and self.queried_titles for pending searches
+        '''
         def get_tid(idsource = 'from db'):
             if idsource == 'from db':
                 data = self.get_cache_return('ttvdbid', name)
@@ -1059,15 +1124,15 @@ class theTVDB_v1(Thread):
                 data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': lang}, chanid)
 
             else:
-                return 0
+                return (0, None)
 
             if data == -1:
                 # A quit request
-                return -1
+                return (-1, None)
 
             elif not isinstance(data, list) or len(data) == 0:
                 # Nothing found
-                return 0
+                return (0, None)
 
             tids = {}
             tidcnt = 0
@@ -1089,13 +1154,13 @@ class theTVDB_v1(Thread):
                     tindex = index
 
             if tindex > -1:
+                rtid = data_value([tindex, 'tid'], data, int, 0)
                 rtdate = data_value([tindex, 'tdate'], data, datetime.date)
-                if self.last_updated == None or (rtdate != None and rtdate < self.last_updated):
-                    self.last_updated = rtdate
 
-                return data_value([tindex, 'tid'], data, int, 0)
+                self.queried_titles[name.lower()] = rtid
+                return (rtid, rtdate)
 
-            return 0
+            return (0, None)
 
         def check_alias():
             alias = self.get_cache_return('ttvdb_alias', name)
@@ -1107,34 +1172,46 @@ class theTVDB_v1(Thread):
 
             return alias
 
-        self.last_updated = None
         tid = 0
-        if search_db:
-            tid = get_tid('from db')
+        last_updated = None
+        if name.lower() in self.queried_titles:
+            tid = self.queried_titles[name.lower()]
+            if tid == 0:
+                return {'state': 0, 'tid': None}
+
+            if tid in self.pending_tids.keys():
+                # There already is a lookup underway
+                return {'state': 3, 'tid': tid}
+
+        if tid == 0:
+            (tid, last_updated) = get_tid('from db')
+            if not isinstance(last_updated, datetime.date):
+                new_fetch = None
+
+            else:
+                new_fetch = bool((datetime.date.today() - last_updated).days > 30)
+
             if tid == -1:
                 self.ready = True
                 return {'state': -1, 'tid': None}
 
-            if isinstance(self.last_updated, datetime.date) and (datetime.date.today() - self.last_updated).days <= 30:
-                # The last check is less then 30 days old
-                # We'll  use the episode info in the database (or signal not found if tid == 0)
-                if tid == 0:
+            elif tid == 0:
+                if new_fetch == False:
                     return {'state': 0, 'tid': None}
 
-                return {'state': 1, 'tid': tid, 'tdate': self.last_updated, 'name': name}
-
-            elif tid > 0 and tid in self.pending_tids.keys():
+            elif tid in self.pending_tids.keys():
                 # There already is a lookup underway
                 return {'state': 3, 'tid': tid}
 
-            elif tid > 0 and isinstance(self.last_updated, datetime.date) \
-              and (datetime.date.today() - self.last_updated).days > 30 \
-              and not self.config.args.only_cache:
+            elif new_fetch == False:
+                return {'state': 1, 'tid': tid, 'tdate': last_updated, 'name': name}
+
+            elif new_fetch and not self.config.args.only_cache:
                 data = self.query_ttvdb('seriesname', { 'ttvdbid': tid, 'lang': lang})
                 if is_data_value([0, 'last updated'], data, datetime.datetime) and \
-                    data_value([0, 'last updated'], data, datetime.datetime).date() < self.last_updated:
+                    data_value([0, 'last updated'], data, datetime.datetime).date() < last_updated:
                         # No updates on theTVDB
-                        return {'state': 1, 'tid': tid, 'tdate': self.last_updated, 'name': name}
+                        return {'state': 1, 'tid': tid, 'tdate': last_updated, 'name': name}
 
         # First we look for a known alias
         series_name = check_alias()
@@ -1148,12 +1225,17 @@ class theTVDB_v1(Thread):
 
         try:
             if tid == 0 and not self.config.args.only_cache:
-                tid = get_tid('from ttvdb')
-                if tid == 0:
-                    # No data
-                    self.store_data('ttvdbid', {'tid': 0, 'title': series_name, 'langs': langs})
-                    return {'state': 0, 'tid': None}
+                (tid, lu) = get_tid('from ttvdb')
 
+            if tid == 0:
+                # No data
+                self.store_data('ttvdbid', {'tid': 0, 'title': series_name, 'langs': langs})
+                self.queried_titles[name.lower()] = 0
+                self.queried_titles[series_name.lower()] = 0
+                return {'state': 0, 'tid': None}
+
+            self.queried_titles[name.lower()] = tid
+            self.queried_titles[series_name.lower()] = tid
             if tid in self.pending_tids.keys():
                 # There already is a lookup underway
                 return {'state': 3, 'tid': tid}
@@ -1161,12 +1243,21 @@ class theTVDB_v1(Thread):
             #We look for other languages
             data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': 'all'}, chanid)
             db_update = []
-            if isinstance(data, list):
+            added_names = []
+            if isinstance(data, list) and len(data) > 0:
                 for index in range(len(data)):
                     if data_value([index, 'tid'], data, int) == tid and data_value([index, 'lang'], data, str) in langs:
                         db_update.append(data[index])
+                        if is_data_value([index, 'name'], data, str):
+                            if data[index]['name'].lower() not in added_names:
+                                added_names.append(data[index]['name'].lower())
+
+                            if data[index]['name'].lower() not in self.queried_titles.keys():
+                                self.queried_titles[data[index]['name'].lower()] = data_value([index, 'tid'], data, int, 0)
 
                 self.store_data('ttvdbid', db_update)
+                if name.lower() not in added_names:
+                    self.store_data('alias', {'tid': tid, 'name': added_names[0], 'alias': name})
 
         except:
             self.config.log([self.config.text('ttvdb', 11), traceback.format_exc()])
@@ -1191,6 +1282,7 @@ class theTVDB_v1(Thread):
             while 'en' in langs:
                 langs.remove('en')
 
+            # We first retrieve the english data in the background
             queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en'}, chanid, True)
             dtree = self.episodetrees[queryid]
             keycount = dtree.searchtree.progress_queue.get(True)
@@ -1251,6 +1343,7 @@ class theTVDB_v1(Thread):
             self.config.log([self.config.text('ttvdb', 12), traceback.format_exc()])
             return {'state': 0, 'tid': tid}
 
+        # We store the data and let the database tell when it's available
         self.store_data('episodes', eps, {'task': 'process_ep_info', 'queryid': queryid})
         return {'state': 2, 'tid': tid, 'queryid':queryid}
 
@@ -1321,7 +1414,6 @@ class theTVDB_v1(Thread):
                     rdata = r[0]
 
             return {'state': 1, 'data':{'ttvdbid': tid,
-                    'ttvdbid': data_value('tid', rdata, int, 0),
                     'season': data_value('sid', rdata, int, 0),
                     'episode': data_value('eid', rdata, int, 0),
                     'abs episode':data_value('abseid', rdata, int, 0),
@@ -1330,13 +1422,13 @@ class theTVDB_v1(Thread):
                     'description': data_value('description', rdata, str),
                     'star-rating': data_value('star-rating', rdata, float, None)}}
 
+        if not isinstance(data, ProgramNode):
+            return {'state': 0, 'data': None}
+
         if parent == None:
             parent = data.channel_config
 
-        if parent.get_opt('disable_ttvdb') or not isinstance(data, ProgramNode):
-            return {'state': 0, 'data': None}
-
-        if parent.group in self.config.ttvdb_disabled_groups:
+        if parent.get_opt('disable_ttvdb') or parent.group in self.config.ttvdb_disabled_groups:
             # We do not lookup for regional channels and radio
             return {'state': 0, 'data': None}
 

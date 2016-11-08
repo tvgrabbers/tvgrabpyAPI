@@ -1410,11 +1410,11 @@ class ProgramCache(Thread):
                     self.quit = True
                     continue
 
-                if 'confirm' in crequest:
-                    if 'queue' in crequest:
+                if 'confirm' in crequest.keys():
+                    if 'queue' in crequest.keys():
                         crequest['queue'].put(crequest['confirm'])
 
-                    elif 'parent' in crequest:
+                    elif 'parent' in crequest.keys():
                         crequest['parent'].cache_return.put(crequest['confirm'])
 
                 self.state = 4

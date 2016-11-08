@@ -504,7 +504,7 @@ class Channel_Config(Thread):
                 (tllevel == 3)):
                     self.functions.update_counter('queue', -1, self.chanid)
                     self.ttvdb_counter += 1
-                    self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'update_ep_info'})
+                    self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'request_ep_info'})
 
     def log_results(self):
         with self.functions.count_lock:
