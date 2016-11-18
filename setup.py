@@ -2,8 +2,8 @@
 
 '''
 This Package contains an API for tv_grabbers Alle data is defined in JSON files
-Including where and how to get the tv data. Multiple source can be defined
-and the resulting data is integrated in to one XMLTV output file.
+Including where and how to get the tv data. Multiple sources can be defined
+and the resulting data is integrated into one XMLTV output file.
 The detailed behaviour is highly configurable. See our site for more details.
 '''
 
@@ -29,7 +29,7 @@ setup(
     description = 'xlmtv API based on JSON datafiles',
     packages = ['tvgrabpyAPI'],
     package_data={'tvgrabpyAPI': ['texts/tv_grab_text.*']},
-    scripts=['tv_grab_nl3.py', 'tv_grab_test_json.py'],
+    scripts=['tv_grab_nl3.py', 'tv_grab_test_json.py', 'tv_grab_test_source.py'],
     data_files=[(source_dir, ['sources/tv_grab_API.json',
                             'sources/tv_grab_nl.json'])],
     requires = ['pytz', 'requests', 'DataTreeGrab'],

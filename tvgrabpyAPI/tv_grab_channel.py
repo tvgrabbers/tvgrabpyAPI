@@ -407,8 +407,6 @@ class Channel_Config(Thread):
                 if detailids == None:
                     continue
 
-                #~ detailids['channelid'] = channelid
-                #~ detailids['chanid'] = self.chanid
                 if is_data_value(['prog_ID'], detailids, str, True):
                     self.config.queues['cache'].put({'task':'query', 'parent': self, \
                                 'programdetails': {'sourceid': src_id, 'channelid': channelid, 'prog_ID': detailids['prog_ID']}})
@@ -697,7 +695,7 @@ class ChannelNode():
                                     self.groupslot_names.append(re.sub('[-,. ]', '', self.config.fetch_func.remove_accents(gs).lower().strip()))
 
             self.merge_type = None
-            if source in self.config.channelsource.keys():
+            if self.is_source(source):
                 self.prime_source = source
                 self.merge_source(programs, source)
 
@@ -979,11 +977,6 @@ class ChannelNode():
                 else:
                     # Unmatched
                     unmatched.append(pp)
-                    #~ if self.config.write_info_files:
-                        #~ self.config.infofiles.write_raw_string('%s, %s: %s - %s' % \
-                            #~ (source, self.chanid,
-                            #~ self.config.in_output_tz(pp['start-time']).strftime('%d %b %H:%M'),
-                            #~ self.config.in_output_tz(pp['stop-time']).strftime('%d %b %H:%M')))
 
         #Is it a valid source or does It look like a a channel merge
         if isinstance(programs, ChannelNode):
@@ -991,7 +984,7 @@ class ChannelNode():
             return
 
         # Is programs empty or is the source invalid?
-        if not isinstance(programs, list) or len(programs) == 0 or not source in self.config.channelsource.keys():
+        if not isinstance(programs, list) or len(programs) == 0 or not self.is_source(source):
             return
 
         with self.node_lock:
@@ -1688,7 +1681,7 @@ class ChannelNode():
                     self.programs_with_no_genre[pn.match_name] = [pn]
 
             prog_ID = pn.get_value('prog_ID', source)
-            if source in self.config.channelsource.keys() and prog_ID not in (None, ''):
+            if self.is_source(source) and prog_ID not in (None, ''):
                 if not source in  self.programs_by_prog_ID.keys():
                     self.programs_by_prog_ID[source] = {}
 
@@ -1719,6 +1712,21 @@ class ChannelNode():
             for k in name_remove:
                 if k in self.programs_with_no_genre.keys():
                     del self.programs_with_no_genre[k]
+
+    def is_source(self, source, include_special_sources = False, only_detail_sources = False):
+        if only_detail_sources:
+            if include_special_sources:
+                return(source in self.config.detail_sources or source == -1)
+
+            else:
+                return(source in self.config.detail_sources)
+
+        else:
+            if include_special_sources:
+                return(source in self.config.source_order or source == -1)
+
+            else:
+                return(source in self.config.source_order)
 
     def get_start_stop(self, tdict, printable=True):
         with self.node_lock:
@@ -1867,7 +1875,7 @@ class ProgramNode():
 
     def is_set(self, key, source = None):
         if key in self.tdict.keys():
-            if source == None or source in self.tdict[key]['sources'].keys():
+            if source == None or source in self.tdict[key]['sources'].keys() and self.get_value(key, source) != None:
                 return True
 
         if key == 'credits':
@@ -1962,7 +1970,7 @@ class ProgramNode():
 
         return False
     def add_source_data(self, data, source):
-        if not source in self.config.channelsource.keys() or not isinstance(data, dict):
+        if not self.channode.is_source(source) or not isinstance(data, dict):
             return
 
         with self.node_lock:
@@ -2080,7 +2088,7 @@ class ProgramNode():
             self.length = self.stop - self.start
 
     def add_detail_data(self, data, source):
-        if not source in self.config.channelsource.keys() or not isinstance(data, dict):
+        if not self.channode.is_source(source, True) or not isinstance(data, dict):
             return
 
         with self.node_lock:
@@ -2098,13 +2106,13 @@ class ProgramNode():
     def set_source_value(self, key, source = None, value = None, force_prime = None):
         self.init_key_value(key)
         if value != None:
-            if source in self.config.channelsource.keys():
+            if self.channode.is_source(source, True):
                 self.tdict[key]['sources'][source] = value
 
         if force_prime != None:
             self.tdict[key]['prime'] = force_prime
 
-        elif not 'prime' in self.tdict[key].keys() and value != None:
+        elif (not 'prime' in self.tdict[key].keys() or self.tdict[key]['prime'] == None) and value != None:
             self.tdict[key]['prime'] = value
 
     def set_value(self, key, value, source=None):
@@ -2206,6 +2214,9 @@ class ProgramNode():
                 self.set_source_value(key, source, value)
                 if value:
                     self.tdict[key]['prime'] = True
+
+            elif source == -1 and key in ("season","episode","abs episode"):
+                self.set_source_value(key, source, value, value)
 
             else:
                 # Get the most common value
@@ -3183,7 +3194,7 @@ class XMLoutput():
             startstring =[u'<?xml version="1.0" encoding="%s"?>\n' % self.xmlencoding]
 
         startstring.append(u'<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
-        startstring.append(u'<tv generator-info-name="%s" generator-info-url="https://github.com/tvgrabbers/tvgrabnlpy">\n' % self.config.version(True))
+        startstring.append(u'<tv generator-info-name="%s" generator-info-url="https://github.com/tvgrabbers/tvgrabnlpy">\n' % self.config.version(True, None))
         closestring = u'</tv>\n'
 
         xml = []

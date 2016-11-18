@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 import re, sys, traceback, difflib
 import time, datetime, pytz, random
 import requests, httplib, socket, json
-from DataTreeGrab import DataTreeShell, is_data_value, data_value, dtWarning, dtDataWarning, dtdata_defWarning, dtParseWarning, dtCalcWarning, dtUrlWarning, dtLinkWarning
+from DataTreeGrab import *
 from tv_grab_channel import ProgramNode
 from threading import Thread, RLock, Semaphore, Event
 from xml.sax import saxutils
@@ -385,25 +385,35 @@ class DataTree(DataTreeShell, Thread):
         self.print_tags = source.print_tags
         self.show_result = source.show_parsing
         self.fle = source.test_output
-        #~ sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, message = 'Regex "\\\d\*/\?\(\\\d\*\)\.\*" in: .*?', caller_id = caller_id)
-        #~ sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, message = 'Regex "\(\\\d\*\)/\.\*" in: .*?', caller_id = caller_id)
+        self.simplefilter("error", category = dtDataWarning, severity = 1)
+        sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, \
+            message = 'Regex "\\\d\*/\?\(\\\d\*\)\.\*" in: .*?', caller_id = caller_id)
+        sys.modules['DataTreeGrab']._warnings.filterwarnings('ignore', category = dtLinkWarning, \
+            message = 'Regex "\(\\\d\*\)/\.\*" in: .*?', caller_id = caller_id)
 
     def run(self):
-        if data_value('task',self.rundata, str) == 'epdata':
-            self.searchtree.show_progress = True
-            self.extract_datalist()
-            if self.export:
-                chanid = data_value('chanid',self.rundata, str)
-                tid = data_value('tid',self.rundata, int, 0)
-                queryid = data_value('queryid',self.rundata, int, -1)
-                if len(self.result) == 0:
-                    self.source.functions.update_counter('fail', -1, chanid)
+        try:
+            if data_value('task',self.rundata, str) == 'epdata':
+                self.searchtree.show_progress = True
+                if self.extract_datalist():
+                    self.config.log('An error "%s" occured while extracting a DataTree\n' % dtErrorTexts[self.check_errorcode()])
                     self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
 
-                eps = self.source.process_data(self.result, tid, 'en')
-                self.source.store_data('episodes', eps[0])
-                self.source.store_data('epcount', eps[1], {'task': 'process_ep_info', 'queryid': queryid})
-                #~ self.source.detail_request.put({'task': 'process_ep_info', 'queryid': queryid})
+                if self.export:
+                    chanid = data_value('chanid',self.rundata, str)
+                    tid = data_value('tid',self.rundata, int, 0)
+                    queryid = data_value('queryid',self.rundata, int, -1)
+                    if len(self.result) == 0:
+                        self.source.functions.update_counter('fail', -1, chanid)
+                        self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
+
+                    eps = self.source.process_data(self.result, tid, 'en')
+                    self.source.store_data('episodes', eps[0])
+                    self.source.store_data('epcount', eps[1], {'task': 'process_ep_info', 'queryid': queryid})
+
+        except dtWarning as e:
+            self.config.log('An error "%s" occured while extracting a DataTree\n' % e.message)
+            self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
 
     def get_string_parts(self, sstring, header_items = None):
         if not isinstance(header_items, (list, tuple)):
@@ -757,6 +767,7 @@ class theTVDB_v1(Thread):
         Thread.__init__(self, name = 'source-thetvdb')
         self.config = config
         self.functions = self.config.fetch_func
+        self.proc_id = -1
         self.quit = False
         self.ready = False
         self.state = 0
@@ -840,24 +851,12 @@ class theTVDB_v1(Thread):
                     parent = crequest['parent']
                     if 'pn' in crequest:
                         pn = crequest['pn']
-                        if self.config.write_info_files:
-                            self.config.infofiles.write_raw_string('query ttvdb %s' % ( pn.get_title()))
-
                         self.state = 3
                         qanswer = self.get_season_episode(parent, pn)
                         if not is_data_value('state', qanswer, int):
                             qanswer = {'state': 0, 'data': None}
 
                         if qanswer['state'] == -1:
-                            if self.config.write_info_files:
-                                self.config.infofiles.write_raw_string('  state %s' % (qanswer['state']))
-
-                                for ti, qi in pending_requests.items():
-                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
-
-                                for ti, qi in self.pending_tids.items():
-                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
-
                             parent.detail_return.put('quit')
                             self.quit = True
                             self.state = 4
@@ -865,12 +864,13 @@ class theTVDB_v1(Thread):
 
                         elif qanswer['state'] in (0, 1):
                             # Failed / Finished
-                            if self.config.write_info_files:
-                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
-                                    (qanswer['state'], data_value(['data','ttvdbid'], qanswer), qanswer['data']))
-
                             parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
                             self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            if qanswer['state'] == 1:
+                                self.functions.update_counter('lookup', -1, parent.chanid)
+
+                            else:
+                                self.functions.update_counter('lookup_fail', -1, parent.chanid)
 
                         elif qanswer['state'] == 2:
                             # Answer is pending
@@ -880,38 +880,17 @@ class theTVDB_v1(Thread):
                             chanid = parent.chanid
                             self.pending_tids[tid] = queryid
                             pending_requests[queryid] = {'tid': tid, 'requests': [{'pn': pn, 'parent': parent}]}
-                            if self.config.write_info_files:
-                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
-                                    (qanswer['state'], qanswer['tid'], qanswer['queryid']))
-
-                                for ti, qi in pending_requests.items():
-                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
-
-                                for ti, qi in self.pending_tids.items():
-                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
 
                         elif qanswer['state'] == 3:
                             # There is a request for this tid pending
                             #{'state': 3, 'tid': tid}
                             queryid = self.pending_tids[qanswer['tid']]
                             pending_requests[queryid]['requests'].append({'pn': pn, 'parent': parent})
-                            if self.config.write_info_files:
-                                self.config.infofiles.write_raw_string('  state %s: %s: %s' % \
-                                    (qanswer['state'], qanswer['tid'], queryid))
-
-                                for ti, qi in pending_requests.items():
-                                    self.config.infofiles.write_raw_string('    Request %s: %s' % (ti, qi))
-
-                                for ti, qi in self.pending_tids.items():
-                                    self.config.infofiles.write_raw_string('    TID %s: %s' % (ti, qi))
-
                     self.state = 4
                     continue
 
                 if crequest['task'] == 'process_ep_info':
                     queryid = crequest['queryid']
-                    if self.config.write_info_files:
-                        self.config.infofiles.write_raw_string('process: %s %s' % (queryid, crequest))
 
                     if queryid in pending_requests:
                         tid = pending_requests[queryid]['tid']
@@ -932,6 +911,11 @@ class theTVDB_v1(Thread):
 
                             parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
                             self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            if qanswer['state'] == 1:
+                                self.functions.update_counter('lookup', -1, parent.chanid)
+
+                            else:
+                                self.functions.update_counter('lookup_fail', -1, parent.chanid)
 
                         del self.pending_tids[tid]
                         del pending_requests[queryid]
@@ -940,8 +924,6 @@ class theTVDB_v1(Thread):
 
                 if crequest['task'] == 'fail_ep_info':
                     queryid = crequest['queryid']
-                    if self.config.write_info_files:
-                        self.config.infofiles.write_raw_string('fail: %s %s' % (queryid, crequest))
 
                     if queryid in pending_requests:
                         tid = pending_requests[queryid]['tid']
@@ -951,6 +933,7 @@ class theTVDB_v1(Thread):
                             pn = r['pn']
                             parent.detail_return.put({'source': -1, 'data': None, 'pn': pn})
                             self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            self.functions.update_counter('lookup_fail', -1, parent.chanid)
 
                         del self.pending_tids[tid]
                         del pending_requests[queryid]
@@ -988,9 +971,6 @@ class theTVDB_v1(Thread):
             time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
 
         self.lastquery = datetime.datetime.now()
-        #~ if self.config.write_info_files:
-            #~ self.config.infofiles.write_raw_string('query ttvdb %s, %s' % ( ptype, pdata))
-
         if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
             return
 
@@ -1034,18 +1014,30 @@ class theTVDB_v1(Thread):
             self.functions.update_counter('fail', -1, chanid)
             return None
 
-        dtree.init_data(page)
-        if background:
-            dtree.start()
-            return queryid
+        try:
+            if dtree.init_data(page):
+                return None
 
-        dtree.extract_datalist()
-        data = dtree.result
-        if len(data) == 0:
+            if background:
+                dtree.start()
+                return queryid
+
+            if dtree.extract_datalist():
+                self.functions.update_counter('fail', -1, chanid)
+                # It failed
+                return None
+
+            data = dtree.result
+            if len(data) == 0:
+                self.functions.update_counter('fail', -1, chanid)
+                return None
+
+            return data
+
+        except dtWarning as e:
             self.functions.update_counter('fail', -1, chanid)
+            self.config.log('An error: "%s"\n   occured while extracting a %s DataTree for %s\n' % (e.message, ptype, 'theTVDB.com'))
             return None
-
-        return data
 
     def store_data(self, task, data, confirm = None):
         '''
@@ -1089,6 +1081,9 @@ class theTVDB_v1(Thread):
 
         if task == 'ttvdbid':
             self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb': {'name': name}})
+
+        elif task == 'ttvdbname':
+            self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb': {'tid': name}})
 
         elif task == 'ttvdb_alias':
             self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb_alias': {'alias': name}})
@@ -1134,6 +1129,9 @@ class theTVDB_v1(Thread):
                 # Nothing found
                 return (0, None)
 
+            if len(data) == 1:
+                return (data_value([0, 'tid'], data, int, 0), data_value([0, 'tdate'], data, datetime.date))
+
             tids = {}
             tidcnt = 0
             tindex = -1
@@ -1168,12 +1166,14 @@ class theTVDB_v1(Thread):
                 return -1
 
             if alias == None:
-                return name
+                return [0, name]
 
             return alias
 
         tid = 0
         last_updated = None
+        new_fetch = True
+        #First check if a request has been done or is pending
         if name.lower() in self.queried_titles:
             tid = self.queried_titles[name.lower()]
             if tid == 0:
@@ -1182,6 +1182,8 @@ class theTVDB_v1(Thread):
             if tid in self.pending_tids.keys():
                 # There already is a lookup underway
                 return {'state': 3, 'tid': tid}
+
+            return {'state': 1, 'tid': tid, 'tdate': last_updated, 'name': name}
 
         if tid == 0:
             (tid, last_updated) = get_tid('from db')
@@ -1219,45 +1221,54 @@ class theTVDB_v1(Thread):
             self.ready = True
             return {'state': -1, 'tid': None}
 
+        if tid == 0:
+            tid = series_name[0]
+
+        series_name = series_name[1]
         langs = self.config.ttvdb_langs
         if lang not in self.config.ttvdb_langs and lang in self.lang_list:
             langs.append(lang)
 
         try:
+            aliasses = [series_name.lower(), name.lower()]
             if tid == 0 and not self.config.args.only_cache:
                 (tid, lu) = get_tid('from ttvdb')
 
             if tid == 0:
                 # No data
-                self.store_data('ttvdbid', {'tid': 0, 'title': series_name, 'langs': langs})
+                self.store_data('alias', {'tid': 0, 'name': series_name, 'alias': aliasses})
                 self.queried_titles[name.lower()] = 0
                 self.queried_titles[series_name.lower()] = 0
                 return {'state': 0, 'tid': None}
 
-            self.queried_titles[name.lower()] = tid
-            self.queried_titles[series_name.lower()] = tid
             if tid in self.pending_tids.keys():
                 # There already is a lookup underway
                 return {'state': 3, 'tid': tid}
 
+            #~ # Check if this tid is already known
+            #~ if not new_fetch:
+                #~ data = self.get_cache_return('ttvdbname', tid)
+                #~ if len(data) > 0:
+
+
+            self.queried_titles[name.lower()] = tid
+            if series_name.lower() != name.lower():
+                self.queried_titles[series_name.lower()] = tid
+
             #We look for other languages
             data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': 'all'}, chanid)
             db_update = []
-            added_names = []
             if isinstance(data, list) and len(data) > 0:
                 for index in range(len(data)):
                     if data_value([index, 'tid'], data, int) == tid and data_value([index, 'lang'], data, str) in langs:
                         db_update.append(data[index])
                         if is_data_value([index, 'name'], data, str):
-                            if data[index]['name'].lower() not in added_names:
-                                added_names.append(data[index]['name'].lower())
-
+                            aliasses.append(data[index]['name'].lower())
                             if data[index]['name'].lower() not in self.queried_titles.keys():
                                 self.queried_titles[data[index]['name'].lower()] = data_value([index, 'tid'], data, int, 0)
 
                 self.store_data('ttvdbid', db_update)
-                if name.lower() not in added_names:
-                    self.store_data('alias', {'tid': tid, 'name': added_names[0], 'alias': name})
+                self.store_data('alias', {'tid': tid, 'name': series_name, 'alias': aliasses})
 
         except:
             self.config.log([self.config.text('ttvdb', 11), traceback.format_exc()])
@@ -1284,6 +1295,9 @@ class theTVDB_v1(Thread):
 
             # We first retrieve the english data in the background
             queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en'}, chanid, True)
+            if queryid == None:
+                return {'state': 0, 'tid': tid}
+
             dtree = self.episodetrees[queryid]
             keycount = dtree.searchtree.progress_queue.get(True)
 
@@ -1436,7 +1450,6 @@ class theTVDB_v1(Thread):
         if tid == None:
             tid = self.get_ttvdb_id(data.get_value('name'), lang, chanid = parent.chanid)
             if not isinstance(tid, dict) or tid['state'] == 0:
-                self.functions.update_counter('lookup_fail', -1, parent.chanid)
                 self.config.log(self.config.text('ttvdb', 13, (data.get_value('name'), parent.chan_name)), 128)
                 # No ID
                 return {'state': 0, 'data': None}
@@ -1466,7 +1479,6 @@ class theTVDB_v1(Thread):
 
             if len(eid) == 1:
                 # We only got one match so we return it
-                self.functions.update_counter('lookup', -1, parent.chanid)
                 self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(eid[0], tid, lang)
 
@@ -1484,7 +1496,6 @@ class theTVDB_v1(Thread):
 
         if len(eps) == 1:
             # We only got one match so we return it
-            self.functions.update_counter('lookup', -1, parent.chanid)
             self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
             return prepare_return(eps[0], tid, lang)
 
@@ -1510,7 +1521,6 @@ class theTVDB_v1(Thread):
 
             if len(absep) == 1:
                 # We only got one match so we return it
-                self.functions.update_counter('lookup', -1, parent.chanid)
                 self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(absep[0], tid, lang)
 
@@ -1535,19 +1545,16 @@ class theTVDB_v1(Thread):
                 ep_list.append(s)
                 ep_dict[s] = ep
                 if s == subt:
-                    self.functions.update_counter('lookup', -1, parent.chanid)
                     self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
                     return prepare_return(ep, tid, lang)
 
             # And finally we try a difflib match
             match_list = difflib.get_close_matches(subt, ep_list, 1, 0.7)
             if len(match_list) > 0:
-                self.functions.update_counter('lookup', -1, parent.chanid)
                 ep = ep_dict[match_list[0]]
                 self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(ep, tid, lang)
 
-        self.functions.update_counter('lookup_fail', -1, parent.chanid)
         self.config.log(self.config.text('ttvdb', 15, (data.get_value('name'), data.get_value('episode title'), parent.chan_name)), 128)
         return {'state': 0, 'data': None}
 
@@ -1569,7 +1576,7 @@ class theTVDB_v1(Thread):
 
         # Check if a record exists
         tid = self.get_cache_return('ttvdbid', series_name)
-        if tid == -1:
+        if tid in (-1, None):
             return(-1)
 
         if len(tid) > 0:
@@ -2030,6 +2037,21 @@ class FetchData(Thread):
         together with the data definition inserted in the DataTree module
         The then by the DataTree extracted data is return
         """
+        def update_counter(ptype, success = False):
+            if ptype in ('detail', 'detail2'):
+                c = pdata['channel'] if ('channel' in pdata.keys()) else None
+                if success:
+                    self.functions.update_counter('detail', self.proc_id, c)
+
+                else:
+                    self.functions.update_counter('fail', self.proc_id, c)
+
+            elif success:
+                self.functions.update_counter('base', self.proc_id)
+
+            else:
+                self.functions.update_counter('fail', self.proc_id)
+
         try:
             if pdata == None:
                 pdata = {}
@@ -2061,6 +2083,7 @@ class FetchData(Thread):
             url = self.datatrees[ptype].get_url(pdata)
             if url == None:
                 self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
+                update_counter(ptype)
                 return
 
             if self.print_roottree:
@@ -2076,20 +2099,19 @@ class FetchData(Thread):
                     for index in range(len(url)):
                         self.roottree_output.write((u'%s = %s\n'% (prtdata[index], url[index])))
 
-            self.functions.update_counter(counter[0], counter[1], counter[2])
+            update_counter(ptype, True)
             page = self.functions.get_page(url)
-            if page in (None, '', '{}'):
+            if page in (None, '', '{}') or self.datatrees[ptype].init_data(page):
                 self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
-                self.functions.update_counter('fail', counter[1], counter[2])
+                update_counter(ptype)
                 if self.print_roottree:
                     self.roottree_output.write(u'No Data\n')
 
                 return None
 
-            self.datatrees[ptype].init_data(page)
             if self.datatrees[ptype].searchtree == None:
                 self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
-                self.functions.update_counter('fail', counter[1], counter[2])
+                update_counter(ptype)
                 if self.print_roottree:
                     self.roottree_output.write(u'No Data\n')
 
@@ -2117,6 +2139,7 @@ class FetchData(Thread):
                     cd = self.datatrees[ptype].searchtree.find_data_value(self.datatrees[ptype].data_value(['data',"today"],list))
                     if not isinstance(cd, datetime.date):
                         self.config.log([self.config.text('fetch', 27, (url[0], )),])
+                        update_counter(ptype)
                         return None
 
                     elif self.night_date_switch > 0 and self.current_fetchdate.hour < self.night_date_switch and (self.current_ordinal - cd.toordinal()) == 1:
@@ -2132,10 +2155,13 @@ class FetchData(Thread):
                         elif (url_type & 12) in (0, 8):
                             # offset
                             pass
-                        self.functions.update_counter('fail', counter[1], counter[2])
+                        update_counter(ptype)
                         return None
 
-            self.datatrees[ptype].extract_datalist()
+            if self.datatrees[ptype].extract_datalist():
+                update_counter(ptype)
+                return None
+
             self.data = self.datatrees[ptype].result
             self.rawdata = self.datatrees[ptype].searchtree.result
             if self.show_result:
@@ -2163,19 +2189,25 @@ class FetchData(Thread):
             # we extract a channel list if available
             if not self.config.test_modus and ptype == 'base' and self.is_data_value("base-channels", dict) and len(self.all_channels) == 0:
                 self.datatrees[ptype].init_data_def(self.data_value("base-channels", dict))
-                self.datatrees[ptype].extract_datalist()
-                self.get_channels(self.datatrees[ptype].result)
+                if not self.datatrees[ptype].extract_datalist():
+                    self.get_channels(self.datatrees[ptype].result)
+
                 self.datatrees[ptype].init_data_def(self.data_value("base", dict))
 
             if len(self.data) == 0:
-                self.functions.update_counter('fail', counter[1], counter[2])
+                update_counter(ptype)
                 return None
 
             return self.data
 
+        except dtWarning as e:
+            self.config.log('An error: "%s"\n   occured while extracting a %s DataTree for %s\n' % (e.message, ptype, self.source))
+            self.functions.update_counter('fail', self.proc_id)
+            return None
+
         except:
             self.config.log([self.config.text('fetch', 29, (ptype, self.source)), traceback.format_exc()], 1)
-            # Reset the counter!
+            self.functions.update_counter('fail', self.proc_id)
             return None
 
     def get_channels(self, data_list = None):

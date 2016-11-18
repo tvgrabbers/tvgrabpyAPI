@@ -378,25 +378,27 @@ class Logging(Thread):
                         close_all_threads()
 
                     elif message[0][:12] == 'DataTreeGrab':
-                        if ltarget == 1:
+                        caller_id = llevel
+                        severity = ltarget
+                        ltarget = 3
+                        if severity == 1:
+                            # It's a serious warning
                             llevel = 1
-                            ltarget = 3
 
-                        elif ltarget == 2:
-                            ltarget = 3
-                            if llevel == -1:
+                        elif severity == 2:
+                            # It's a medium warning
+                            if caller_id == -1:
+                                # Comming from ttvdb
                                 llevel = 128
 
                             else:
                                 llevel = 256
 
-                        elif llevel == -1:
+                        elif caller_id == -1:
                             llevel = 32768
-                            ltarget = 3
 
                         else:
                             llevel = 65536
-                            ltarget = 3
 
                     if isinstance(message[0], (str, unicode)):
                         self.writelog(message[0], llevel, ltarget)
@@ -794,10 +796,13 @@ class ProgramCache(Thread):
                     "tid": {"fields": ["tid", "sid", "eid"]}}},
             "ttvdb_alias": {"name": "ttvdb_alias", "no rowid": True,
                 "fields":{ "alias": {"type": "TEXT", "default": ""},
-                                   "name": {"type": "TEXT", "default": ""}},
+                                   "tid": {"type": "INTEGER", "default": 0},
+                                   "name": {"type": "TEXT", "default": ""},
+                                   "tdate": {"type": "date", "null": True}},
                 "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
                                     "fields": ["alias"]},
-                    "ttvdbtitle": {"fields": ["name"]}}},
+                    "ttvdbtitle": {"fields": ["name"]},
+                    "ttvdbtid": {"fields": ["tid"]}}},
             "episodes": {"name": "episodes", "no rowid": True,
                 "fields":{"tid": {"type": "INTEGER", "default": 0},
                                    "sid": {"type": "INTEGER", "default": -1},
@@ -1210,9 +1215,12 @@ class ProgramCache(Thread):
                 self.check_indexes(t)
 
             # We add if not jet there some defaults
-            for a, t in self.config.ttvdb_aliasses.items():
-                if not self.query_id('ttvdb_alias', {'name': t, 'alias': a}):
-                    self.add('ttvdb_alias', {'name': t, 'alias': a})
+            #~ for a, t in self.config.ttvdb_aliasses.items():
+                #~ if not self.query_id('ttvdb_alias', {'name': t, 'alias': a}):
+                    #~ self.add('ttvdb_alias', {'name': t, 'alias': a})
+            for a, t in self.config.ttvdb_ids.items():
+                if not self.query_id('ttvdb_alias', {'tid': t['tid'], 'alias': a}):
+                    self.add('ttvdb_alias', {'tid': t['tid'], 'name': t['name'], 'alias': a, 'tdate': None})
 
         except:
             self.functions.log([self.config.text('IO', 24, (self.filename, )), traceback.format_exc(), self.config.text('IO', 25)])
@@ -1649,7 +1657,7 @@ class ProgramCache(Thread):
             return slist
 
         elif table == 'ttvdb_aliasses':
-            pcursor.execute(u"SELECT `alias` FROM ttvdb_alias WHERE lower(name) = ?", (item.lower(), ))
+            pcursor.execute(u"SELECT `alias` FROM ttvdb_alias WHERE tid = ?", (item, ))
             r = pcursor.fetchall()
             aliasses = []
             if r != None:
@@ -1828,37 +1836,56 @@ class ProgramCache(Thread):
         pcursor = self.pconn.cursor()
         if table == 'ttvdb':
             tlist = []
-            pcursor.execute(u"SELECT ttvdb.tid, tdate, ttvdb.name, ttvdb.lang FROM ttvdb JOIN ttvdb_alias " + \
-                    "ON lower(ttvdb.name) = lower(ttvdb_alias.name) WHERE lower(alias) = ?", \
-                    (item['name'].lower(), ))
-            for r in pcursor.fetchall():
-                tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
+            #~ pcursor.execute(u"SELECT ttvdb.tid, tdate, ttvdb.name, ttvdb.lang FROM ttvdb JOIN ttvdb_alias " + \
+                    #~ "ON ttvdb.tid = ttvdb_alias.tid WHERE lower(alias) = ?", \
+                    #~ (item['name'].lower(), ))
+            #~ for r in pcursor.fetchall():
+                #~ tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
+            if 'name' in item.keys():
+                pcursor.execute(u"SELECT tid, tdate, name FROM ttvdb_alias WHERE lower(alias) = ?", (item['name'].lower(), ))
+                tid = pcursor.fetchone()
+                if tid == None:
+                    return tlist
 
-            pcursor.execute(u"SELECT tid, tdate, name, lang FROM ttvdb WHERE lower(name) = ?", (item['name'].lower(), ))
+                if tid[0] == 0:
+                    return [{'tid': 0, 'tdate': tid[1], 'name': tid[2], 'lang': None}]
+
+                tid = tid[0]
+
+            elif 'tid' in item.keys():
+                tid = item['tid']
+
+            else:
+                return tlist
+
+            pcursor.execute(u"SELECT tid, tdate, name, lang FROM ttvdb WHERE tid = ?", (tid, ))
             for r in pcursor.fetchall():
                 tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
 
             return tlist
 
         elif table == 'ttvdb_alias':
-            pcursor.execute(u"SELECT name FROM ttvdb_alias WHERE lower(alias) = ?", (item['alias'].lower(), ))
+            pcursor.execute(u"SELECT tid, name FROM ttvdb_alias WHERE lower(alias) = ?", (item['alias'].lower(), ))
             r = pcursor.fetchone()
-            if r == None:
-                if 'name' in item:
-                    return False
-
-                else:
-                    return
-
-            if 'name' in item:
-                if item['name'].lower() == r[0].lower():
+            if 'tid' in item.keys():
+                if r != None and item['tid'] == r[0]:
                     return True
 
                 else:
                     return False
 
+            if 'name' in item.keys():
+                if r != None and item['name'] == r[1]:
+                    return True
+
+                else:
+                    return False
+
+            elif r != None:
+                return [r[0], r[1]]
+
             else:
-                return {'name': r[0]}
+                return None
 
         elif table == 'tdate':
             pcursor.execute(u"SELECT tdate FROM ttvdb WHERE tid = ?", (item,))
@@ -2154,17 +2181,29 @@ class ProgramCache(Thread):
             self.execute(add_string2, rec2)
 
         elif table == 'ttvdb_alias':
-            add_string = u"INSERT INTO ttvdb_alias (`name`, `alias`) VALUES (?, ?)"
-            aliasses = self.query('ttvdb_aliasses', item['name'])
+            if not 'tid' in item:
+                return
+
+            tname = data_value('name', item, str)
+            add_string = u"INSERT INTO ttvdb_alias (`tid`, `name`, `alias`, `tdate`) VALUES (?, ?, ?, ?)"
+            aliasses = self.query('ttvdb_aliasses', item['tid'])
             if isinstance(item['alias'], list) and len(item['alias']) > 0:
-                for a in item['alias']:
-                    if not a in aliasses:
-                        rec.append((item['name'], a))
+                for a in set(item['alias']):
+                    if 'tdate' in item:
+                        rec.append((item['tid'], tname, a, item['tdate']))
+
+                    elif not a in aliasses:
+                        rec.append((item['tid'], tname, a, datetime.date.today()))
+
 
                 self.execute(add_string, rec)
 
+            elif 'tdate' in item:
+                rec = (item['tid'], tname, item['alias'], item['tdate'])
+                self.execute(add_string, rec)
+
             elif not item['alias'] in aliasses:
-                rec = (item['name'], item['alias'])
+                rec = (item['tid'], tname, item['alias'], datetime.date.today())
                 self.execute(add_string, rec)
 
         elif table == 'episodes':

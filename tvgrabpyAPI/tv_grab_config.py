@@ -111,8 +111,9 @@ import os, re, sys, argparse, traceback, datetime, time, codecs, pickle
 import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
-if dtversion()[1:4] < (1,2,6):
-    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.2.6 or higher\n")
+if dtversion()[1:4] < (1,3,1):
+    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.3.1 or higher\n")
+    sys.stderr.write('Goto "https://github.com/tvgrabbers/DataTree/releases/latest"\n')
     sys.exit(2)
 
 try:
@@ -124,7 +125,7 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 5
-api_patchdate = u'20160927'
+api_patchdate = u'20161118'
 api_alfa = False
 api_beta = True
 
@@ -396,6 +397,16 @@ class Configure:
             else:
                 return (self.api_name, self.api_major, self.api_minor, self.api_patch, self.api_patchdate, self.api_beta, self.api_alfa)
 
+        elif API == None:
+            if self.api_alfa:
+                return u'%s (API-%s: %s.%s.%s-p%s-alpha)' % (self.name, self.text('config', 6, type = 'other'), self.api_major, self.api_minor, '{:0>2}'.format(self.api_patch), self.api_patchdate)
+
+            if self.api_beta:
+                return u'%s (API-%s: %s.%s.%s-p%s-beta)' % (self.name, self.text('config', 6, type = 'other'), self.api_major, self.api_minor, '{:0>2}'.format(self.api_patch), self.api_patchdate)
+
+            if not self.api_patchdate:
+                return u'%s (API-%s: %s.%s.%s-p%s)' % (self.name, self.text('config', 6, type = 'other'), self.api_major, self.api_minor, '{:0>2}'.format(self.api_patch), self.patchdate)
+
         else:
             if as_string and self.alfa:
                 return u'%s (%s: %s.%s.%s-p%s-alpha)' % (self.name, self.text('config', 6, type = 'other'), self.major, self.minor, '{:0>2}'.format(self.patch), self.patchdate)
@@ -495,6 +506,9 @@ class Configure:
 
             else:
                 return tz.normalize(cdate.astimezone(tz))
+
+        elif isinstance(cdate, datetime.date):
+            return cdate
 
     def in_utc(self, cdate):
         return self.in_tz(cdate, self.utc_tz)
@@ -684,7 +698,7 @@ class Configure:
         self.validate_option('channel_settings')
         if not self.args.configure and self.configversion < float('%s.%s' % (self.api_major+2, self.api_minor)):
             # Update to the current version config
-            if self.configversion == 1.0:
+            if self.configversion == 1.0 or not os.path.isfile(self.opt_dict['settings_file']):
                 self.write_defaults_list()
 
             if not self.write_config(None):
@@ -709,6 +723,10 @@ class Configure:
 
             self.log([self.text('config', 10, (self.opt_dict['config_file'], )), \
                 self.text('config', 6), self.text('config', 7)], 1, 1)
+
+            if not os.path.isfile(self.opt_dict['settings_file']):
+                self.write_defaults_list()
+
             return(0)
 
         if self.args.save_options:
@@ -2004,7 +2022,8 @@ class Configure:
             self.tuple_values = gitdata_dict("tuple_values")
             self.xml_output.logo_provider = gitdata_dict("logo_provider", 1)
             self.xml_output.logo_source_preference = gitdata_value("logo_source_preference", list)
-            self.ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
+            #~ self.ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
+            self.ttvdb_ids = gitdata_dict("ttvdb_ids")
             self.coutrytrans = gitdata_dict("coutrytrans")
             self.notitlesplit = gitdata_value("notitlesplit", list)
             self.user_agents = gitdata_value("user_agents", list, self.user_agents)
@@ -2128,9 +2147,13 @@ class Configure:
             if s not in self.sources.keys():
                 del self.prime_source_groups[g]
         logo_provider = gitdata_dict("logo_provider", 1)
-        ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
-        for k, v in ttvdb_aliasses.items():
-            self.ttvdb_aliasses[k] = v
+        #~ ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
+        #~ for k, v in ttvdb_aliasses.items():
+            #~ self.ttvdb_aliasses[k] = v
+
+        ttvdb_ids = gitdata_dict("ttvdb_ids")
+        for k, v in ttvdb_ids.items():
+            self.ttvdb_ids[k] = v
 
         self.channel_rename = gitdata_dict("channel_rename")
         self.chan_groups = gitdata_dict("channel_groups", 1)

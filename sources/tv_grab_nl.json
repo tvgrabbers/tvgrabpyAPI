@@ -21,7 +21,7 @@
 	"sources":{
 		"5":{
 			"json file":"source-horizon.tv",
-			"version":10,
+			"version":11,
 			"cattrans type":1,
 			"cattransid":2},
 		"6":{
@@ -56,7 +56,7 @@
 			"cattransid":null},
 		"3":{
 			"json file":"source-tvgids.nl",
-			"version":6,
+			"version":7,
 			"cattrans type":1,
 			"cattransid":0},
 		"1":{
@@ -76,7 +76,7 @@
 			"cattransid":7},
 		"11":{
 			"json file":"source-virtual.nl",
-			"version":2,
+			"version":3,
 			"cattrans type":null,
 			"cattransid":null}},
 	"active_sources":[7,3,5,9,6,8,2,4,10,11,12],
@@ -638,6 +638,7 @@
 			"0-431": "hbo_1",
 			"0-435": "24_kitchen",
 			"0-438": "tlc",
+			"0-440": "fox",
 			"0-460": "sbs_9",
 			"0-464": "bbc_first",
 			"1-ketnet-canvas-2": "ketnet",
@@ -716,7 +717,7 @@
 			"6-49": "eurosport1",
 			"6-97": "comedy-central",
 			"6-69": "mtv",
-			"6-93": "sundance-tv",
+			"6-93": "sundancetv",
 			"8-nickelodeon": "nickelodeon",
 			"8-tv5-monde": "tv5-monde",
 			"8-ketnet": "ketnet",
@@ -1094,7 +1095,7 @@
 		"0-15" : ["1", "rtbf1.gif"],
 		"0-16" : ["1", "rtbf2.gif"],
 		"0-17" : ["4", "tv5monde_europe"],
-		"0-18" : ["4", "national_geographic_sd"],
+		"0-18" : ["4", "nat_geo_v3"],
 		"0-19" : ["4", "eurosport1_v2"],
 		"0-21" : ["4", "cartoon_network"],
 		"0-24" : ["4", "film1_premiere_1"],
@@ -1152,7 +1153,7 @@
 		"0-404" : ["4", "foxlife_1"],
 		"0-406" : ["4", "ons"],
 		"0-407" : ["4", "outtv_v2"],
-		"0-408" : ["4", "rtl_lounge1"],
+		"0-408" : ["4", "rtl_lounge_v2"],
 		"0-409" : ["4", "rtl_crime2"],
 		"0-410" : ["4", "npo_101"],
 		"0-411" : ["4", "film1_action"],
@@ -1210,7 +1211,7 @@
 		"1-sport-1-2" : ["4", "ziggo_sport_voetbal"],
 		"1-tv-e" : ["4", "tve"],
 		"1-veronica" : ["4", "veronica_disney_xd3"],
-		"1-zappelin" : ["4", "npo_zapp_xtra"],
+		"1-zappelin" : ["4", "npo_zapp_xtra_best"],
 		"5-635928103346" : ["4", "fox_sports_ere_3_hd"],
 		"5-635928103347" : ["4", "fox_sports2_hd"],
 		"5-635928103348" : ["4", "fox_sports_ere_1_hd"],
