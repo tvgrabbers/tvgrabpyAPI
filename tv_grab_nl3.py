@@ -136,9 +136,9 @@ class Configure(tvgrabpyAPI.Configure):
         self.major = 3
         self.minor = 0
         self.patch = 1
-        self.patchdate = u'20160802'
+        self.patchdate = u'20161204'
         self.alfa = False
-        self.beta = True
+        self.beta = False
         # The default timezone to use in the xmltv output file. Can be overruled in the users configuration.
         self.opt_dict['output_tz'] = 'Europe/Amsterdam'
         # Where to get the json datafile and updates (if different from the API location)

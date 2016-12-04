@@ -1,23 +1,25 @@
 {"description":[
 	"This is generic data used by the tv_grab_API and gets downloaded on every run"],
 	"data_version":0,
-	"program_version":[1,0,0],
+	"program_version":[1,0,5],
 	"version_message":["\n",
 		"\n",
 		"\n"],
 	"data_keys":{
 		"text":["prog_ID","gen_ID","detail_url","group name","name","episode title",
 			"originaltitle","description","genre","subgenre","org-genre","org-subgenre",
-			"premiere year","infourl","audio","star-rating","broadcaster","group","programid"],
+			"premiere year","infourl","audio","star-rating","broadcaster","group",
+			"programid","imdbid","zaptoitid"],
 		"datetime":["start-time","stop-time"],
 		"timedelta":["length"],
 		"date":["airdate"],
 		"bool":["rerun","premiere","last-chance","new","teletext"],
-		"int":["season","episode","abs episode","episodecount","offset","tmdbid","ttvdbid"],
+		"int":["season","episode","abs episode","episodecount","offset","tmdbid","ttvdbid","ttvdbepid"],
 		"list":["country","rating"],
 		"video":["HD","widescreen","blackwhite"],
 		"credits":["director","actor","guest","writer","composer","presenter","reporter",
-			"commentator","adapter","producer","editor"]},
+			"commentator","adapter","producer","editor"],
+		"metadata":["banner","poster","fanart"]},
 	"tuple_values":{
 		"title":["group name","name", "episode title"],
         "genres":["genre","subgenre"],
@@ -25,7 +27,7 @@
 	"ttvdb":{
 		"v1":{
 			"json file":"source-thetvdb.v1",
-			"version":0},
+			"version":3},
 		"v2":{
 			"json file":"source-thetvdb.v2",
 			"version":0}},
@@ -72,10 +74,6 @@
 		"38": "https://wp26-images-nl-dynamic.horizon.tv/ChannelLogos/02/",
 		"39": "https://wp27-images-nl-dynamic.horizon.tv/ChannelLogos/02/",
 		"40": "https://wp28-images-nl-dynamic.horizon.tv/ChannelLogos/02/"},
-	"ttvdb_aliasses":{
-		"Castle": "Castle (2009)",
-		"Father Brown": "Father Brown (2013)",
-		"The Player":"The Player (2015)"},
 	"ttvdb_ids":{
 		"Castle":{"name":"Castle (2009)","tid":83462},
 		"Father Brown":{"name":"Father Brown (2013)","tid":265834},

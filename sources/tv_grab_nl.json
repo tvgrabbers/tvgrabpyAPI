@@ -21,7 +21,7 @@
 	"sources":{
 		"5":{
 			"json file":"source-horizon.tv",
-			"version":11,
+			"version":12,
 			"cattrans type":1,
 			"cattransid":2},
 		"6":{
@@ -61,7 +61,7 @@
 			"cattransid":0},
 		"1":{
 			"json file":"source-tvgids.tv",
-			"version":5,
+			"version":6,
 			"cattrans type":2,
 			"cattransid":5},
 		"7":{
@@ -341,7 +341,7 @@
 			"1-vitaya": "vitaya",
 			"1-vtmkzoom": "vtmkzoom",
 			"1-zappelin": "zappelin",
-			"5-606274087102": "horse-country-tv",
+			"5-24443943051": "cnbc-europe",
 			"5-728310311076": "food-network",
 			"5-728310311079": "fine-living"},
 		"2":{"0-4": "RTL4",
@@ -560,7 +560,8 @@
 			"5-647417383034": "647417383034",
 			"5-647417383035": "647417383035",
 			"5-728310311076": "728310311076",
-			"5-728310311079": "728310311079"},
+			"5-728310311079": "728310311079",
+			"5-760730662979": "760730662979"},
 		"6":{"0-1": "30",
 			"0-2": "32",
 			"0-3": "34",
@@ -1042,7 +1043,7 @@
 	"channel_grouping":{
 		"1":["0-34","1-zappelin"],
 		"2":["1-ketnet-canvas-2", "8-eenplus","8-zes"],
-		"3":["1-cbeebies", "5-24443943080", "5-24443943013", "5-24443943051"],
+		"3":["1-cbeebies", "5-24443943080", "5-24443943013"],
 		"4":[],
 		"5":["1-rtl-tvi", "6-65", "6-45", "8-tv5-monde", "9-tracetv"],
 		"6":[],
@@ -1066,7 +1067,7 @@
 		"12":["7-vrt_radio_1", "7-vrt_radio_2", "7-klara"],
 		"13":["7-bbc_radio_3", "7-ndr_3", "7-wdr3"],
 		"14":["0-315", "0-415", "0-417", "0-422", "0-462", "1-rai-uno", "1-tv-e", 
-			"5-24443943016", "5-24443943025", "5-24443943039", "5-24443943044", 
+			"5-24443943016", "5-24443943025", "5-24443943039", "5-24443943044", "5-24443943051",
 			"5-24443943129", "5-24443943145", "5-24443943214", "5-555680807175", 
 			"5-561138215256", "5-606274087099", "5-728310311076", "5-728310311079"],
 		"15":["0-19", "0-99", "0-148", "0-419", "0-420", "0-436", "0-466",
@@ -1487,7 +1488,8 @@
 			["amusement", "klusprogramma"],
 			["amusement", "hobbyprogramma"],
 			["amusement", "lifestyleprogramma"],
-			["amusement", "modeprogramma"]],
+			["amusement", "modeprogramma"],
+			["vrije tijd", ""]],
 		"Cooking":[
 			["magazine", "culinair"],
 			["amusement", "kookprogramma"],
@@ -1519,6 +1521,7 @@
 			["film", ""],
 			["korte film", ""]],
 		"Reality":[
+			["serie/soap", "realityserie"],
 			["amusement", "realityserie"],
 			["informatief", "docusoap"],
 			["informatief", "realityprogramma"],
@@ -1530,10 +1533,12 @@
 			["serie/soap", "soap"]],
 		"Comedy":[
 			["amusement", "komedie"],
+			["serie/soap", "komisch"],
 			["serie/soap", "comedyserie"],
 			["serie/soap", "komedieserie"]],
 		"Crime/Mystery":[
 			["serie/soap", "detectiveserie"],
+			["serie/soap", "detective"],
 			["serie/soap", "misdaadserie"]],
 		"Sci-fi/Fantasy":[
 			["serie/soap", "sciencefictionserie"],

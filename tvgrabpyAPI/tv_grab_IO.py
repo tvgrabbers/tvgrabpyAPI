@@ -285,8 +285,10 @@ class Logging(Thread):
                     continue
 
         self.log_output = self.config.log_output
+        last_queuelog = datetime.datetime.now()
         lastcheck = datetime.datetime.now()
         checkinterfall = 60
+        queueloginterfall = 300
         self.fatal_error = [self.config.text('IO', 10), \
                 '     %s\n' % (self.config.opt_dict['config_file']), \
                 '     %s\n' % (self.config.opt_dict['log_file'])]
@@ -319,6 +321,10 @@ class Logging(Thread):
                         self.send_mail(self.log_string, self.config.opt_dict['mail_log_address'])
 
                     return(0)
+
+                if (datetime.datetime.now() - last_queuelog).total_seconds() > queueloginterfall:
+                    last_queuelog = datetime.datetime.now()
+                    self.send_queue_log()
 
                 if (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
                     lastcheck = datetime.datetime.now()
@@ -414,7 +420,7 @@ class Logging(Thread):
                 self.writelog(self.config.text('IO', 13, (message, type(message))))
 
             except:
-                sys.stderr.write((self.now() + u'An error ocured while logging!\n').encode(self.local_encoding, 'replace'))
+                sys.stderr.write((self.now() + u'An error occured while logging!\n').encode(self.local_encoding, 'replace'))
                 traceback.print_exc()
 
     # end run()
@@ -530,7 +536,11 @@ class Logging(Thread):
                  if waittime > idle_timeout2:
                     ttvdb_cnt = 0
                     if len(t.pending_tids) > 0:
-                        self.config.log([self.config.text('fetch', 19, (t.pending_tids, ))])
+                        for ttvdbid, queryid in t.pending_tids.items():
+                            name = t.episodetrees[queryid].rundata['name']
+                            self.config.log([self.config.text('fetch', 19, ('%s: %s' % (ttvdbid, name), ))])
+                            if t.episodetrees[queryid].is_alive():
+                                t.episodetrees[queryid].searchtree.quit = True
 
                     for t in enumthreads():
                         try:
@@ -549,6 +559,24 @@ class Logging(Thread):
                         #~ self.config.log('ttvdb has the following IDs pending: %s' % self.config.ttvdb.pending_tids.keys())
 
     # end check_thread_sanity()
+
+    def send_queue_log(self):
+        for m in self.config.log_queues():
+            self.writelog(m, 512, 1)
+
+        t = self.config.ttvdb
+        if t != None and t.is_alive():
+            for queryid in t.pending_tids.values():
+                dtree = t.episodetrees[queryid]
+                if dtree.is_alive() and not dtree.searchtree.progress_queue.empty():
+                    name = dtree.rundata['name']
+                    tid = dtree.rundata['tid']
+                    while not dtree.searchtree.progress_queue.empty():
+                        actkey, keycount = dtree.searchtree.progress_queue.get(True)
+
+                    progress = actkey/keycount
+                    self.writelog('ttvdb query for "%s" (%s) is at %3.0f%%' % (name, tid, progress), 512, 1)
+    # send_queue_log()
 
     def writelog(self, message, log_level = 1, log_target = 3):
         try:
@@ -628,7 +656,6 @@ class Logging(Thread):
             sys.stderr.write(traceback.format_exc())
 
         mail.quit()
-
     # send_mail()
 
 # end Logging
@@ -650,14 +677,6 @@ class ProgramCache(Thread):
         self.config = config
         self.functions = self.config.IO_func
         self.current_date = self.config.in_fetch_tz(datetime.datetime.now(pytz.utc))
-        self.field_list = []
-        self.field_list.extend(self.config.key_values['text'])
-        self.field_list.extend(self.config.key_values['date'])
-        self.field_list.extend(self.config.key_values['datetime'])
-        self.field_list.extend(self.config.key_values['bool'])
-        self.field_list.extend(self.config.key_values['video'])
-        self.field_list.extend(self.config.key_values['int'])
-        self.field_list.extend(self.config.key_values['list'])
         sqlite3.register_adapter(list, self.adapt_list)
         sqlite3.register_converter(str('listing'), self.convert_list)
         sqlite3.register_adapter(bool, self.adapt_bool)
@@ -675,6 +694,12 @@ class ProgramCache(Thread):
                                     "fields": ["chanid"]},
                     "cgroup": {"fields": ["cgroup"]},
                     "chan_name": {"fields": ["name"]}}},
+            "sources": {"name": "sources", "no rowid": True,
+                "fields":{"sourceid": {"type": "INTEGER", "default": 0},
+                                   "name": {"type": "TEXT", "default": ""},
+                                   "use_alt_url": {"type": "boolean", "default": "False"}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["sourceid"]}}},
             "channelsource": {"name": "channelsource", "no rowid": True,
                 "fields":{"chanid": {"type": "TEXT", "default": ""},
                                    "sourceid": {"type": "INTEGER", "default": 0},
@@ -747,6 +772,7 @@ class ProgramCache(Thread):
             "programdetails": {"name": "programdetails", "no rowid": True,
                 "fields":{"sourceid": {"type": "INTEGER", "default": 0},
                                    "channelid": {"type": "TEXT", "default": ""},
+                                   "scandate": {"type": "date", "default": 0},
                                    "prog_ID": {"type": "TEXT", "default": ""},
                                    "start-time": {"type": "datetime", "default": 0},
                                    "stop-time": {"type": "datetime", "default": 0},
@@ -761,6 +787,7 @@ class ProgramCache(Thread):
             "creditdetails": {"name": "creditdetails", "no rowid": True,
                 "fields":{"sourceid": {"type": "INTEGER", "default": 0},
                                    "channelid": {"type": "TEXT", "default": ""},
+                                   "scandate": {"type": "date", "default": 0},
                                    "prog_ID": {"type": "TEXT", "default": ""},
                                    "start-time": {"type": "datetime", "default": 0},
                                    "stop-time": {"type": "datetime", "default": 0},
@@ -771,19 +798,52 @@ class ProgramCache(Thread):
                                     "fields": ["sourceid", "channelid", "prog_ID", "title", "name"]},
                     "starttime": {"fields": ["sourceid", "channelid", "start-time"]},
                     "stoptime": {"fields": ["sourceid", "channelid", "stop-time"]}}},
+            "ttvdb_alias": {"name": "ttvdb_alias", "no rowid": True,
+                "fields":{ "alias": {"type": "TEXT", "default": ""},
+                                   "tid": {"type": "INTEGER", "default": 0},
+                                   "name": {"type": "TEXT", "default": ""},
+                                   "tdate": {"type": "date", "null": True}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["alias"]},
+                    "ttvdbtitle": {"fields": ["name"]},
+                    "ttvdbtid": {"fields": ["tid"]}}},
             "ttvdb": {"name": "ttvdb", "no rowid": True,
                 "fields":{"name": {"type": "TEXT", "default": ""},
                                    "tid": {"type": "INTEGER", "default": 0},
-                                   "lang": {"type": "TEXT", "default": ""},
                                    "tdate": {"type": "date", "default": 0},
-                                   "airdate": {"type": "date", "null": True},
-                                   "description": {"type": "TEXT", "null": True},
-                                   "banner": {"type": "TEXT", "null": True}},
+                                   "airdate": {"type": "date", "null": True}},
                 "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
-                                    "fields": ["name", "lang"]},
+                                    "fields": ["tid"]},
                     "ttvdbtitle": {"fields": ["name"]},
-                    "ttvdbdate": {"fields": ["tdate"]},
-                    "ttvdbtid": {"fields": ["tid", 'lang']}}},
+                    "ttvdbdate": {"fields": ["tdate"]}}},
+            "ttvdbint": {"name": "ttvdbint", "no rowid": True,
+                "fields":{"tid": {"type": "INTEGER", "default": 0},
+                                   "lang": {"type": "TEXT", "default": ""},
+                                   "name": {"type": "TEXT", "default": ""},
+                                   "description": {"type": "TEXT", "null": True}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["tid", "lang"]},
+                    "ttvdbtitle": {"fields": ["name"]},
+                    "ttvdbtid": {"fields": ["tid"]}}},
+            "episodes": {"name": "episodes", "no rowid": True,
+                "fields":{"tepid": {"type": "INTEGER", "default": -1},
+                                   "tid": {"type": "INTEGER", "default": 0},
+                                   "sid": {"type": "INTEGER", "default": -1},
+                                   "eid": {"type": "INTEGER", "default": -1},
+                                   "abseid": {"type": "INTEGER", "default": 0},
+                                   "star-rating": {"type": "TEXT", "null": True},
+                                   "airdate": {"type": "date", "null": True}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["tepid"]},
+                    "tseid": {"fields": ["tid", "sid", "eid"]}}},
+            "episodesint": {"name": "episodesint", "no rowid": True,
+                "fields":{"tepid": {"type": "INTEGER", "default": -1},
+                                   "lang": {"type": "TEXT", "default": ""},
+                                   "episode title": {"type": "TEXT", "default": ""},
+                                   "description": {"type": "TEXT", "null": True}},
+                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
+                                    "fields": ["tepid", "lang"]},
+                    "eptitle": {"fields": ["episode title"]}}},
             "ttvdbcredits": {"name": "ttvdbcredits", "no rowid": True,
                 "fields":{"tid": {"type": "INTEGER", "default": 0},
                                    "sid": {"type": "INTEGER", "default": -1},
@@ -794,27 +854,13 @@ class ProgramCache(Thread):
                 "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
                                     "fields": ["tid", "sid", "eid", "title", "name"]},
                     "tid": {"fields": ["tid", "sid", "eid"]}}},
-            "ttvdb_alias": {"name": "ttvdb_alias", "no rowid": True,
-                "fields":{ "alias": {"type": "TEXT", "default": ""},
-                                   "tid": {"type": "INTEGER", "default": 0},
-                                   "name": {"type": "TEXT", "default": ""},
-                                   "tdate": {"type": "date", "null": True}},
-                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
-                                    "fields": ["alias"]},
-                    "ttvdbtitle": {"fields": ["name"]},
-                    "ttvdbtid": {"fields": ["tid"]}}},
-            "episodes": {"name": "episodes", "no rowid": True,
+            "ttvdbmetadata": {"name": "ttvdbmetadata",
                 "fields":{"tid": {"type": "INTEGER", "default": 0},
                                    "sid": {"type": "INTEGER", "default": -1},
                                    "eid": {"type": "INTEGER", "default": -1},
-                                   "abseid": {"type": "INTEGER", "default": 0},
-                                   "lang": {"type": "TEXT", "default": ""},
-                                   "episode title": {"type": "TEXT", "default": ""},
-                                   "description": {"type": "TEXT", "null": True},
-                                   "airdate": {"type": "date", "null": True}},
-                "indexes":{"PRIMARY": {"unique": True, "on conflict": "REPLACE",
-                                    "fields": ["tid", "sid", "eid", "lang"]},
-                    "eptitle": {"fields": ["episode title"]}}},
+                                   "type": {"type": "TEXT", "default": "banner"},
+                                   "url": {"type": "TEXT", "default": ""}},
+                "indexes":{"tid": {"fields": ["tid", "sid", "eid"]}}},
             "epcount": {"name": "epcount", "no rowid": True,
                 "fields":{"tid": {"type": "INTEGER", "default": 0},
                                    "sid": {"type": "INTEGER", "default": -1},
@@ -829,10 +875,12 @@ class ProgramCache(Thread):
             if key in self.config.detail_keys['all'] and key not in self.get_fields("programdetails"):
                 self.table_definitions["programdetails"]["fields"][key] = {"type": "TEXT", "null": True}
 
-            if key in self.config.detail_keys['ttvdb'] and key not in self.get_fields("ttvdb"):
+            if key in self.config.detail_keys['ttvdb'] and not \
+              (key in self.get_fields("ttvdb") or key in self.get_fields("ttvdbint")):
                 self.table_definitions["ttvdb"]["fields"][key] = {"type": "TEXT", "null": True}
 
-            if key in self.config.detail_keys['episodes'] and key not in self.get_fields("episodes"):
+            if key in self.config.detail_keys['episodes'] and not \
+              (key in self.get_fields("episodes") or key in self.get_fields("episodesint")):
                 self.table_definitions["episodes"]["fields"][key] = {"type": "TEXT", "null": True}
 
         for key in self.config.key_values['date']:
@@ -913,6 +961,10 @@ class ProgramCache(Thread):
             if key in self.config.detail_keys['episodes'] and key not in self.get_fields("episodes"):
                 self.table_definitions["episodes"]["fields"][key] = {"type": "listing", "null": True}
 
+        self.field_list = {}
+        for table, data in self.table_definitions.items():
+            self.field_list[table] = data['fields'].keys()
+
         # where we store our info
         self.filename  = filename
         self.quit = False
@@ -922,7 +974,7 @@ class ProgramCache(Thread):
         self.state = 0
         self.config.threads.append(self)
         self.request_list = {}
-        self.request_list['query_id'] = ('chan_group', 'ttvdb', 'ttvdb_alias', 'tdate')
+        self.request_list['query_id'] = ('chan_group', 'ttvdb', 'ttvdb_alias', 'tdate', 'sources')
         self.request_list['query'] = ('icon', 'chan_group', 'chan_scid',
                                     'laststop', 'fetcheddays', 'sourceprograms', 'programdetails',
                                     'ttvdb', 'ttvdb_aliasses', 'ttvdb_langs',
@@ -930,8 +982,11 @@ class ProgramCache(Thread):
         self.request_list['add'] = ('channelsource', 'channel', 'icon',
                                     'laststop', 'fetcheddays', 'sourceprograms', 'programdetails',
                                     'ttvdb', 'ttvdb_alias', 'episodes', 'epcount')
+        self.request_list['update'] = ('toggle_alt_url', )
         self.request_list['delete'] = ('sourceprograms', 'programdetails', 'ttvdb')
         self.request_list['clear'] = ('fetcheddays', 'fetcheddata', 'sourceprograms', 'credits', 'programdetails', 'creditdetails')
+        self.request_list['clearttvdb'] = ('ttvdb', 'ttvdbint', 'ttvdb_alias', 'episodes', 'episodesint',
+                                    'ttvdbcredits', 'ttvdbmetadata', 'epcount')
 
     def offset_to_date(self, val):
         return (self.current_date + datetime.timedelta(days=val)).date()
@@ -1190,6 +1245,12 @@ class ProgramCache(Thread):
         try:
             pcursor.execute("PRAGMA main.synchronous = OFF")
             pcursor.execute("PRAGMA main.temp_store = MEMORY")
+            pcursor.execute("PRAGMA main.table_info('ttvdbint')")
+            if len(pcursor.fetchall()) == 0:
+                # Itś an old ttvdb table structure we clear it
+                for t in self.request_list['clearttvdb']:
+                    self.clear(t)
+
             # We Check all Tables, Columns and Indices
             for t in self.table_definitions.keys():
                 if self. print_data_structure:
@@ -1214,12 +1275,9 @@ class ProgramCache(Thread):
 
                 self.check_indexes(t)
 
-            # We add if not jet there some defaults
-            #~ for a, t in self.config.ttvdb_aliasses.items():
-                #~ if not self.query_id('ttvdb_alias', {'name': t, 'alias': a}):
-                    #~ self.add('ttvdb_alias', {'name': t, 'alias': a})
+            #~ # We add if not jet there some defaults
             for a, t in self.config.ttvdb_ids.items():
-                if not self.query_id('ttvdb_alias', {'tid': t['tid'], 'alias': a}):
+                if self.query_id('ttvdb_alias', {'alias': a}) == None:
                     self.add('ttvdb_alias', {'tid': t['tid'], 'name': t['name'], 'alias': a, 'tdate': None})
 
         except:
@@ -1352,7 +1410,7 @@ class ProgramCache(Thread):
                     continue
 
                 if crequest['task'] in ('query', 'query_id'):
-                    if not 'parent' in crequest:
+                    if not 'parent' in crequest.keys():
                         continue
 
                     if self.filename == None:
@@ -1361,7 +1419,7 @@ class ProgramCache(Thread):
 
                     else:
                         for t in self.request_list[crequest['task']]:
-                            if t in crequest:
+                            if t in crequest.keys():
                                 if crequest['task'] == 'query':
                                     self.state = 3
                                     qanswer = self.query(t, crequest[t])
@@ -1386,21 +1444,33 @@ class ProgramCache(Thread):
 
                 if crequest['task'] == 'add':
                     for t in self.request_list[crequest['task']]:
-                        if t in crequest:
+                        if t in crequest.keys():
                             self.state = 3
                             self.add(t, crequest[t])
 
+                if crequest['task'] == 'update':
+                    for t in self.request_list[crequest['task']]:
+                        if t in crequest.keys():
+                            self.state = 3
+                            self.update(t, crequest[t])
+
                 if crequest['task'] == 'delete':
                     for t in self.request_list[crequest['task']]:
-                        if t in crequest:
+                        if t in crequest.keys():
                             self.state = 3
                             self.delete(t, crequest[t])
 
                 if crequest['task'] == 'clear':
                     if 'table' in crequest:
-                        for t in crequest['table']:
-                            self.state = 3
-                            self.clear(t)
+                        if crequest['table'] == 'cttvdb':
+                            for t in self.request_list['clearttvdb']:
+                                self.state = 3
+                                self.clear(t)
+
+                        else:
+                            for t in crequest['table']:
+                                self.state = 3
+                                self.clear(t)
 
                     else:
                         for t in self.request_list[crequest['task']]:
@@ -1559,7 +1629,13 @@ class ProgramCache(Thread):
             for p in programs:
                 pp = {}
                 for key in p.keys():
-                    if p[key] != None:
+                    if p[key] == None:
+                        continue
+
+                    elif key in self.config.key_values['text'] and isinstance(p[key], (str, unicode)):
+                        pp[unicode(key)] = p[key].strip()
+
+                    else:
                         pp[unicode(key)] = p[key]
 
                 pp['offset'] = self.date_to_offset(pp['scandate'])
@@ -1622,11 +1698,18 @@ class ProgramCache(Thread):
             for p in programs:
                 pp = {}
                 for key in p.keys():
-                    if p[key] != None:
+                    if p[key] == None:
+                        continue
+
+                    elif key in self.config.key_values['text'] and isinstance(p[key], (str, unicode)):
+                        pp[unicode(key)] = p[key].strip()
+
+                    else:
                         pp[unicode(key)] = p[key]
 
                 pcursor.execute(u"SELECT * FROM creditdetails WHERE `sourceid` = ? AND `channelid` = ? AND `prog_ID` = ?", (item['sourceid'], item['channelid'], pp['prog_ID']))
                 for r in pcursor.fetchall():
+
                     if not r[str('title')] in pp.keys():
                         pp[r[str('title')]] = []
 
@@ -1641,20 +1724,25 @@ class ProgramCache(Thread):
             return programs2
 
         elif table == 'ttvdb':
-            pcursor.execute(u"SELECT * FROM ttvdb WHERE `tid` = ?", (item,))
-            slist = []
-            for r in pcursor.fetchall():
-                serie = {}
-                serie['tid'] = r[str('tid')]
-                serie['name'] = r[str('name')]
-                serie['tdate'] = r[str('tdate')]
-                serie['lang'] = r[str('lang')]
-                serie['star-rating'] = r[str('star-rating')]
-                serie['description'] = r[str('description')]
-                serie['airdate'] = r[str('airdate')]
-                slist.append(serie)
+            pcursor.execute(u"SELECT * FROM ttvdb WHERE tid = ?", (item,))
+            r = pcursor.fetchone()
+            serie = {item:{}}
+            if r != None:
+                for key in r.keys():
+                    serie[item][unicode(key)] = r[key]
 
-            return slist
+                serie[item]['name'] = {}
+                serie[item]['description'] = {}
+                pcursor.execute(u"SELECT * FROM ttvdbint WHERE tid = ?", (item,))
+                for r in pcursor.fetchall():
+                    lang = r[str('lang')]
+                    serie[item]['name'][lang]  = r[str('name')]
+                    serie[item]['description'][lang]  = r[str('description')]
+
+                for k, v in self.query('ttvdb_credits', {'tid': item, 'sid': -1, 'eid': -1}).items():
+                    serie[item][k] = v
+
+            return serie
 
         elif table == 'ttvdb_aliasses':
             pcursor.execute(u"SELECT `alias` FROM ttvdb_alias WHERE tid = ?", (item, ))
@@ -1667,16 +1755,42 @@ class ProgramCache(Thread):
             return aliasses
 
         elif table == 'ttvdb_langs':
-            pcursor.execute(u"SELECT `lang` FROM ttvdb WHERE tid = ?", (item['tid'],))
+            pcursor.execute(u"SELECT `lang` FROM ttvdbint WHERE tid = ?", (item['tid'],))
             langs = []
             for r in pcursor.fetchall():
                 langs.append( r[str('lang')])
 
             return langs
 
+        elif table == 'ttvdb_credits':
+            if isinstance(item, dict):
+                item = [item]
+
+            qstring = u"SELECT * FROM ttvdbcredits WHERE tid = ? and sid = ? and eid = ?"
+            pp = {}
+            for i in item:
+                tid = data_value('tid', i, int, 0)
+                sid = data_value(['sid'], i, int, -1)
+                eid = data_value(['eid'], i, int, -1)
+                pcursor.execute(qstring, (tid, sid, eid))
+
+                for r in pcursor.fetchall():
+                    if not r[str('title')] in pp.keys():
+                        pp[r[str('title')]] = []
+
+                    if r[str('title')] in ('actor', 'guest'):
+                        pp[r[str('title')]].append({'name': r[str('name')], 'role': r[str('role')]})
+
+                    else:
+                        pp[r[str('title')]].append( r[str('name')])
+
+            return pp
+
         elif table == 'ep_by_id':
-            qstring = u"SELECT * FROM episodes WHERE tid = ?"
-            qlist = [item['tid']]
+            tid = data_value('tid', item, int, 0)
+            qstring = u"SELECT * FROM episodes JOIN episodesint " + \
+                    "ON episodes.tepid = episodesint.tepid WHERE tid = ?"
+            qlist = [tid]
             if data_value(['sid'], item, int, -1) >= 0:
                 qstring += u" and sid = ?"
                 qlist.append(item['sid'])
@@ -1696,9 +1810,10 @@ class ProgramCache(Thread):
             pcursor.execute(qstring, tuple(qlist))
 
             r = pcursor.fetchall()
-            if len(r) == 0  and data_value(['lang'], item, str) != 'en':
+            if len(r) == 0  and data_value(['lang'], item, str) not in ('en', ''):
                 # We try again for english
-                qstring = u"SELECT * FROM episodes WHERE tid = ?"
+                qstring = u"SELECT * FROM episodes JOIN episodesint " + \
+                    "ON episodes.tepid = episodesint.tepid WHERE tid = ?"
                 qlist = [item['tid']]
                 if data_value(['sid'], item, int, -1) >= 0:
                     qstring += u" and sid = ?"
@@ -1708,6 +1823,10 @@ class ProgramCache(Thread):
                     qstring += u" and eid = ?"
                     qlist.append(item['eid'])
 
+                if data_value(['abseid'], item, int, -1) >= 0:
+                    qstring += u" and abseid = ?"
+                    qlist.append(item['abseid'])
+
                 qstring += u" and lang = ?"
                 qlist.append('en')
 
@@ -1715,33 +1834,59 @@ class ProgramCache(Thread):
 
                 r = pcursor.fetchall()
 
-            series = []
+            series = {tid:{}}
             for s in r:
-                series.append({'tid': int(s[str('tid')]),
-                                          'sid': int(s[str('sid')]),
-                                          'eid': int(s[str('eid')]),
-                                          'abseid': int(s[str('abseid')]),
-                                          'episode title': s[str('episode title')],
-                                          'airdate': s[str('airdate')],
-                                          'lang': s[str('lang')],
-                                          'star-rating': s[str('star-rating')],
-                                          'description': s[str('description')]})
+                tepid = int(s[str('tepid')])
+                lang = s[str('lang')]
+                if not tepid in series[tid].keys():
+                    sid = int(s[str('sid')])
+                    eid = int(s[str('eid')])
+                    series[tid][tepid] = {'tid': tid,
+                                        'tepid': tepid,
+                                        'sid': sid,
+                                        'eid': eid,
+                                        'abseid': int(s[str('abseid')]),
+                                        'airdate': s[str('airdate')],
+                                        'star-rating': s[str('star-rating')],
+                                        'episode title': {},
+                                        'description': {}}
+
+                    for k, v in self.query('ttvdb_credits', [{'tid': tid, 'sid': -1, 'eid': -1},{'tid': tid, 'sid': sid, 'eid': eid}]).items():
+                        series[tid][tepid][k] = v
+
+                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
+                series[tid][tepid]['description'][lang] = s[str('description')]
+
             return series
 
         elif table == 'ep_by_title':
-            pcursor.execute(u"SELECT * FROM episodes WHERE tid = ? and lower(`episode title`) = ?", (item['tid'], item['episode title'].lower(), ))
+            tid = data_value('tid', item, int, 0)
+            pcursor.execute(u"SELECT * FROM episodes JOIN episodesint ON episodes.tepid = episodesint.tepid " + \
+                    "WHERE tid = ? and lower(episodesint.`episode title`) = ?", (item['tid'], item['episode title'].lower(), ))
             r = pcursor.fetchall()
-            series = []
+            series = {tid:{}}
             for s in r:
-                series.append({'tid': int(s[str('tid')]),
-                                          'sid': int(s[str('sid')]),
-                                          'eid': int(s[str('eid')]),
-                                          'abseid': int(s[str('abseid')]),
-                                          'episode title': s[str('episode title')],
-                                          'airdate': s[str('airdate')],
-                                          'lang': s[str('lang')],
-                                          'star-rating': s[str('star-rating')],
-                                          'description': s[str('description')]})
+                tepid = int(s[str('tepid')])
+                lang = s[str('lang')]
+                if not tepid in series[tid].keys():
+                    sid = int(s[str('sid')])
+                    eid = int(s[str('eid')])
+                    series[tid][tepid] = {'tid': tid,
+                                        'tepid': tepid,
+                                        'sid': sid,
+                                        'eid': eid,
+                                        'abseid': int(s[str('abseid')]),
+                                        'airdate': s[str('airdate')],
+                                        'star-rating': s[str('star-rating')],
+                                        'episode title': {},
+                                        'description': {}}
+
+                    for k, v in self.query('ttvdb_credits', [{'tid': tid, 'sid': -1, 'eid': -1},{'tid': tid, 'sid': sid, 'eid': eid}]).items():
+                        series[tid][tepid][k] = v
+
+                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
+                series[tid][tepid]['description'][lang] = s[str('description')]
+
             return series
         elif table == 'icon':
             if item == None:
@@ -1836,11 +1981,6 @@ class ProgramCache(Thread):
         pcursor = self.pconn.cursor()
         if table == 'ttvdb':
             tlist = []
-            #~ pcursor.execute(u"SELECT ttvdb.tid, tdate, ttvdb.name, ttvdb.lang FROM ttvdb JOIN ttvdb_alias " + \
-                    #~ "ON ttvdb.tid = ttvdb_alias.tid WHERE lower(alias) = ?", \
-                    #~ (item['name'].lower(), ))
-            #~ for r in pcursor.fetchall():
-                #~ tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
             if 'name' in item.keys():
                 pcursor.execute(u"SELECT tid, tdate, name FROM ttvdb_alias WHERE lower(alias) = ?", (item['name'].lower(), ))
                 tid = pcursor.fetchone()
@@ -1858,7 +1998,8 @@ class ProgramCache(Thread):
             else:
                 return tlist
 
-            pcursor.execute(u"SELECT tid, tdate, name, lang FROM ttvdb WHERE tid = ?", (tid, ))
+            pcursor.execute(u"SELECT ttvdb.tid, tdate, ttvdbint.name, lang FROM ttvdb JOIN ttvdbint " + \
+                    "ON ttvdb.tid = ttvdbint.tid WHERE ttvdb.tid = ?", (tid, ))
             for r in pcursor.fetchall():
                 tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
 
@@ -1882,7 +2023,12 @@ class ProgramCache(Thread):
                     return False
 
             elif r != None:
-                return [r[0], r[1]]
+                items = self.query_id('ttvdb', {'tid': r[0]})
+                if len(items) == 0:
+                    return [{'tid': r[0], 'tdate': None, 'name': r[1], 'lang': None}]
+
+                else:
+                    return items
 
             else:
                 return None
@@ -1903,13 +2049,68 @@ class ProgramCache(Thread):
 
             return r[0]
 
+        elif table == 'sources':
+            if not isinstance(item, dict) or not 'sourceid'in item.keys():
+                return
+
+            pcursor.execute(u"SELECT * FROM sources WHERE sourceid = ?", (item['sourceid'],))
+            r = pcursor.fetchone()
+            if r == None:
+                self.execute(u"INSERT INTO sources (`sourceid`, `name`) VALUES (?, ? )", (item['sourceid'], data_value('name', item, str)))
+                pcursor.execute(u"SELECT * FROM sources WHERE sourceid = ?", (item['sourceid'],))
+                r = pcursor.fetchone()
+
+            rv = {}
+            for k in r.keys():
+                rv[k] = r[k]
+
+            return rv
+
     def add(self, table='sourceprograms', item=None):
+        def get_value(data, tbl, fld):
+            if fld in data.keys():
+                return data[fld]
+
+            elif self.get_fprop(tbl, fld, 'null', False):
+                return None
+
+            else:
+                return self.get_fprop(tbl, fld, 'default', '')
+
+        def make_add_string(tbl):
+            if not tbl in self.field_list:
+                return
+
+            sql_flds = u"INSERT INTO %s (`%s`" % (tbl, self.field_list[tbl][0])
+            sql_cnt = u"VALUES (?"
+            for f in self.field_list[tbl][1:]:
+                sql_flds = u"%s, `%s`" % (sql_flds, f)
+                sql_cnt = u"%s, ?" % (sql_cnt)
+
+            return u"%s) %s)" % (sql_flds, sql_cnt)
+
+        def make_val_list(data, tbl, details = None):
+            sql_vals = []
+            if details == None:
+                details = {}
+
+            for f in self.field_list[tbl]:
+                if f in details.keys():
+                    sql_vals.append(details[f])
+
+                else:
+                    sql_vals.append(get_value(data, tbl, f))
+
+            return tuple(sql_vals)
+
         """
         Adds (or updates) a record
         """
         rec = []
         rec_upd = []
         rec2 = []
+        rec3 = []
+        rec4 = []
         if table == 'laststop':
             if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys() \
               or not "laststop" in item.keys() or not isinstance(item['laststop'], datetime.datetime):
@@ -1958,47 +2159,29 @@ class ProgramCache(Thread):
             if isinstance(item, dict):
                 item = [item]
 
-            sql_flds = u"INSERT INTO sourceprograms (`sourceid`, `channelid`, `scandate`"
-            sql_cnt = u"VALUES (?, ?, ?"
-            for f in self.field_list:
-                sql_flds = u"%s, `%s`" % (sql_flds, f)
-                sql_cnt = u"%s, ?" % (sql_cnt)
-
-            add_string = u"%s) %s)" % (sql_flds, sql_cnt)
-            add_string2 = u"INSERT INTO credits (`sourceid`, `channelid`, `scandate`, `prog_ID`, `start-time`, `title`, `name`, `role`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            add_string = make_add_string(table)
+            add_string2 = make_add_string('credits')
             for p in item:
                 if not isinstance(p, dict):
                     continue
 
-                sql_vals = [p['sourceid'], p['channelid'], p['scandate']]
-                for f in self.field_list:
-                    if f in p.keys():
-                        sql_vals.append(p[f])
-
-                    else:
-                        sql_vals.append(None)
-
-                rec.append(tuple(sql_vals))
+                rec.append(make_val_list(p, table))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
-                            sql_vals = [p['sourceid'], p['channelid'], p['scandate'], p['prog_ID'], p['start-time'], f]
-                            if isinstance(cr, dict):
-                                sql_vals.append(cr['name'])
-                                if 'role' in cr.keys():
-                                    sql_vals.append(cr['role'])
+                            crd = {'title': f, 'role': None}
+                            if isinstance(cr, (str, unicode)):
+                                crd['name'] = cr
 
-                                else:
-                                    sql_vals.append(None)
-
-                            elif isinstance(cr, (str, unicode)):
-                                sql_vals.append(cr)
-                                sql_vals.append(None)
+                            elif isinstance(cr, dict):
+                                crd['name'] = cr['name']
+                                if 'role' in cr:
+                                    crd['role'] = cr['role']
 
                             else:
                                 continue
 
-                            rec2.append(tuple(sql_vals))
+                            rec2.append(make_val_list(p, 'credits', crd))
 
             self.execute(add_string, rec)
             self.execute(add_string2, rec2)
@@ -2007,59 +2190,29 @@ class ProgramCache(Thread):
             if isinstance(item, dict):
                 item = [item]
 
-            sql_flds = u"INSERT INTO programdetails (`sourceid`, `channelid`, `prog_ID`, `start-time`, `stop-time`, `name`, `genre`"
-            sql_cnt = u"VALUES (?, ?, ?, ?, ?, ?, ?"
-            for f in self.config.detail_keys['all']:
-                if f in self.field_list:
-                    sql_flds = u"%s, `%s`" % (sql_flds, f)
-                    sql_cnt = u"%s, ?" % (sql_cnt)
-
-            add_string = u"%s) %s)" % (sql_flds, sql_cnt)
-            add_string2 = u"INSERT INTO creditdetails (`sourceid`, `channelid`, `prog_ID`, `start-time`, `title`, `name`, `role`) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            add_string = make_add_string(table)
+            add_string2 = make_add_string('creditdetails')
             for p in item:
                 if not isinstance(p, dict):
                     continue
 
-                sql_vals = [p['sourceid'], p['channelid'], p['prog_ID']]
-                for f in ('start-time', 'stop-time', 'name', 'genre'):
-                    if f in p.keys():
-                        sql_vals.append(p[f])
-
-                    elif self.get_fprop(table, f, 'null', False):
-                        sql_vals.append(None)
-
-                    else:
-                        sql_vals.append(self.get_fprop(table, f, 'default', ''))
-
-                for f in self.config.detail_keys['all']:
-                    if f in self.field_list:
-                        if f in p.keys():
-                            sql_vals.append(p[f])
-
-                        else:
-                            sql_vals.append(None)
-
-                rec.append(tuple(sql_vals))
+                rec.append(make_val_list(p, table))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
-                            sql_vals = [p['sourceid'], p['channelid'], p['prog_ID'], p['start-time'], f]
-                            if isinstance(cr, dict):
-                                sql_vals.append(cr['name'])
-                                if 'role' in cr.keys():
-                                    sql_vals.append(cr['role'])
+                            crd = {'title': f, 'role': None}
+                            if isinstance(cr, (str, unicode)):
+                                crd['name'] = cr
 
-                                else:
-                                    sql_vals.append(None)
-
-                            elif isinstance(cr, (str, unicode)):
-                                sql_vals.append(cr)
-                                sql_vals.append(None)
+                            elif isinstance(cr, dict):
+                                crd['name'] = cr['name']
+                                if 'role' in cr:
+                                    crd['role'] = cr['role']
 
                             else:
                                 continue
 
-                            rec2.append(tuple(sql_vals))
+                            rec2.append(make_val_list(p, 'creditdetails', crd))
 
             self.execute(add_string, rec)
             self.execute(add_string2, rec2)
@@ -2128,139 +2281,117 @@ class ProgramCache(Thread):
             if isinstance(item, dict):
                 item = [item]
 
-            sql_flds = u"INSERT INTO ttvdb (`tid`, 'tdate'"
-            sql_cnt = u"VALUES (?, ?"
-            fld_list = self.get_fields(table)
-            for f in fld_list:
-                if f in ('tid', 'tdate'):
-                    continue
-
-                sql_flds = u"%s, `%s`" % (sql_flds, f)
-                sql_cnt = u"%s, ?" % (sql_cnt)
-
-            add_string = u"%s) %s)" % (sql_flds, sql_cnt)
-            add_string2 = u"INSERT INTO ttvdbcredits (`tid`, `sid`, `eid`, `title`, `name`, `role`) VALUES (?, ?, ?, ?, ?, ?)"
+            add_string = make_add_string('ttvdb')
+            add_string2 = make_add_string('ttvdbcredits')
+            add_string3 = make_add_string('ttvdbint')
+            add_string4 = make_add_string('ttvdbmetadata')
+            added_tids = []
             for p in item:
                 if not isinstance(p, dict) or not 'tid' in p.keys() or not 'lang' in p.keys() or not 'name' in p.keys():
                     continue
 
-                sql_vals = [p['tid'], datetime.date.today()]
-                for f in fld_list:
-                    if f in ('tid', 'tdate'):
-                        continue
+                p['tdate'] = datetime.date.today()
+                if not p['tid'] in added_tids:
+                    added_tids.append(p['tid'])
+                    rec.append(make_val_list(p, 'ttvdb'))
 
-                    elif f in p.keys():
-                        sql_vals.append(p[f])
-
-                    else:
-                        sql_vals.append(None)
-
-                rec.append(tuple(sql_vals))
+                rec3.append(make_val_list(p, 'ttvdbint'))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
-                            sql_vals = [p['tid'], -1, -1, f]
-                            if isinstance(cr, dict):
-                                sql_vals.append(cr['name'])
-                                if 'role' in cr.keys():
-                                    sql_vals.append(cr['role'])
+                            crd = {'title': f, 'role': None}
+                            if isinstance(cr, (str, unicode)):
+                                crd['name'] = cr
 
-                                else:
-                                    sql_vals.append(None)
-
-                            elif isinstance(cr, (str, unicode)):
-                                sql_vals.append(cr)
-                                sql_vals.append(None)
+                            elif isinstance(cr, dict):
+                                crd['name'] = cr['name']
+                                if 'role' in cr:
+                                    crd['role'] = cr['role']
 
                             else:
                                 continue
 
-                            rec2.append(tuple(sql_vals))
+                            sql_vals = make_val_list(p, 'ttvdbcredits', crd)
+                            if not sql_vals in rec2:
+                                rec2.append(sql_vals)
+
+                for f in self.config.key_values['metadata']:
+                    if f in p.keys():
+                        sql_vals = make_val_list(p, 'ttvdbmetadata', {'type':f, 'url':p[f]})
+                        if not sql_vals in rec4:
+                            rec4.append(sql_vals)
 
             self.execute(add_string, rec)
             self.execute(add_string2, rec2)
+            self.execute(add_string3, rec3)
+            self.execute(add_string4, rec4)
 
         elif table == 'ttvdb_alias':
-            if not 'tid' in item:
+            if not 'tid' in item.keys():
                 return
 
-            tname = data_value('name', item, str)
-            add_string = u"INSERT INTO ttvdb_alias (`tid`, `name`, `alias`, `tdate`) VALUES (?, ?, ?, ?)"
+            if not 'tdate' in item.keys() or item[ 'tdate'] == None:
+                item[ 'tdate'] = datetime.date.today()
+
+            add_string = make_add_string('ttvdb_alias')
             aliasses = self.query('ttvdb_aliasses', item['tid'])
             if isinstance(item['alias'], list) and len(item['alias']) > 0:
                 for a in set(item['alias']):
-                    if 'tdate' in item:
-                        rec.append((item['tid'], tname, a, item['tdate']))
+                    rec.append(make_val_list(item, 'ttvdb_alias', {'alias': a}))
 
-                    elif not a in aliasses:
-                        rec.append((item['tid'], tname, a, datetime.date.today()))
+            else:
+                rec.append(make_val_list(item, 'ttvdb_alias'))
 
-
-                self.execute(add_string, rec)
-
-            elif 'tdate' in item:
-                rec = (item['tid'], tname, item['alias'], item['tdate'])
-                self.execute(add_string, rec)
-
-            elif not item['alias'] in aliasses:
-                rec = (item['tid'], tname, item['alias'], datetime.date.today())
-                self.execute(add_string, rec)
+            self.execute(add_string, rec)
 
         elif table == 'episodes':
             if isinstance(item, dict):
                 item = [item]
 
-            sql_flds = u"INSERT INTO episodes (`tid`, `sid`, `eid`, `lang`, `episode title`"
-            sql_cnt = u"VALUES (?, ?, ?, ?, ?"
-            fld_list = self.get_fields(table)
-            for f in fld_list:
-                if f in ('tid', 'sid', 'eid', 'lang', 'episode title'):
-                    continue
-
-                sql_flds = u"%s, `%s`" % (sql_flds, f)
-                sql_cnt = u"%s, ?" % (sql_cnt)
-
-            add_string = u"%s) %s)" % (sql_flds, sql_cnt)
-            add_string2 = u"INSERT INTO ttvdbcredits (`tid`, `sid`, `eid`, `title`, `name`, `role`) VALUES (?, ?, ?, ?, ?, ?)"
+            add_string = make_add_string('episodes')
+            add_string2 = make_add_string('ttvdbcredits')
+            add_string3 = make_add_string('episodesint')
+            add_string4 = make_add_string('ttvdbmetadata')
+            added_tepids = []
             for p in item:
                 if not isinstance(p, dict) or not 'tid' in p.keys() or not 'lang' in p.keys() or not 'episode title' in p.keys():
                     continue
 
-                sql_vals = [p['tid'], p['sid'], p['eid'], p['lang'], p['episode title'], ]
-                for f in fld_list:
-                    if f in ('tid', 'sid', 'eid', 'lang', 'episode title'):
-                        continue
-
-                    elif f in p.keys():
-                        sql_vals.append(p[f])
-
-                    else:
-                        sql_vals.append(None)
-
-                rec.append(tuple(sql_vals))
+                p['tdate'] = datetime.date.today()
+                if not p['tepid'] in added_tepids:
+                    added_tepids.append(p['tepid'])
+                    rec.append(make_val_list(p, 'episodes'))
+                rec3.append(make_val_list(p, 'episodesint'))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
-                            sql_vals = [p['tid'], p['sid'], p['eid'], f]
-                            if isinstance(cr, dict):
-                                sql_vals.append(cr['name'])
-                                if 'role' in cr.keys():
-                                    sql_vals.append(cr['role'])
+                            crd = {'title': f, 'role': None}
+                            if isinstance(cr, (str, unicode)):
+                                crd['name'] = cr
 
-                                else:
-                                    sql_vals.append(None)
-
-                            elif isinstance(cr, (str, unicode)):
-                                sql_vals.append(cr)
-                                sql_vals.append(None)
+                            elif isinstance(cr, dict):
+                                crd['name'] = cr['name']
+                                if 'role' in cr:
+                                    crd['role'] = cr['role']
 
                             else:
                                 continue
 
-                            rec2.append(tuple(sql_vals))
+                            sql_vals = make_val_list(p, 'ttvdbcredits', crd)
+                            if not sql_vals in rec2:
+                                rec2.append(sql_vals)
+
+                for f in self.config.key_values['metadata']:
+                    if f in p.keys():
+                        sql_vals = make_val_list(p, 'ttvdbmetadata', {'type':f, 'url':p[f]})
+                        if not sql_vals in rec4:
+                            rec4.append(sql_vals)
+
 
             self.execute(add_string, rec)
             self.execute(add_string2, rec2)
+            self.execute(add_string3, rec3)
+            self.execute(add_string4, rec4)
 
         elif table == 'epcount':
             if isinstance(item, dict):
@@ -2275,6 +2406,19 @@ class ProgramCache(Thread):
                 rec.append(sql_vals)
 
             self.execute(add_string, rec)
+
+    def update(self, table, item= None):
+        pcursor = self.pconn.cursor()
+        if table == 'toggle_alt_url':
+            if not isinstance(item, dict) or not 'sourceid'in item.keys():
+                return
+
+            pcursor.execute(u"SELECT `use_alt_url` FROM sources WHERE sourceid = ?", (item['sourceid'],))
+            r = pcursor.fetchone()
+            if r == None:
+                return
+
+            self.execute("UPDATE sources SET `use_alt_url` = ? WHERE sourceid = ?", ( not r[0], item['sourceid']))
 
     def delete(self, table='ttvdb', item=None):
         if table == 'sourceprograms':
@@ -2351,10 +2495,14 @@ class ProgramCache(Thread):
 
         elif table == 'ttvdb':
             with self.pconn:
+                self.pconn.execute(u"DELETE FROM ttvdb_alias WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdb WHERE tid = ?",  (int(item['tid']), ))
+                self.pconn.execute(u"DELETE FROM ttvdbint WHERE tid = ?",  (int(item['tid']), ))
+                self.pconn.execute(u"DELETE FROM episodesint WHERE tepid = (SELECT tepid FROM episodes WHERE tid = ?)",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM episodes WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM epcount WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdbcredits WHERE tid = ?",  (int(item['tid']), ))
+                self.pconn.execute(u"DELETE FROM ttvdbmetadata WHERE tid = ?",  (int(item['tid']), ))
 
     def clear(self, table):
         """
@@ -2372,11 +2520,11 @@ class ProgramCache(Thread):
         """
         dnow = datetime.datetime.today() - datetime.timedelta(days = 1)
         dttvdb = dnow.date() - datetime.timedelta(days = 29)
-        self.execute(u"DELETE FROM sourceprograms WHERE `stop-time` < ?", (dnow,))
-        self.execute(u"DELETE FROM credits WHERE `stop-time` < ?", (dnow,))
-        self.execute(u"DELETE FROM programdetails WHERE `stop-time` < ?", (dnow,))
-        self.execute(u"DELETE FROM creditdetails WHERE `stop-time` < ?", (dnow,))
-        self.execute(u"DELETE FROM fetcheddays WHERE `scandate` < ?", (dnow.date(),))
+        self.execute(u"DELETE FROM sourceprograms WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM credits WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM programdetails WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM creditdetails WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM fetcheddays WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
         #~ self.execute(u"DELETE FROM ttvdb WHERE tdate < ?", (dttvdb,))
 
         self.execute(u"VACUUM")
@@ -2435,17 +2583,14 @@ class InfoFiles():
 
         for channelid, channel in source.all_channels.items():
             if not (channelid in source_channels[source.proc_id].values() or channelid in source.empty_channels):
-                #~ print u'New channel on %s => %s (%s)\n' % (source.source, channelid, channel['name'])
                 self.lineup_changes.append( u'New channel on %s => %s (%s)\n' % (source.source, channelid, channel['name']))
 
         for chanid, channelid in source_channels[source.proc_id].items():
             if not (channelid in source.all_channels.keys() or channelid in source.empty_channels):
-                #~ print u'Removed channel on %s => %s (%s)\n' % (source.source, channelid, chanid)
                 self.lineup_changes.append( u'Removed channel on %s => %s (%s)\n' % (source.source, channelid, chanid))
 
         for channelid in source.empty_channels:
             if not channelid in source.all_channels.keys():
-                #~ print  u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source)
                 self.lineup_changes.append( u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source))
 
         self.lineup_changes.extend(source.lineup_changes)
@@ -2903,7 +3048,7 @@ class test_Source():
     def test_detail(self):
         if self.opt_dict['detailid'] == '':
             self.config.log('You did not provide a detailid to test the detail-page with.\n Extracting a base-page.\n\n')
-            if self.test_base() > 0:
+            if self.test_base() > 0 or self.source.data == None:
                 return(1)
 
             self.config.log('\nSelect one of the programs to use for testing:\n', log_target = 1)

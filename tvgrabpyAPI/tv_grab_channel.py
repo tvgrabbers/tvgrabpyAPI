@@ -78,7 +78,6 @@ class Channel_Config(Thread):
         self.requested_details = {}
 
     def validate_settings(self):
-
         if not self.active and not self.is_child:
             return
 
@@ -278,22 +277,28 @@ class Channel_Config(Thread):
 
                         src_id = fetched_detail['source']
                         # It's a ttvdb request return
-                        if src_id == -1:
+                        if src_id == self.config.ttvdb1_id:
                             self.ttvdb_counter -= 1
                             if is_data_value('data', fetched_detail, dict):
                                 fetched_detail['pn'].add_detail_data(fetched_detail['data'], src_id)
 
                         # it's a fetch return
                         if src_id in self.config.detail_sources and is_data_value('data', fetched_detail, dict):
-                            # Add it to the cache
-                            self.config.queues['cache'].put({'task':'add', 'parent': self, 'programdetails': fetched_detail['data']})
                             # Add it to the program
                             prog_ID = fetched_detail['data']['prog_ID']
+                            scandate = None
                             for pn in data_value([src_id, prog_ID], self.channel_node.programs_by_prog_ID, list):
+                                if scandate == None or pn.scandate > scandate:
+                                    scandate = pn.scandate
+
                                 self.add_tuple_values(fetched_detail['data'], pn, src_id)
                                 pn.add_detail_data(fetched_detail['data'], src_id)
                                 # and do a ttvdb check
                                 self.check_ttvdb(pn)
+
+                            # Add it to the cache
+                            fetched_detail['data']['scandate'] = scandate
+                            self.config.queues['cache'].put({'task':'add', 'parent': self, 'programdetails': fetched_detail['data']})
 
                     # Check if the sources are still alive
                     s_cnt = 0
@@ -391,7 +396,7 @@ class Channel_Config(Thread):
             without_details = True
             counter = get_counter()
             if not isinstance(pn, ProgramNode) or pn.is_groupslot:
-                self.functions.update_counter('exclude', -99, self.chanid)
+                self.functions.update_counter('exclude', self.config.cache_id, self.chanid)
                 continue
 
             logstring = u'%s: %s' % \
@@ -420,7 +425,7 @@ class Channel_Config(Thread):
                     elif len(cache_detail) > 0:
                         # Add it to the program(s)
                         without_details = False
-                        self.functions.update_counter('detail', -99, self.chanid)
+                        self.functions.update_counter('detail', self.config.cache_id, self.chanid)
                         self.config.log(self.config.text('fetch', 33, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
                         dn = self.channel_node.programs_by_prog_ID[src_id][detailids['prog_ID']]
                         p = cache_detail[0]
@@ -430,7 +435,7 @@ class Channel_Config(Thread):
 
                         continue
 
-                if is_data_value(['detail_url'], detailids, str, True):
+                if is_data_value(['detail_url'], detailids, str, True) and not no_fetch:
                     # check if this source could add anything
                     for key in self.config.channelsource[src_id].detail_keys:
                         if not pn.is_set(key):
@@ -443,6 +448,16 @@ class Channel_Config(Thread):
                             # Add it to the requests
                             sources[src_id] = detailids
 
+            # No details to fetch
+            if no_fetch or len(sources) == 0:
+                if without_details:
+                    self.functions.update_counter('fail', self.config.cache_id, self.chanid)
+                    self.config.log(self.config.text('fetch', 34, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
+
+                # Check ttvdb
+                self.check_ttvdb(pn)
+                continue
+
             pngenre = pn.get_value('genre').lower()
             # Check if its genre is in the allow detailfetch list
             if not(('all' in self.config.detailed_genres \
@@ -451,17 +466,7 @@ class Channel_Config(Thread):
                 or (not 'all' in self.config.detailed_genres \
                     and (pngenre in self.config.detailed_genres \
                         or ('none' in self.config.detailed_genres and not pn.is_set('genre'))))):
-                self.functions.update_counter('exclude', -99, self.chanid)
-                # Check ttvdb
-                self.check_ttvdb(pn)
-                continue
-
-            # No details to fetch
-            if no_fetch or len(sources) == 0:
-                if without_details:
-                    self.functions.update_counter('fail', -99, self.chanid)
-                    self.config.log(self.config.text('fetch', 34, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
-
+                self.functions.update_counter('exclude', self.config.cache_id, self.chanid)
                 # Check ttvdb
                 self.check_ttvdb(pn)
                 continue
@@ -500,7 +505,7 @@ class Channel_Config(Thread):
                 ((tllevel == 1 and pneptitle != '' and pnseason == 0) or \
                 (tllevel == 2 and pneptitle != '') or \
                 (tllevel == 3)):
-                    self.functions.update_counter('queue', -1, self.chanid)
+                    self.functions.update_counter('queue', self.config.ttvdb1_id, self.chanid)
                     self.ttvdb_counter += 1
                     self.config.ttvdb.detail_request.put({'pn':pn, 'parent': self, 'task': 'request_ep_info'})
 
@@ -510,14 +515,14 @@ class Channel_Config(Thread):
             counter = self.functions.progress_counter
 
         log_array = ['\n', self.config.text('fetch', 1, (self.chan_name, counter, self.config.chan_count), type = 'stats')]
-        log_array.append( self.config.text('fetch',2, (self.functions.get_counter('detail', -99, self.chanid), ), type = 'stats'))
-        log_array.append( self.config.text('fetch',10, (self.functions.get_counter('exclude', -99, self.chanid), ), type = 'stats'))
+        log_array.append( self.config.text('fetch',2, (self.functions.get_counter('detail', self.config.cache_id, self.chanid), ), type = 'stats'))
+        log_array.append( self.config.text('fetch',10, (self.functions.get_counter('exclude', self.config.cache_id, self.chanid), ), type = 'stats'))
 
         if self.get_opt('fast'):
-            log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', self.config.cache_id, self.chanid), ), type = 'stats'))
             log_array.append('\n')
-            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', -1, self.chanid), ), type = 'stats'))
-            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', -1, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
 
         else:
             fail = 0
@@ -527,14 +532,15 @@ class Channel_Config(Thread):
                     (self.functions.get_counter('detail', source, self.chanid), self.config.channelsource[source].source), type = 'stats'))
 
             log_array.append(self.config.text('fetch', 7, (fail,), type = 'stats'))
-            log_array.append(self.config.text('fetch', 8, (self.functions.get_counter('fail', -99, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 8, (self.functions.get_counter('fail', self.config.cache_id, self.chanid), ), type = 'stats'))
             log_array.append('\n')
-            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', -1, self.chanid), ), type = 'stats'))
-            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', -1, self.chanid), ), type = 'stats'))
-            log_array.append('\n')
-            for source in self.config.detail_sources:
-                log_array.append(self.config.text('fetch', 9, \
-                    (self.config.channelsource[source].detail_request.qsize(), self.config.channelsource[source].source), type = 'stats'))
+            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+            log_array.extend(self.config.log_queues())
+            #~ log_array.append('\n')
+            #~ for source in self.config.detail_sources:
+                #~ log_array.append(self.config.text('fetch', 9, \
+                    #~ (self.config.channelsource[source].detail_request.qsize(), self.config.channelsource[source].source), type = 'stats'))
 
         log_array.append('\n')
         self.config.log(log_array, 4, 3)
@@ -939,6 +945,7 @@ class ChannelNode():
             pn = ProgramNode(self, source, pp)
             if pn.is_valid:
                 pn.is_groupslot = is_groupslot
+                pn.scandate = programs[index]['scandate']
                 dlist.append(pn)
 
         def check_gaps(pp, is_groupslot = False):
@@ -1012,6 +1019,7 @@ class ChannelNode():
 
                     # Create the program node
                     pn = ProgramNode(self, source, programs[index])
+                    pn.scandate = programs[index]['scandate']
                     if not pn.is_valid:
                         continue
 
@@ -1382,7 +1390,7 @@ class ChannelNode():
             pn = self.first_node
             while isinstance(pn, ProgramNode):
                 if abs(pn.stop - pn.start) < datetime.timedelta(minutes = 1):
-                    self.config.log(self.config.text('merge', 2, ('%s: %s' % (pn.get_title(), pn.get_start_stop()), self.name)), 4, 3)
+                    self.config.log(self.config.text('merge', 2, ('%s: %s' % (pn.get_title(), pn.get_start_stop()), self.name)), 64, 3)
                     self.remove_node(pn)
 
                 pn = pn.next
@@ -1393,7 +1401,7 @@ class ChannelNode():
                     if gap.abs_length > self.max_overlap:
                         continue
 
-                    self.config.log(self.config.text('merge', 1, (gap.length.total_seconds() / 60, gap.start.strftime('%d %b %H:%M'), self.name)), 4, 3)
+                    self.config.log(self.config.text('merge', 1, (gap.length.total_seconds() / 60, gap.start.strftime('%d %b %H:%M'), self.name)), 64, 3)
                     # stop-time of previous program wins
                     if overlap_strategy == 'stop':
                         gap.next.adjust_start(gap.start)
@@ -1716,19 +1724,19 @@ class ChannelNode():
     def is_source(self, source, include_special_sources = False, only_detail_sources = False):
         if only_detail_sources:
             if include_special_sources:
-                return(source in self.config.detail_sources or source == -1)
+                return(source in self.config.detail_sources or source == self.config.ttvdb1_id)
 
             else:
                 return(source in self.config.detail_sources)
 
         else:
             if include_special_sources:
-                return(source in self.config.source_order or source == -1)
+                return(source in self.config.source_order or source == self.config.ttvdb1_id)
 
             else:
                 return(source in self.config.source_order)
 
-    def get_start_stop(self, tdict, printable=True):
+    def get_start_stop(self, tdict, printable=True, only_start = False):
         with self.node_lock:
             if isinstance(tdict, ProgramNode):
                 pstart = self.config.in_output_tz(tdict.start)
@@ -1744,7 +1752,11 @@ class ChannelNode():
                 return
 
             if printable:
-                return ' %s - %s' % (pstart.strftime('%d %b %H:%M'), pstop.strftime('%d %b %H:%M'))
+                if only_start:
+                    return '%s' % (pstart.strftime('%d %b %H:%M'), )
+
+                else:
+                    return ' %s - %s' % (pstart.strftime('%d %b %H:%M'), pstop.strftime('%d %b %H:%M'))
 
             return (pstart, pstop)
 
@@ -1818,9 +1830,13 @@ class ChannelNode():
 
                 elif cat1 in self.config.cattrans.keys() and self.config.cattrans[cat1] != '':
                     cat = self.config.cattrans[cat1].capitalize()
+                    if sg != '':
+                        self.config.cattrans[cat2] = self.config.cattrans[cat1]
 
                 elif cat0 in self.config.cattrans.keys() and self.config.cattrans[cat0] != '':
                    cat = self.config.cattrans[cat0].capitalize()
+                   if sg != '' and g != self.config.cattrans_unknown.lower().strip():
+                        self.config.cattrans[cat2] = self.config.cattrans[cat0]
 
                 else:
                     cat = 'Unknown'
@@ -1848,6 +1864,7 @@ class ProgramNode():
             self.channel_config = channode.channel_config
             self.start = None
             self.stop = None
+            self.scandate = None
             self.length = None
             self.name = None
             self.match_name = None
@@ -2093,8 +2110,14 @@ class ProgramNode():
 
         with self.node_lock:
             for key, value in data.items():
-                if value not in (None, ''):
-                    self.set_value(key, value, source)
+                if value in (None, ''):
+                    continue
+
+                if source == self.config.ttvdb1_id and key == 'description':
+                    # We as jet can not verify the language!
+                    continue
+
+                self.set_value(key, value, source)
 
     def init_key_value(self, key):
         if not self.is_set(key):
@@ -2215,7 +2238,7 @@ class ProgramNode():
                 if value:
                     self.tdict[key]['prime'] = True
 
-            elif source == -1 and key in ("season","episode","abs episode"):
+            elif source == self.config.ttvdb1_id and key in ("season","episode","abs episode","ttvdbepid"):
                 self.set_source_value(key, source, value, value)
 
             else:
@@ -2360,14 +2383,42 @@ class ProgramNode():
 
     def set_prime_values(self, gen_genre = None):
         def check_group_names():
+            def remerge(source, ttuple, movename = True):
+                sname = '%s: %s' % ttuple[:2]
+                self.tdict['group name']['sources'][source] = ''
+                self.set_source_value('name', source, sname)
+                if movename:
+                    names.remove((source, ttuple[1].lower()))
+                    names.append((source, sname.lower()))
+
+                self.tdict['title']['sources'][source] = ('', sname, ttuple[2])
+
+            def moveup(source, ttuple):
+                self.tdict['group name']['sources'][source] = ''
+                self.set_source_value('name', source,  ttuple[0])
+                self.set_source_value('episode title', source, ttuple[1])
+                names.remove((source, ttuple[1].lower()))
+                names.append((source, ttuple[0].lower()))
+                episodes.append((source, ttuple[1].lower()))
+                self.tdict['title']['sources'][source] = ('', ttuple[0], ttuple[1])
+
+            def removegroupname(source, ttuple):
+                self.tdict['group name']['sources'][source] = ''
+                self.tdict['title']['sources'][source] = ('', ttuple[1], ttuple[2])
+
+            def movegroupname(source, ttuple):
+                self.tdict['group name']['sources'][source] = ''
+                self.set_source_value('name', source, ttuple[0])
+                names.remove((source, ttuple[1].lower()))
+                names.append((source, ttuple[0].lower()))
+                self.tdict['title']['sources'][source] = ('', ttuple[0], ttuple[2])
+
             if self.get_value('genre').lower() in self.config.movie_genres or \
                 (not self.get_value('genre').lower() in self.config.series_genres and not self.is_set('episode title')):
                 # We put these together again
                 for s, v in self.tdict['title']['sources'].items():
                     if not v[0] in (None, ''):
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, '%s: %s' % v[:2])
-                        self.tdict['title']['sources'][s] = ('', '%s: %s' % v[:2], v[2])
+                        remerge(s, v, False)
 
                 return
 
@@ -2377,177 +2428,171 @@ class ProgramNode():
             only_name = []
             names = []
             episodes = []
+            # First sort the available tuples on the available title parts
             for s, v in self.tdict['title']['sources'].items():
+                names.append((s, v[1].lower()))
                 if v[0] in (None, ''):
+                    # No groupname
                     if v[2] in (None, ''):
+                        # No episode title
                         only_name.append(s)
-                        names.append(v[1].lower())
 
                     else:
                         with_et.append(s)
-                        names.append(v[1].lower())
-                        episodes.append(v[2].lower())
+                        episodes.append((s, v[2].lower()))
 
                 elif v[2] in (None, ''):
+                    # No episode title
                     with_gn.append(s)
 
                 else:
                     with_both.append(s)
+                    episodes.append((s, v[2].lower()))
 
             if len(with_both) == 0:
-                for s, v in self.tdict['title']['sources'].items():
-                    if not v[0] in (None, ''):
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, v[0])
-                        self.set_source_value('episode title', s, v[1])
-                        self.tdict['title']['sources'][s] = ('', v[0], v[1])
+                # Move any groupname/name set to name/episode title
+                for s in with_gn[:]:
+                    v = self.tdict['title']['sources'][s]
+                    moveup(s, v)
 
                 return
 
             for s in with_gn[:]:
                 v = self.tdict['title']['sources'][s]
-                for n in names:
+                # Check if a groupname matches  any of the names
+                for sn, n in names:
                     self.matchobject.set_seqs(n, v[0].lower())
                     if self.matchobject.ratio() > .8:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s,  v[0])
-                        self.set_source_value('episode title', s, v[1])
-                        self.tdict['title']['sources'][s] = ('', v[0], v[1])
-                        names.append(v[0].lower())
-                        episodes.append(v[1].lower())
+                        # And if so move groupname/name to name/episode title
+                        moveup(s, v)
                         with_gn.remove(s)
+                        with_et.append(s)
                         break
 
                 else:
-                    for n in episodes:
+                    # And alternately the same with name and any of the episode titles
+                    for sn, n in episodes:
                         self.matchobject.set_seqs(n, v[1].lower())
                         if self.matchobject.ratio() > .8:
-                            self.tdict['group name']['sources'][s] = ''
-                            self.set_source_value('name', s,  v[0])
-                            self.set_source_value('episode title', s, v[1])
-                            self.tdict['title']['sources'][s] = ('', v[0], v[1])
-                            names.append(v[0].lower())
-                            episodes.append(v[1].lower())
+                            # And if so move groupname/name to name/episode title
+                            moveup(s, v)
                             with_gn.remove(s)
+                            with_et.append(s)
                             break
 
-            for s in with_both:
+            for s in with_both[:]:
                 v = self.tdict['title']['sources'][s]
                 partmatch = []
                 for i in range(4):
                     partmatch.append(False)
 
-                for n in names:
+                # Does the groupname match a name?
+                for sn, n in names:
                     self.matchobject.set_seqs(n, v[0].lower())
                     if self.matchobject.ratio() > .8:
                         partmatch[0] = True
                         break
 
-                for n in names:
+                # Does the name match a name?
+                for sn, n in names:
+                    if sn == s:
+                        continue
+
                     self.matchobject.set_seqs(n, v[1].lower())
                     if self.matchobject.ratio() > .8:
                         partmatch[1] = True
                         break
 
-                for n in episodes:
+                # Does the episode title match an episode title?
+                for sn, n in episodes:
+                    if sn == s:
+                        continue
+
                     self.matchobject.set_seqs(n, v[2].lower())
                     if self.matchobject.ratio() > .8:
                         partmatch[2] = True
                         break
 
-                for n in episodes:
+                # Does the name match an episode title?
+                for sn, n in episodes:
                     self.matchobject.set_seqs(n, v[1].lower())
                     if self.matchobject.ratio() > .8:
                         partmatch[3] = True
                         break
 
-                if partmatch[2]:
-                    if partmatch[1]:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.tdict['title']['sources'][s] = ('', v[1], v[2])
-                        continue
+                if partmatch[1]:
+                    # We remove the groupname
+                    removegroupname(s, v)
 
-                    elif partmatch[0]:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, v[0])
-                        self.tdict['title']['sources'][s] = ('', v[0], v[2])
-                        continue
+                elif partmatch[2]:
+                    if partmatch[0]:
+                        # We move the groupname to name
+                        movegroupname(s, v)
 
                     else:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, '%s: %s' % v[:2])
-                        self.tdict['title']['sources'][s] = ('','%s: %s' % v[:2], v[2])
-                        continue
-
-                if partmatch[1]:
-                    self.tdict['group name']['sources'][s] = ''
-                    self.set_source_value('episode title', s, '')
-                    self.tdict['title']['sources'][s] = ('', v[1],'')
-                    continue
+                        # We remerge groupname and name
+                        remerge(s, v)
 
                 elif partmatch[3] or partmatch[0]:
-                    self.tdict['group name']['sources'][s] = ''
-                    self.set_source_value('name', s, v[0])
-                    self.set_source_value('episode title', s, v[1])
-                    self.tdict['title']['sources'][s] = ('', v[0], v[1])
-                    continue
+                    # Move groupname/name set to name/episode title
+                    moveup(s, v)
 
                 else:
-                    self.tdict['group name']['sources'][s] = ''
-                    self.set_source_value('name', s, '%s: %s' % v[:2])
-                    self.set_source_value('episode title', s, '')
-                    self.tdict['title']['sources'][s] = ('','%s: %s' % v[:2], '')
-                    continue
+                    # We remerge groupname and name
+                    remerge(s, v)
+
+                with_both.remove(s)
+                with_et.append(s)
 
             for s in with_gn[:]:
                 v = self.tdict['title']['sources'][s]
-                for n in names:
+                sname = '%s: %s' % v[:2]
+                for sn, n in names:
+                    # Again check if a groupname matches  any of the names
                     self.matchobject.set_seqs(n, v[0].lower())
                     if self.matchobject.ratio() > .8:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, v[0])
-                        self.set_source_value('episode title', s, v[1])
-                        self.tdict['title']['sources'][s] = ('', v[0], v[1])
-                        names.append(v[0].lower())
-                        episodes.append(v[1].lower())
+                        # And if so move groupname/name to name/episode title
+                        moveup(s, v)
                         with_gn.remove(s)
+                        with_et.append(s)
                         break
 
+                    # Or the name
                     self.matchobject.set_seqs(n, v[1].lower())
                     if self.matchobject.ratio() > .8:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.tdict['title']['sources'][s] = ('', v[1], '')
-                        names.append(v[1].lower())
+                        # We remove the groupname
+                        removegroupname(s, v)
+                        with_gn.remove(s)
+                        only_name.append(s)
                         break
 
-                    self.matchobject.set_seqs(n,'%s: %s'.lower() % v[:2])
+                    # Or the combined groupnam/name
+                    self.matchobject.set_seqs(n,sname.lower())
                     if self.matchobject.ratio() > .8:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, '%s: %s' % v[:2])
-                        self.tdict['title']['sources'][s] = ('','%s: %s' % v[:2], '')
+                        remerge(s, v)
+                        with_gn.remove(s)
+                        only_name.append(s)
                         break
 
                 else:
-                    for n in episodes:
+                    # Again alternately the same with name and any of the episode titles
+                    for sn, n in episodes:
                         self.matchobject.set_seqs(n, v[1].lower())
                         if self.matchobject.ratio() > .8:
-                            self.tdict['group name']['sources'][s] = ''
-                            self.set_source_value('name', s, v[0])
-                            self.set_source_value('episode title', s, v[1])
-                            self.tdict['title']['sources'][s] = ('', v[0], v[1])
-                            names.append(v[0].lower())
-                            episodes.append(v[1].lower())
+                            # And if so move groupname/name to name/episode title
+                            moveup(s, v)
                             with_gn.remove(s)
+                            with_et.append(s)
                             break
 
                     else:
-                        self.tdict['group name']['sources'][s] = ''
-                        self.set_source_value('name', s, '%s: %s' % v[:2])
-                        self.tdict['title']['sources'][s] = ('','%s: %s' % v[:2], '')
+                        # We remerge groupname and name
+                        remerge(s, v)
+                        with_gn.remove(s)
+                        only_name.append(s)
 
         with self.node_lock:
             if len(self.tdict['genres']['values']) >1:
-                #~ print '  ', self.tdict['genres']['sources']
                 gcount = {}
                 for s, v in self.tdict['genres']['sources'].items():
                     if v[0] in (None, ''):
@@ -2601,13 +2646,8 @@ class ProgramNode():
 
             if len(self.tdict['title']['values']) >1:
                 if self.is_set('group name'):
-                    #~ print self.tdict['title']['sources']
                     # First we check what to do with group names
                     check_group_names()
-                    #~ print self.tdict['title']['sources']
-                    #~ print self.tdict['name']['sources']
-                    #~ if self.is_set('episode title'):
-                        #~ print self.tdict['episode title']['sources']
 
                 ncount = {}
                 for s, v in self.tdict['title']['sources'].items():
@@ -2749,8 +2789,8 @@ class ProgramNode():
 
                 return rval
 
-    def get_start_stop(self, printable=True):
-        return self.channode.get_start_stop(self, printable)
+    def get_start_stop(self, printable=True, only_start = False):
+        return self.channode.get_start_stop(self, printable, only_start)
 
     def get_title(self, printable=True):
         return self.channode.get_title(self, printable)
@@ -2794,6 +2834,7 @@ class ProgramNode():
             new_pnode.start = new_pnode.tdict['start-time']['prime']
             new_pnode.stop = new_pnode.tdict['stop-time']['prime']
             new_pnode.length = new_pnode.tdict['length']['prime']
+            new_pnode.scandate = copy(self.scandate)
             new_pnode.name = copy(self.name)
             new_pnode.match_name = copy(self.match_name)
             new_pnode.match_group_name = copy(self.match_name)
@@ -3001,18 +3042,18 @@ class XMLoutput():
             xml.append(self.add_starttag('programme', 2, attribs))
 
             # Title
-            xml.append(self.add_starttag('title', 4, 'lang="%s"' % (self.config.xml_language), self.xmlescape(program.name), True))
+            xml.append(self.add_starttag('title', 4, 'lang="%s"' % (self.config.xml_language), program.name, True))
             if program.is_set('originaltitle') and program.is_set('country') :
-                xml.append(self.add_starttag('title', 4, 'lang="%s"' % (program.get_value('country').lower()), self.xmlescape(program.get_value('originaltitle')), True))
+                xml.append(self.add_starttag('title', 4, 'lang="%s"' % (program.get_value('country').lower()), program.get_value('originaltitle'), True))
 
             # Subtitle
             if program.is_set('episode title') and program.get_value('episode title') != program.name:
-                xml.append(self.add_starttag('sub-title', 4, 'lang="%s"' % (self.config.xml_language), self.xmlescape(program.get_value('episode title')) ,True))
+                xml.append(self.add_starttag('sub-title', 4, 'lang="%s"' % (self.config.xml_language), program.get_value('episode title') ,True))
 
             # Description
             desc_line = program.get_description()
             if desc_line != '':
-                xml.append(self.add_starttag('desc', 4, 'lang="%s"' % (self.config.xml_language), self.xmlescape(desc_line),True))
+                xml.append(self.add_starttag('desc', 4, 'lang="%s"' % (self.config.xml_language), desc_line,True))
 
             # Process credits section if present.
             # This will generate director/actor/presenter info.
@@ -3024,13 +3065,13 @@ class XMLoutput():
                         for name in rlist:
                             if isinstance(name, dict) and 'name'in name:
                                 if 'role'in name and name['role'] != None:
-                                    xml.append(self.add_starttag((role), 6, 'role="%s"' % (name['role']), self.xmlescape(name['name']),True))
+                                    xml.append(self.add_starttag((role), 6, 'role="%s"' % (name['role']), name['name'],True))
 
                                 else:
-                                    xml.append(self.add_starttag((role), 6, '', self.xmlescape(name['name']),True))
+                                    xml.append(self.add_starttag((role), 6, '', name['name'],True))
 
                             elif name != '':
-                                xml.append(self.add_starttag((role), 6, '', self.xmlescape(name),True))
+                                xml.append(self.add_starttag((role), 6, '', name,True))
 
                 xml.append(self.add_endtag('credits', 4))
 
@@ -3045,17 +3086,17 @@ class XMLoutput():
             # Genre
             cat = program.get_genre()
             if self.config.channels[chanid].get_opt('cattrans'):
-                xml.append(self.add_starttag('category', 4 , '', self.xmlescape(cat), True))
+                xml.append(self.add_starttag('category', 4 , '', cat, True))
 
             else:
-                xml.append(self.add_starttag('category', 4, 'lang="%s"' % (self.config.xml_language), self.xmlescape(cat), True))
+                xml.append(self.add_starttag('category', 4, 'lang="%s"' % (self.config.xml_language), cat, True))
 
             if program.is_set('subgenre'):
-                xml.append(self.add_starttag('keyword', 4, 'lang="%s"' % (self.config.xml_language), self.xmlescape(program.get_value('subgenre').capitalize()), True))
+                xml.append(self.add_starttag('keyword', 4, 'lang="%s"' % (self.config.xml_language), program.get_value('subgenre').capitalize(), True))
 
             # An available url
             if program.is_set('infourl'):
-                xml.append(self.add_starttag('url', 4, '', self.xmlescape(program.get_value('infourl')),True))
+                xml.append(self.add_starttag('url', 4, '', program.get_value('infourl'),True))
 
             # A Country
             if program.is_set('country'):
@@ -3081,6 +3122,9 @@ class XMLoutput():
 
             if program.is_set('ttvdbid'):
                 xml.append(self.add_starttag('episode-num', 4, 'system="thetvdb.com"', 'series/%s' % program.get_value('ttvdbid'),True))
+
+            if program.is_set('ttvdbepid'):
+                xml.append(self.add_starttag('episode-num', 4, 'system="thetvdb.com"', 'episode/%s' % program.get_value('ttvdbepid'),True))
 
             elif program.is_set('tmdbid'):
                 xml.append(self.add_starttag('episode-num', 4, 'system="themoviedb.org"', 'movie/%s' % program.get_value('tmdbid'),True))

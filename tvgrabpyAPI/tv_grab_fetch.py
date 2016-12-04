@@ -37,11 +37,28 @@ class Functions():
         self.source_counters = {}
         self.source_counters['total'] = {}
         self.raw_json = {}
+        self.cache_id = self.config.cache_id
+        self.json_id = self.config.json_id
+        self.ttvdb1_id = self.config.ttvdb1_id
+        self.ttvdb2_id = self.config.ttvdb2_id
+        self.imdb3_id = self.config.imdb3_id
+        self.page_OK = 0
+        self.page_urlerror = 1
+        self.page_timeout = 2
+        self.page_httperror = 3
+        self.page_jsonerror = 4
+        self.page_nodata = 5
+        self.page_data_error = 6
+        self.page_wrongdate = 7
+        self.page_unknownfail = 9
 
     # end init()
 
-    def update_counter(self, cnt_type, source_id=-1, chanid=None, cnt_add=True, cnt_change=1):
-        #source_id: -99 = cache, -98 = jsondata, -1 = ttvdb
+    def update_counter(self, cnt_type, source_id=None, chanid=None, cnt_add=True, cnt_change=1):
+        #source_id: -99 = cache, -98 = jsondata, -11 = ttvdb
+        if source_id == None:
+            source_id = self.ttvdb1_id
+
         if not isinstance(cnt_change, int) or cnt_change == 0:
             return
 
@@ -74,7 +91,7 @@ class Functions():
                 self.source_counters[source_id][cnt_type] = 0
 
             self.source_counters[source_id][cnt_type] += cnt_change
-            if isinstance(source_id, int) and (source_id >= 0 or source_id == -98):
+            if isinstance(source_id, int) and (source_id >= 0 or source_id == self.json_id):
                 if cnt_type in self.source_counters['total'].keys():
                     self.source_counters['total'][cnt_type] += cnt_change
 
@@ -82,7 +99,10 @@ class Functions():
                     self.source_counters['total'][cnt_type] = cnt_change
     # end update_counter()
 
-    def get_counter(self, cnt_type, source_id=-1, chanid=None):
+    def get_counter(self, cnt_type, source_id=None, chanid=None):
+        if source_id == None:
+            source_id = self.ttvdb1_id
+
         if chanid == None:
             if not source_id in self.source_counters.keys():
                 return 0
@@ -129,11 +149,14 @@ class Functions():
             fu.join(self.config.opt_dict['global_timeout']+1)
             page = fu.result
             self.max_fetches.release()
-            if (page == None) or (page =={}) or (isinstance(page, (str, unicode)) and ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
-                return None
+            if fu.page_status != self.page_OK or fu.status_code != requests.codes.ok:
+                return (fu.page_status, page, fu.status_code)
+
+            elif (page == None) or (page =={}) or (isinstance(page, (str, unicode)) and ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
+                return (self.page_nodata, None, fu.status_code)
 
             else:
-                return page
+                return (self.page_OK, page, fu.status_code)
 
         except(socket.timeout):
             self.config.log(self.config.text('fetch', 1, (self.config.opt_dict['global_timeout'], url)), 1, 1)
@@ -141,10 +164,13 @@ class Functions():
                 self.config.infofiles.add_url_failure('Fetch timeout: %s\n' % url)
 
             self.max_fetches.release()
-            return None
+            return (self.page_timeout, None, fu.status_code)
     # end get_page()
 
-    def get_json_data(self, name, version = None, source = -98, url = None, fpath = None):
+    def get_json_data(self, name, version = None, source = None, url = None, fpath = None):
+        if source == None:
+            source = self.json_id
+
         self.raw_json[name] = ''
         local_name = '%s.%s.json' % (name, version) if isinstance(version, int) and not self.config.test_modus else '%s.json' % (name)
         # Try to find the source files locally
@@ -291,6 +317,7 @@ class FetchURL(Thread):
         self.thread_type = 'fetching'
         self.state = 0
         self.config = config
+        self.func = self.config.fetch_func
         self.url = url
         self.txtdata = txtdata
         self.txtheaders = txtheaders
@@ -298,6 +325,9 @@ class FetchURL(Thread):
         self.is_json = is_json
         self.raw = ''
         self.result = None
+        self.page_status = self.func.page_OK
+        self.url_request = None
+        self.status_code = None
 
     def run(self):
         try:
@@ -305,6 +335,7 @@ class FetchURL(Thread):
 
         except:
             self.result = None
+            self.page_status = self.func.page_unknownfail
             self.config.log(self.config.text('fetch', 2,  (sys.exc_info()[0], sys.exc_info()[1], self.url)), 0)
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('%s,%s:\n  %s\n' % (sys.exc_info()[0], sys.exc_info()[1], self.url))
@@ -323,47 +354,63 @@ class FetchURL(Thread):
         the specified number of timeout seconds.
         """
         try:
-            url_request = requests.get(self.url, headers = self.txtheaders, params = self.txtdata, timeout=self.config.opt_dict['global_timeout']/2, stream=True)
+            self.url_request = requests.get(self.url, headers = self.txtheaders, params = self.txtdata, timeout=self.config.opt_dict['global_timeout']/2, stream=True)
+            self.status_code = self.url_request.status_code
+            if self.url_request.status_code != requests.codes.ok:
+                if self.status_code == 500 and len(self.url_request.text) > 0 and not self.url_request.text.strip()[0] in ("{", "["):
+                    # This probably is an inclomplete read we probably can fix
+                    pass
+                    #~ if self.config.write_info_files:
+                        #~ self.config.infofiles.write_raw_string(self.url_request.text)
+
+                else:
+                    self.url_request.raise_for_status()
+
             encoding = self.find_html_encoding()
             if encoding != None:
-                url_request.encoding = encoding
+                self.url_request.encoding = encoding
 
             elif self.encoding != None:
-                url_request.encoding = self.encoding
+                self.url_request.encoding = self.encoding
 
-            self.raw = url_request.content
-            self.url_text = url_request.text
+            self.raw = self.url_request.content
+            self.url_text = self.url_request.text
 
-            if 'content-type' in url_request.headers and 'json' in url_request.headers['content-type'] or self.is_json:
+            if 'content-type' in self.url_request.headers and 'json' in self.url_request.headers['content-type'] or self.is_json:
                 try:
-                    return url_request.json()
+                    return self.url_request.json()
 
                 except(ValueError) as e:
                     self.config.log(self.config.text('fetch', 5, (self.url, e)), 1, 1)
+                    self.page_status = self.func.page_jsonerror
                     if self.config.write_info_files:
                         self.config.infofiles.add_url_failure('JSONError: %s\n' % self.url)
+                        self.config.infofiles.write_raw_string(self.url_text)
 
                 return None
 
             else:
                 return self.url_text
 
-        except (requests.ConnectionError) as e:
+        except (requests.ConnectionError):
             self.config.log(self.config.text('fetch', 3, (self.url, )), 1, 1)
+            self.page_status = self.func.page_urlerror
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('URLError: %s\n' % self.url)
 
             return None
 
         except (requests.HTTPError) as e:
-            self.config.log(self.config.text('fetch', 4, (self.url, e.code)), 1, 1)
+            self.config.log(self.config.text('fetch', 4, (self.url, '%s: %s' % (e.response.status_code, e.response.reason))), 1, 1)
+            self.page_status = self.func.page_httperror
             if self.config.write_info_files:
-                self.config.infofiles.add_url_failure('HTTPError: %s\n' % self.url)
+                self.config.infofiles.add_url_failure('HTTPError %s: %s: %s\n' % (e.response.status_code, e.response.reason, self.url))
 
             return None
 
-        except (requests.Timeout) as e:
+        except (requests.Timeout):
             self.config.log(self.config.text('fetch', 1, (self.config.opt_dict['global_timeout'], self.url)), 1, 1)
+            self.page_status = self.func.page_timeout
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('Fetch timeout: %s\n' % self.url)
 
@@ -394,25 +441,39 @@ class DataTree(DataTreeShell, Thread):
     def run(self):
         try:
             if data_value('task',self.rundata, str) == 'epdata':
+                tid = data_value('tid',self.rundata, int, 0)
+                queryid = data_value('queryid',self.rundata, int, -1)
                 self.searchtree.show_progress = True
                 if self.extract_datalist():
-                    self.config.log('An error "%s" occured while extracting a DataTree\n' % dtErrorTexts[self.check_errorcode()])
+                    if self.check_errorcode() == 7:
+                        self.config.log(self.config.text('ttvdb', 16, ('%s: %s' % (tid, self.rundata['name']), )))
+
+                    else:
+                        self.config.log(self.config.text('fetch', 13, (self.check_errorcode(text_values = True)[0], )))
+
                     self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
 
                 if self.export:
                     chanid = data_value('chanid',self.rundata, str)
-                    tid = data_value('tid',self.rundata, int, 0)
-                    queryid = data_value('queryid',self.rundata, int, -1)
                     if len(self.result) == 0:
-                        self.source.functions.update_counter('fail', -1, chanid)
-                        self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
+                        self.source.functions.update_counter('fail', self.config.ttvdb1_id, chanid)
+                        self.source.detail_request.put({'task': 'fail_ep_info', 'tid': tid, 'queryid': queryid})
 
-                    eps = self.source.process_data(self.result, tid, 'en')
-                    self.source.store_data('episodes', eps[0])
-                    self.source.store_data('epcount', eps[1], {'task': 'process_ep_info', 'queryid': queryid})
+                    else:
+                        eps = self.source.process_data(self.result, tid, 'en')
+                        self.init_data_def(self.source.data_value("seriesname", dict))
+                        if not self.extract_datalist():
+                            self.source.store_data('ttvdbid', self.result)
+
+                        epc = []
+                        for k, v in eps[1].items():
+                            epc.append({'tid': tid,'sid': k, 'count': v})
+
+                        self.source.store_data('episodes', eps[0])
+                        self.source.store_data('epcount', epc, {'task': 'process_ep_info', 'tid': tid, 'queryid': queryid})
 
         except dtWarning as e:
-            self.config.log('An error "%s" occured while extracting a DataTree\n' % e.message)
+            self.config.log(self.config.text('fetch', 13, (e.message, )))
             self.source.detail_request.put({'task': 'fail_ep_info', 'queryid': queryid})
 
     def get_string_parts(self, sstring, header_items = None):
@@ -501,7 +562,10 @@ class DataTree(DataTreeShell, Thread):
                 if len(data) == 0:
                     return default
 
-                if len(data) == 1 and isinstance(data[0], (list,tuple)):
+                # It's a single list of dicts created through the "name" keyword
+                #~ if len(data) == 1 and isinstance(data[0], (list,tuple)):
+                if is_data_value(0, data, list) and (len(data) == 1 or is_data_value(1, data, int)):
+                    modus = data_value(1, data, int, 0)
                     for item in data[0]:
                         if not isinstance(item, dict):
                             continue
@@ -509,22 +573,36 @@ class DataTree(DataTreeShell, Thread):
                         for k, v in item.items():
                             if k.lower() in self.config.roletrans.keys():
                                 role = self.config.roletrans[k.lower()]
-                                for pp in v:
-                                    pp = pp.split(',')
-                                    for p in pp:
-                                        cn = p.split('(')
-                                        if len(cn) > 1:
-                                            add_person(role, cn[0].strip(), cn[1].split(')')[0].strip())
+                                if modus == 1:
+                                    for pp in v:
+                                        cn = re.search('(.*?)\((.*?)\)',pp)
+                                        if cn:
+                                            add_person(role, cn.group(1).strip(), cn.group(2).strip())
 
                                         else:
-                                            add_person(role, cn[0].strip())
+                                            add_person(role, pp.strip())
+
+                                else:
+                                    for pp in v:
+                                        pp = pp.split(',')
+                                        for p in pp:
+                                            cn = p.split('(')
+                                            if len(cn) > 1:
+                                                add_person(role, cn[0].strip(), cn[1].split(')')[0].strip())
+
+                                            else:
+                                                add_person(role, cn[0].strip())
 
                     return credits
 
                 if len(data) < 2:
                     return default
 
-                if isinstance(data[1], (list,tuple)):
+                # data[0] is a list of list of names
+                # data[1] is a list of roles
+                # data[2] is an optional list of characters matching data[0]
+                #~ if isinstance(data[1], (list,tuple)):
+                if is_data_value(0, data, list) and is_data_value(1, data, list):
                     for item in range(len(data[0])):
                         if item >= len(data[1]):
                             continue
@@ -545,6 +623,7 @@ class DataTree(DataTreeShell, Thread):
                                     else:
                                         add_person(role, person.strip())
 
+                # The same but with a single role
                 elif isinstance(data[1], (str,unicode)) and data[1].lower() in self.config.roletrans.keys():
                     role = self.config.roletrans[data[1].lower()]
 
@@ -767,7 +846,7 @@ class theTVDB_v1(Thread):
         Thread.__init__(self, name = 'source-thetvdb')
         self.config = config
         self.functions = self.config.fetch_func
-        self.proc_id = -1
+        self.proc_id = self.config.ttvdb1_id
         self.quit = False
         self.ready = False
         self.state = 0
@@ -794,12 +873,13 @@ class theTVDB_v1(Thread):
         self.config.threads.append(self)
         self.local_encoding = self.config.logging.local_encoding
         self.show_progres = False
+        self.lookup_log = []
         try:
             self.source_data = source_data
             self.source = self.data_value('name', str)
             self.lang_list = self.data_value('lang-list', list)
             self.detail_keys = {}
-            self.detail_keys['series'] = list(self.data_value(["seriesname", "values"], dict).keys())
+            self.detail_keys['series'] = list(self.data_value(["last_updated", "values"], dict).keys())
             self.detail_keys['episodes'] = list(self.data_value(["episodes", "values"], dict).keys())
             self.config.detail_keys['ttvdb'] = self.detail_keys['series']
             self.config.detail_keys['episodes'] = self.detail_keys['episodes']
@@ -807,11 +887,11 @@ class theTVDB_v1(Thread):
             self.datatrees = {}
             self.episodetrees = {}
             self.queryid = 0
-            for ptype in ("seriesid", "seriesname", "episodes"):
+            for ptype in ("seriesid", "last_updated", "episodes"):
                 if not self.is_data_value([ptype, 'timezone'], str):
                     self.source_data[ptype]['timezone'] = self.data_value('site-timezone', str, default = 'utc')
 
-                self.datatrees[ptype] = DataTree(self, self.data_value(ptype, dict), 'always', -1)
+                self.datatrees[ptype] = DataTree(self, self.data_value(ptype, dict), 'always', self.proc_id)
 
         except:
             self.config.opt_dict['disable_ttvdb'] = True
@@ -822,6 +902,9 @@ class theTVDB_v1(Thread):
             return
 
         pending_requests = {}
+        def make_se(data):
+            return '(s%se%s) %r:%r' % (unicode(data['season']).rjust(2, '0'), unicode(data['episode']).rjust(2, '0'), data['stitle'], data['episode title'])
+
         try:
             self.state = 4
             while True:
@@ -864,13 +947,18 @@ class theTVDB_v1(Thread):
 
                         elif qanswer['state'] in (0, 1):
                             # Failed / Finished
-                            parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
-                            self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            d = qanswer['data']
+                            parent.detail_return.put({'source': self.proc_id, 'data': d, 'pn': pn})
+                            self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
                             if qanswer['state'] == 1:
-                                self.functions.update_counter('lookup', -1, parent.chanid)
+                                self.functions.update_counter('lookup', self.proc_id, parent.chanid)
+                                self.lookup_log.append('lookup %s(%s) <= %s: %s %s\n' % \
+                                    (d['ttvdbid'], make_se(d), parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
 
                             else:
-                                self.functions.update_counter('lookup_fail', -1, parent.chanid)
+                                self.functions.update_counter('lookup_fail', self.proc_id, parent.chanid)
+                                self.lookup_log.append('failed %s <= %s: %s %s\n' % \
+                                    (qanswer['tid'], parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
 
                         elif qanswer['state'] == 2:
                             # Answer is pending
@@ -909,13 +997,18 @@ class theTVDB_v1(Thread):
                                 self.state = 4
                                 continue
 
-                            parent.detail_return.put({'source': -1, 'data': qanswer['data'], 'pn': pn})
-                            self.functions.update_counter('queue', -1,  parent.chanid, False)
+                            d = qanswer['data']
+                            parent.detail_return.put({'source': self.proc_id, 'data': d, 'pn': pn})
+                            self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
                             if qanswer['state'] == 1:
-                                self.functions.update_counter('lookup', -1, parent.chanid)
+                                self.functions.update_counter('lookup', self.proc_id, parent.chanid)
+                                self.lookup_log.append('lookup %s(%s) <= %s: %s %s\n' % \
+                                    (d['ttvdbid'], make_se(d), parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
 
                             else:
-                                self.functions.update_counter('lookup_fail', -1, parent.chanid)
+                                self.functions.update_counter('lookup_fail', self.proc_id, parent.chanid)
+                                self.lookup_log.append('failed %s <= %s: %s %s\n' % \
+                                    (qanswer['tid'], parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
 
                         del self.pending_tids[tid]
                         del pending_requests[queryid]
@@ -931,9 +1024,11 @@ class theTVDB_v1(Thread):
                         for r in prequests:
                             parent = r['parent']
                             pn = r['pn']
-                            parent.detail_return.put({'source': -1, 'data': None, 'pn': pn})
-                            self.functions.update_counter('queue', -1,  parent.chanid, False)
-                            self.functions.update_counter('lookup_fail', -1, parent.chanid)
+                            parent.detail_return.put({'source': self.proc_id, 'data': None, 'pn': pn})
+                            self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
+                            self.functions.update_counter('lookup_fail', self.proc_id, parent.chanid)
+                            self.lookup_log.append('failed %s <= %s: %s %s\n' % \
+                                (tid, parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
 
                         del self.pending_tids[tid]
                         del pending_requests[queryid]
@@ -957,6 +1052,14 @@ class theTVDB_v1(Thread):
 
                     continue
 
+            if self.config.ttvdb_log_output != None:
+                self.lookup_log.sort()
+                for line in self.lookup_log:
+                    self.config.ttvdb_log_output.write(line)
+
+                self.config.ttvdb_log_output.close()
+                self.config.ttvdb_log_output = None
+
         except:
             self.config.queues['log'].put({'fatal': [traceback.format_exc(), '\n'], 'name': 'theTVDB'})
             self.ready = True
@@ -975,16 +1078,14 @@ class theTVDB_v1(Thread):
             return
 
         # A request must either contain a name or an ID
-        if 'ttvdbid' in pdata:
-            if isinstance(pdata['ttvdbid'], (int, str)):
-                pdata['ttvdbid'] = unicode(pdata['ttvdbid'])
-
-        elif 'name' in pdata:
-            if isinstance(pdata['name'], (int, str)):
-                pdata['name'] = unicode(pdata['name'])
-
-        else:
+        if not ('ttvdbid' in pdata or 'name' in pdata):
             return
+
+        if is_data_value(['ttvdbid'], pdata, (int, str)):
+            pdata['ttvdbid'] = unicode(pdata['ttvdbid'])
+
+        if is_data_value(['name'], pdata, (int, str)):
+            pdata['name'] = unicode(pdata['name'])
 
         pdata['api-key'] = self.api_key
         # A language must be valid
@@ -995,9 +1096,14 @@ class theTVDB_v1(Thread):
         if background:
             self.queryid += 1
             queryid = self.queryid
-            self.episodetrees[queryid] = DataTree(self, self.data_value(ptype, dict), 'always', -1)
+            self.episodetrees[queryid] = DataTree(self, self.data_value(ptype, dict), 'always', self.proc_id)
             dtree = self.episodetrees[queryid]
-            dtree.rundata = {'task':'epdata', 'queryid': queryid, 'tid': pdata['ttvdbid'], 'lang': pdata['lang'], 'chanid': chanid}
+            dtree.rundata = {'task':'epdata',
+                                        'queryid': queryid,
+                                        'tid': int(pdata['ttvdbid']),
+                                        'lang': pdata['lang'],
+                                        'name': pdata['name'],
+                                        'chanid': chanid}
 
         else:
             dtree = self.datatrees[ptype]
@@ -1008,10 +1114,10 @@ class theTVDB_v1(Thread):
             print '(url, encoding, accept_header, url_data, is_json)'
             print url
 
-        self.functions.update_counter('detail', -1, chanid)
-        page = self.functions.get_page(url)
-        if page == None:
-            self.functions.update_counter('fail', -1, chanid)
+        self.functions.update_counter('detail', self.proc_id, chanid)
+        pstate, page, pcode = self.functions.get_page(url)
+        if pstate != self.functions.page_OK or page == None:
+            self.functions.update_counter('fail', self.proc_id, chanid)
             return None
 
         try:
@@ -1023,21 +1129,79 @@ class theTVDB_v1(Thread):
                 return queryid
 
             if dtree.extract_datalist():
-                self.functions.update_counter('fail', -1, chanid)
+                self.functions.update_counter('fail', self.proc_id, chanid)
                 # It failed
                 return None
 
-            data = dtree.result
+            data = copy(dtree.result)
             if len(data) == 0:
-                self.functions.update_counter('fail', -1, chanid)
+                self.functions.update_counter('fail', self.proc_id, chanid)
                 return None
+
+            # we extract the main series data
+            if ptype == 'episodes':
+                dtree.init_data_def(self.data_value("seriesname", dict))
+                if not dtree.extract_datalist():
+                    self.store_data('ttvdbid', dtree.result)
+
+                dtree.init_data_def(self.data_value("episodes", dict))
 
             return data
 
         except dtWarning as e:
-            self.functions.update_counter('fail', -1, chanid)
-            self.config.log('An error: "%s"\n   occured while extracting a %s DataTree for %s\n' % (e.message, ptype, 'theTVDB.com'))
+            self.functions.update_counter('fail', self.proc_id, chanid)
+            self.config.log(self.config.text('fetch', 14, (e.message, ptype, 'theTVDB.com')))
             return None
+
+    def process_data(self, data, tid, lang):
+        eps = []
+        abs_cnt = 0
+        pre_eps = []
+        pre_cnt = 0
+        sep_cnt = {}
+        data.sort(key=lambda p: (p['sid'], p['eid']))
+        for ep in data:
+            if not isinstance(ep, dict):
+                continue
+
+            sid = data_value('sid', ep, int, -1)
+            eid = data_value('eid', ep, int, -1)
+            abseid = data_value('abseid', ep, int, -1)
+            tepid = data_value('tepid', ep, int, -1)
+            if sid == -1 or eid == -1:
+                continue
+
+            if sid in sep_cnt.keys():
+                sep_cnt[sid] += 1
+
+            else:
+                sep_cnt[sid] = 1
+
+            title = data_value('episode title', ep, str, 'Episode %s' % eid)
+            desc = data_value('description', ep, str, None)
+            airdate = data_value('airdate', ep, datetime.date, None)
+            rating = data_value('star-rating', ep, float, None)
+            writer = data_value('writer', ep, list)
+            guest = data_value('guest', ep, list)
+            actor = data_value('actor', ep, list)
+            director = data_value('director', ep, list)
+            edata = {'tid': int(tid),
+                    'sid': int(sid),
+                    'eid': int(eid),
+                    'abseid': int(abseid),
+                    'tepid': int(tepid),
+                    'episode title': title,
+                    'airdate': airdate,
+                    'writer': writer,
+                    'guest': guest,
+                    'director': director,
+                    'lang': lang,
+                    'star-rating': rating,
+                    'description': desc}
+
+            eps.append(edata)
+
+        return [eps, sep_cnt]
 
     def store_data(self, task, data, confirm = None):
         '''
@@ -1113,7 +1277,7 @@ class theTVDB_v1(Thread):
         '''
         def get_tid(idsource = 'from db'):
             if idsource == 'from db':
-                data = self.get_cache_return('ttvdbid', name)
+                data = self.get_cache_return('ttvdb_alias', name)
 
             elif idsource == 'from ttvdb':
                 data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': lang}, chanid)
@@ -1165,10 +1329,10 @@ class theTVDB_v1(Thread):
             if alias == -1:
                 return -1
 
-            if alias == None:
-                return [0, name]
+            if alias == None or len(alias) == 0:
+                return {'tid':0, 'tdate': None, 'name': name, 'lang': None}
 
-            return alias
+            return alias[0]
 
         tid = 0
         last_updated = None
@@ -1209,7 +1373,7 @@ class theTVDB_v1(Thread):
                 return {'state': 1, 'tid': tid, 'tdate': last_updated, 'name': name}
 
             elif new_fetch and not self.config.args.only_cache:
-                data = self.query_ttvdb('seriesname', { 'ttvdbid': tid, 'lang': lang})
+                data = self.query_ttvdb('last_updated', { 'ttvdbid': tid, 'lang': lang})
                 if is_data_value([0, 'last updated'], data, datetime.datetime) and \
                     data_value([0, 'last updated'], data, datetime.datetime).date() < last_updated:
                         # No updates on theTVDB
@@ -1222,9 +1386,9 @@ class theTVDB_v1(Thread):
             return {'state': -1, 'tid': None}
 
         if tid == 0:
-            tid = series_name[0]
+            tid = series_name['tid']
 
-        series_name = series_name[1]
+        series_name = series_name['name']
         langs = self.config.ttvdb_langs
         if lang not in self.config.ttvdb_langs and lang in self.lang_list:
             langs.append(lang)
@@ -1257,17 +1421,17 @@ class theTVDB_v1(Thread):
 
             #We look for other languages
             data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': 'all'}, chanid)
-            db_update = []
             if isinstance(data, list) and len(data) > 0:
                 for index in range(len(data)):
                     if data_value([index, 'tid'], data, int) == tid and data_value([index, 'lang'], data, str) in langs:
-                        db_update.append(data[index])
                         if is_data_value([index, 'name'], data, str):
-                            aliasses.append(data[index]['name'].lower())
-                            if data[index]['name'].lower() not in self.queried_titles.keys():
-                                self.queried_titles[data[index]['name'].lower()] = data_value([index, 'tid'], data, int, 0)
+                            aname = data[index]['name'].lower()
+                            if not aname in aliasses:
+                                aliasses.append(aname)
 
-                self.store_data('ttvdbid', db_update)
+                            if aname not in self.queried_titles.keys():
+                                self.queried_titles[aname] = data_value([index, 'tid'], data, int, 0)
+
                 self.store_data('alias', {'tid': tid, 'name': series_name, 'alias': aliasses})
 
         except:
@@ -1275,7 +1439,7 @@ class theTVDB_v1(Thread):
             return {'state': 0, 'tid': None}
 
         # And we retreive the episodes
-        epdata = self.get_all_episodes(tid, lang, chanid)
+        epdata = self.get_all_episodes(tid, lang, chanid, name)
         if epdata['state'] == -1:
             return {'state': -1, 'tid': None}
 
@@ -1287,47 +1451,52 @@ class theTVDB_v1(Thread):
         try:
             eps = []
             langs = self.config.ttvdb_langs[:]
-            if lang not in self.config.ttvdb_langs and lang in self.lang_list:
+            if isinstance(lang, list):
+                for l in lang:
+                    if l not in self.config.ttvdb_langs and l in self.lang_list:
+                        langs.append(l)
+
+            elif lang not in self.config.ttvdb_langs and lang in self.lang_list:
                 langs.append(lang)
 
             while 'en' in langs:
                 langs.remove('en')
 
             # We first retrieve the english data in the background
-            queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en'}, chanid, True)
+            queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': 'en', 'name': name}, chanid, True)
             if queryid == None:
                 return {'state': 0, 'tid': tid}
 
             dtree = self.episodetrees[queryid]
-            keycount = dtree.searchtree.progress_queue.get(True)
+            actkey, keycount = dtree.searchtree.progress_queue.get(True)
 
             if self.show_progres:
                 # It's a call through the commandline so we give feed-back
                 dtree.export = True
                 qi = []
                 qi.append(queryid)
-                self.config.log([self.config.text('ttvdb', 11, ('en', name, tid, keycount[1]), type = 'frontend')])
-                for i in range(keycount[1]):
-                    keycount = dtree.searchtree.progress_queue.get(True)
-                    self.config.log([self.config.text('ttvdb', 12, keycount, type = 'frontend')],log_target = 1)
+                self.config.log([self.config.text('ttvdb', 11, ('en', name, tid, keycount), type = 'frontend')])
+                for i in range(keycount):
+                    keyno = dtree.searchtree.progress_queue.get(True)
+                    self.config.log([self.config.text('ttvdb', 12, keyno, type = 'frontend')],log_target = 1)
 
                 for l in langs:
-                    queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l}, chanid, True)
+                    queryid = self.query_ttvdb('episodes', {'ttvdbid': tid, 'lang': l, 'name': name}, chanid, True)
                     qi.append(queryid)
                     dtree = self.episodetrees[queryid]
                     dtree.export = True
-                    keycount = dtree.searchtree.progress_queue.get(True)
-                    self.config.log([self.config.text('ttvdb', 11, (l, name, tid, keycount[1]), type = 'frontend')])
-                    for i in range(keycount[1]):
-                        keycount = dtree.searchtree.progress_queue.get(True)
-                        self.config.log([self.config.text('ttvdb', 12, keycount, type = 'frontend')],log_target = 1)
+                    keyno = dtree.searchtree.progress_queue.get(True)
+                    self.config.log([self.config.text('ttvdb', 11, (l, name, tid, keyno[1]), type = 'frontend')])
+                    for i in range(keyno[1]):
+                        keyno = dtree.searchtree.progress_queue.get(True)
+                        self.config.log([self.config.text('ttvdb', 12, keyno, type = 'frontend')],log_target = 1)
 
                 for queryid in qi:
                     self.episodetrees[queryid].join()
 
             else:
-                dtree.searchtree.show_progress = False
-                if keycount[1] > 500:
+                #~ dtree.searchtree.show_progress = False
+                if keycount > 500:
                     # It's to big so we stay with only the English data collection in the background
                     dtree.export = True
                     return {'state': 2, 'tid': tid, 'queryid':queryid}
@@ -1346,12 +1515,16 @@ class theTVDB_v1(Thread):
                 # And collect the data from the first thread
                 data = dtree.result
                 if len(data) == 0:
-                    self.functions.update_counter('fail', -1, chanid)
+                    self.functions.update_counter('fail', self.proc_id, chanid)
 
                 else:
                     ep = self.process_data(data, tid, 'en')
                     eps.extend(ep[0])
-                    self.store_data('epcount', ep[1])
+                    epc = []
+                    for k, v in ep[1].items():
+                        epc.append({'tid': tid,'sid': k, 'count': v})
+
+                    self.store_data('epcount', epc)
 
         except:
             self.config.log([self.config.text('ttvdb', 12), traceback.format_exc()])
@@ -1361,126 +1534,90 @@ class theTVDB_v1(Thread):
         self.store_data('episodes', eps, {'task': 'process_ep_info', 'queryid': queryid})
         return {'state': 2, 'tid': tid, 'queryid':queryid}
 
-    def process_data(self, data, tid, lang):
-        eps = []
-        abs_cnt = 0
-        pre_eps = []
-        pre_cnt = 0
-        sep_cnt = {}
-        data.sort(key=lambda p: (p['sid'], p['eid']))
-        for ep in data:
-            if not isinstance(ep, dict):
-                continue
-
-            sid = data_value('sid', ep, int, -1)
-            eid = data_value('eid', ep, int, -1)
-            if sid == -1 or eid == -1:
-                continue
-
-            if sid in sep_cnt.keys():
-                sep_cnt[sid] += 1
-
-            else:
-                sep_cnt[sid] = 1
-
-            title = data_value('episode title', ep, str, 'Episode %s' % eid)
-            desc = data_value('description', ep, str, None)
-            airdate = data_value('airdate', ep, datetime.date, None)
-            rating = data_value('star-rating', ep, float, None)
-            edata = {'tid': int(tid),
-                    'sid': int(sid),
-                    'eid': int(eid),
-                    'episode title': title,
-                    'airdate': airdate,
-                    'lang': lang,
-                    'star-rating': rating,
-                    'description': desc}
-
-            if sid > 0:
-                abs_cnt += 1
-                edata['abseid'] = abs_cnt
-                eps.append(edata)
-
-            else:
-                edata['abseid'] = pre_cnt
-                pre_eps.append(edata)
-                pre_cnt += 1
-
-        for ep in pre_eps:
-            ep['abseid'] -= pre_cnt
-
-        eps.extend(pre_eps)
-        return [eps, sep_cnt]
-
     def get_season_episode(self, parent = None, data = None, tid = None):
         def prepare_return(rdata, tid, lang):
-            if data_value('lang', rdata, str) != lang:
-                r = self.get_cache_return('query', 'ep_by_id', \
-                                                        {'tid': tid,
-                                                        'sid': data_value('sid', rdata, int, 0),
-                                                        'eid':data_value('eid', rdata, int, 0),
-                                                        'lang': lang})
+            tepid = rdata.keys()[0]
+            ept = data.get_value('episode title')
+            if ept in ('', None):
+                ept = data_value([tepid,'episode title', lang], rdata, str)
 
-                if r == -1:
-                    return {'state': -1, 'data': None}
+            if ept in ('', None):
+                ept = data_value([tepid,'episode title', 'en'], rdata, str)
 
-                if is_data_value(0, r, dict):
-                    rdata = r[0]
+            if ept in ('', None):
+                for k, v in data_value([tepid,'episode title'], rdata, dict):
+                    if v not in ('', None):
+                        ept = v
+                        break
 
             return {'state': 1, 'data':{'ttvdbid': tid,
-                    'season': data_value('sid', rdata, int, 0),
-                    'episode': data_value('eid', rdata, int, 0),
-                    'abs episode':data_value('abseid', rdata, int, 0),
-                    'airdate': data_value('airdate', rdata, datetime.date, None),
-                    'episode title': data_value('episode title', rdata, str),
-                    'description': data_value('description', rdata, str),
-                    'star-rating': data_value('star-rating', rdata, float, None)}}
+                    'ttvdbepid': tepid,
+                    'season': data_value([tepid,'sid'], rdata, int, 0),
+                    'episode': data_value([tepid,'eid'], rdata, int, 0),
+                    'abs episode':data_value([tepid,'abseid'], rdata, int, 0),
+                    'airdate': data_value([tepid,'airdate'], rdata, datetime.date, None),
+                    'stitle': series_name,
+                    'episode title': ept,
+                    'description': data_value([tepid,'description',lang], rdata, str),
+                    'star-rating': data_value([tepid,'star-rating'], rdata, float, None)}}
 
         if not isinstance(data, ProgramNode):
-            return {'state': 0, 'data': None}
+            return {'state': 0, 'tid': -1, 'data': None}
 
         if parent == None:
             parent = data.channel_config
 
         if parent.get_opt('disable_ttvdb') or parent.group in self.config.ttvdb_disabled_groups:
             # We do not lookup for regional channels and radio
-            return {'state': 0, 'data': None}
+            return {'state': 0, 'tid': -1, 'data': None}
 
         lang = self.config.group_language[parent.group]
+        series_name = data.get_value('name')
         if tid == None:
-            tid = self.get_ttvdb_id(data.get_value('name'), lang, chanid = parent.chanid)
+            tid = self.get_ttvdb_id(series_name, lang, chanid = parent.chanid)
             if not isinstance(tid, dict) or tid['state'] == 0:
-                self.config.log(self.config.text('ttvdb', 13, (data.get_value('name'), parent.chan_name)), 128)
+                self.config.log(self.config.text('ttvdb', 13, (series_name, parent.chan_name)), 128)
                 # No ID
-                return {'state': 0, 'data': None}
+                return {'state': 0, 'tid': 0, 'data': None}
 
             elif tid['state'] == -1:
                 # Quit signaled
-                return {'state': -1, 'data': None}
+                return {'state': -1, 'tid': -1, 'data': None}
 
             elif tid['state'] in (2, 3):
                 # Request pending
                 return tid
 
+            series_name = tid['name']
             tid = tid['tid']
 
         eptitle = data.get_value('episode title')
         epno = data.get_value('episode')
         seno = data.get_value('season')
-        # First we just look for a matching subtitle (if set)
-        eid = []
+        # First if season and episode are known
+        if data.is_set('episode') and data.is_set('season'):
+            eps = self.get_cache_return('query', 'ep_by_id',  {'tid': tid, 'eid': epno, 'sid': seno})
+            if eps == -1:
+                return {'state': -1, 'tid': -1, 'data': None}
+
+            if tid in eps.keys() and len(eps[tid]) == 1:
+                # We only got one match so we return it
+                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                return prepare_return(eps.values()[0], tid, lang)
+
+        # Next we just look for a matching subtitle (if set)
         if data.is_set('episode title') and eptitle != '':
             eid = self.get_cache_return('query', 'ep_by_title', \
                                                         {'tid': tid,
                                                         'episode title': eptitle})
 
             if eid == -1:
-                return {'state': -1, 'data': None}
+                return {'state': -1, 'tid': -1, 'data': None}
 
-            if len(eid) == 1:
+            if tid in eid.keys() and len(eid[tid]) == 1:
                 # We only got one match so we return it
                 self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                return prepare_return(eid[0], tid, lang)
+                return prepare_return(eid.values()[0], tid, lang)
 
         # What can we find on season/episode
         qdict = {'tid': tid}
@@ -1492,23 +1629,12 @@ class theTVDB_v1(Thread):
 
         eps = self.get_cache_return('query', 'ep_by_id', qdict )
         if eps == -1:
-            return {'state': -1, 'data': None}
+            return {'state': -1, 'tid': -1, 'data': None}
 
-        if len(eps) == 1:
+        if tid in eps.keys() and len(eps[tid]) == 1:
             # We only got one match so we return it
             self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-            return prepare_return(eps[0], tid, lang)
-
-        elif len(eps) > 0 and data.is_set('episode') and data.is_set('season'):
-            # It is for multiple languages
-            for ep in eps:
-                if data_value('lang', ep, str) == lang:
-                    self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                    return prepare_return(ep, tid, lang)
-
-            else:
-                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                return prepare_return(eps[0], tid, lang)
+            return prepare_return(eps.values()[0], tid, lang)
 
         # And on absolute episode numbers
         if data.is_set('episode'):
@@ -1517,36 +1643,29 @@ class theTVDB_v1(Thread):
                                                         'abseid': epno} )
 
             if absep == -1:
-                return {'state': -1, 'data': None}
+                return {'state': -1, 'tid': -1, 'data': None}
 
-            if len(absep) == 1:
+            if tid in absep.keys() and len(absep[tid]) == 1:
                 # We only got one match so we return it
                 self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                return prepare_return(absep[0], tid, lang)
+                return prepare_return(absep.values()[0], tid, lang)
 
-            elif len(absep) > 0:
-                # It is for multiple languages
-                for ep in absep:
-                    if data_value('lang', ep, str) == lang:
-                        self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                        return prepare_return(ep, tid, lang)
-
-                else:
-                    self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                    return prepare_return(absep[0], tid, lang)
-
-        if data.is_set('episode title') and eptitle != '' and len(eps) > 0:
+        if data.is_set('episode title') and eptitle != '' and  tid in eps.keys() and len(eps[tid]) > 0:
             # Now we get a list of episodes matching what we already know and compare with confusing characters removed
             subt = re.sub('[-,. ]', '', self.functions.remove_accents(data.get_value('episode title')).lower())
             ep_dict = {}
             ep_list = []
-            for ep in eps:
-                s = re.sub('[-,. ]', '', self.functions.remove_accents(ep['episode title']).lower())
-                ep_list.append(s)
-                ep_dict[s] = ep
-                if s == subt:
-                    self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
-                    return prepare_return(ep, tid, lang)
+            for ep in eps[tid].values():
+                for l, ept in ep['episode title'].items():
+                    if ept == '':
+                        continue
+
+                    s = re.sub('[-,. ]', '', self.functions.remove_accents(ept).lower())
+                    ep_list.append(s)
+                    ep_dict[s] = ep
+                    if s == subt:
+                        self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                        return prepare_return(ep, tid, lang)
 
             # And finally we try a difflib match
             match_list = difflib.get_close_matches(subt, ep_list, 1, 0.7)
@@ -1556,9 +1675,9 @@ class theTVDB_v1(Thread):
                 return prepare_return(ep, tid, lang)
 
         self.config.log(self.config.text('ttvdb', 15, (data.get_value('name'), data.get_value('episode title'), parent.chan_name)), 128)
-        return {'state': 0, 'data': None}
+        return {'state': 0, 'tid': tid, 'data': None}
 
-    def check_ttvdb_title(self, series_name, lang=None):
+    def check_ttvdb_title(self, series_name, lang=None, ttvdbid = 0):
         if self.config.opt_dict['disable_ttvdb']:
             return(-1)
 
@@ -1575,11 +1694,20 @@ class theTVDB_v1(Thread):
             langs.append(lang)
 
         # Check if a record exists
-        tid = self.get_cache_return('ttvdbid', series_name)
-        if tid in (-1, None):
+        tid = self.get_cache_return('ttvdb_alias', series_name)
+        if tid == -1:
             return(-1)
 
-        if len(tid) > 0:
+        if ttvdbid != 0:
+            data = self.query_ttvdb('last_updated', {'ttvdbid': ttvdbid, 'lang': 'en'})
+            if data == None:
+                print(self.config.text('ttvdb', 14, (ttvdbid, ), type = 'frontend').encode(self.local_encoding, 'replace'))
+                return(0)
+
+            else:
+                new_name = data[0]['name']
+
+        if tid != None and len(tid) > 0:
             # It 's already in the DB
             elangs = []
             for ep in tid:
@@ -1600,58 +1728,79 @@ class theTVDB_v1(Thread):
             print(self.config.text('ttvdb', 3,(series_name, ) , type = 'frontend').encode(self.local_encoding, 'replace'))
             old_tid = -1
 
-        try:
-            # Print what was found
-            series_list = self.query_ttvdb('seriesid', {'name': series_name, 'lang': lang})
-            if not isinstance(series_list, list):
-                series_list = [series_list]
+        if ttvdbid != 0:
+            if old_tid == -1:
+                print(self.config.text('ttvdb', 16, (ttvdbid, new_name), type = 'frontend').encode(self.local_encoding, 'replace'))
 
-            if not is_data_value([0, 'tid'], series_list, int):
-                print(self.config.text('ttvdb', 4, (series_name, ), type = 'frontend').encode(self.local_encoding, 'replace'))
+            elif ttvdbid != old_tid:
+                print(self.config.text('ttvdb', 13, (ttvdbid, new_name), type = 'frontend').encode(self.local_encoding, 'replace'))
+
+            else:
                 return(0)
 
-            print(self.config.text('ttvdb', 5, type = 'frontend').encode(self.local_encoding, 'replace'))
-            for s in range(len(series_list)):
-                print("%3.0f -> %9.0f: (%s) %s".encode(self.local_encoding, 'replace') % (s+1, data_value([s, 'tid'], series_list, int), \
-                                                                        data_value([s, 'lang'], series_list, str), \
-                                                                        data_value([s, 'name'], series_list, str)))
-
-            # Ask to select the right one
             while True:
-                try:
-                    print(self.config.text('ttvdb', 6, type = 'frontend').encode(self.local_encoding, 'replace'))
-                    ans = raw_input()
-                    selected_id = int(ans)-1
-                    if 0 <= selected_id < len(series_list):
-                        break
+                print(self.config.text('ttvdb', 15, type = 'frontend').encode(self.local_encoding, 'replace'))
+                ans = raw_input()
+                if ans in ('y', 'Y'):
+                    tid = data[0]
+                    break
 
-                except ValueError:
-                    if ans.lower() == "q":
-                        return(0)
+                elif ans in ('n', 'N'):
+                    return(0)
 
-            tid = series_list[selected_id]
-            clist = []
+        else:
+            try:
+                # Print what was found
+                series_list = self.query_ttvdb('seriesid', {'name': series_name, 'lang': lang})
+                if not isinstance(series_list, list):
+                    series_list = [series_list]
+
+                if not is_data_value([0, 'tid'], series_list, int):
+                    print(self.config.text('ttvdb', 4, (series_name, ), type = 'frontend').encode(self.local_encoding, 'replace'))
+                    return(0)
+
+                print(self.config.text('ttvdb', 5, type = 'frontend').encode(self.local_encoding, 'replace'))
+                for s in range(len(series_list)):
+                    print("%3.0f -> %9.0f: (%s) %s".encode(self.local_encoding, 'replace') % (s+1, data_value([s, 'tid'], series_list, int), \
+                                                                            data_value([s, 'lang'], series_list, str), \
+                                                                            data_value([s, 'name'], series_list, str)))
+
+                # Ask to select the right one
+                while True:
+                    try:
+                        print(self.config.text('ttvdb', 6, type = 'frontend').encode(self.local_encoding, 'replace'))
+                        ans = raw_input()
+                        selected_id = int(ans)-1
+                        if 0 <= selected_id < len(series_list):
+                            break
+
+                    except ValueError:
+                        if ans.lower() == "q":
+                            return(0)
+
+                tid = series_list[selected_id]
+
+            except:
+                traceback.print_exc()
+                return(-1)
+
+        try:
             # Get the English name and those for other languages
             langs = list(set(langs))
+            aliasses = [series_name.lower()]
+            ename = tid['name']
             for l in langs:
-                data = self.query_ttvdb('seriesname', {'ttvdbid': tid['tid'], 'lang': l})
-                clist.extend(data)
-                if l == 'en':
-                    ename = data_value([0, 'name'], data, str)
-                    if ename in (None, ''):
-                        ename = tid['name']
+                data = self.query_ttvdb('last_updated', {'ttvdbid': tid['tid'], 'lang': l})
+                aname = data_value([0, 'name'], data, str)
+                if not aname.lower() in aliasses:
+                    aliasses.append(aname.lower())
+
+                if l == 'en'and not aname in (None, ''):
+                    ename = aname
 
             if old_tid != int(tid['tid']):
                 print(self.config.text('ttvdb', 7, type = 'frontend').encode(self.local_encoding, 'replace'))
                 self.store_data('delete ttvdbid', {'tid': old_tid})
-
-            self.store_data('ttvdbid', clist)
-            aliasses = []
-            if ename.lower() != tid['name'].lower():
-                aliasses.append(tid['name'])
-
-            if ename.lower() != series_name.lower() and tid['name'].lower() != series_name.lower():
-                aliasses.append(series_name)
 
             if len(aliasses) > 0:
                 # Add an alias record
@@ -1712,6 +1861,7 @@ class FetchData(Thread):
         self.config.queues['source'][self.proc_id] = self.detail_request
         self.thread_type = 'source'
         self.config.threads.append(self)
+        self.page_status = self.functions.page_OK
 
         self.all_channels = {}
         self.channels = {}
@@ -1741,6 +1891,9 @@ class FetchData(Thread):
         self.cattrans = {}
         self.new_cattrans = None
         self.cattrans_type = cattrans_type
+        self.detail_keys = []
+        self.data = None
+        self.rawdata = None
 
         self.datatrees = {}
 
@@ -1769,6 +1922,11 @@ class FetchData(Thread):
             self.site_tz = pytz.timezone(self.data_value('site-timezone', str, default = 'utc'))
             self.night_date_switch = self.data_value('night-date-switch', int, default = 0)
             self.item_count = self.data_value(['base', 'default-item-count'], int, default=0)
+            if self.is_data_value(['alt-url-code']):
+                for ptype in ('base', 'base-channels', 'channels', 'detail', 'detail2'):
+                    if self.is_data_value([ptype, 'alt-url']):
+                        self.source_data[ptype]['normal-url'] = self.data_value([ptype, 'url'])
+
             if self.detail_processor:
                 if self.proc_id not in self.config.detail_sources:
                     self.detail_processor = False
@@ -1795,7 +1953,7 @@ class FetchData(Thread):
 
         except:
             self.config.validate_option('disable_source', value = self.proc_id)
-            #~ traceback.print_exc()
+            traceback.print_exc()
 
     def run(self):
         """The grabing thread"""
@@ -1970,6 +2128,13 @@ class FetchData(Thread):
         self.current_sitedate = self.config.in_tz(self.current_date, self.site_tz)
         self.current_fetchdate = self.config.in_fetch_tz(self.current_date)
         self.current_ordinal = self.current_date.toordinal()
+        self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'sources': {'sourceid': self.proc_id, 'name': self.source}})
+        self.sourcedbdata = self.get_cache_return()
+        if self.is_data_value(['alt-url-code']) and self.sourcedbdata['use_alt_url']:
+            for ptype in ('base', 'base-channels', 'channels', 'detail', 'detail2'):
+                if self.is_data_value([ptype, 'alt-url']):
+                    self.source_data[ptype]['url'] = self.data_value([ptype, 'alt-url'])
+
         for chanid, channel in self.config.channels.iteritems():
             # Is the channel active and this source for the channel not disabled
             if channel.active and not self.proc_id in channel.opt_dict['disable_source']:
@@ -2037,6 +2202,19 @@ class FetchData(Thread):
         together with the data definition inserted in the DataTree module
         The then by the DataTree extracted data is return
         """
+        def switch_url():
+            for ptype in ('base', 'base-channels', 'channels', 'detail', 'detail2'):
+                if ptype in self.source_data.keys():
+                    if self.sourcedbdata['use_alt_url']:
+                        self.source_data[ptype]['url'] = self.data_value([ptype, 'alt-url'])
+                        if ptype in self.datatrees.keys():
+                            self.datatrees[ptype].data_def['url'] = self.data_value([ptype, 'url'])
+
+                    else:
+                        self.source_data[ptype]['url'] = self.data_value([ptype, 'normal-url'])
+                        if ptype in self.datatrees.keys():
+                            self.datatrees[ptype].data_def['url'] = self.data_value([ptype, 'url'])
+
         def update_counter(ptype, success = False):
             if ptype in ('detail', 'detail2'):
                 c = pdata['channel'] if ('channel' in pdata.keys()) else None
@@ -2052,6 +2230,7 @@ class FetchData(Thread):
             else:
                 self.functions.update_counter('fail', self.proc_id)
 
+        self.page_status = self.functions.page_OK
         try:
             if pdata == None:
                 pdata = {}
@@ -2080,37 +2259,50 @@ class FetchData(Thread):
                 counter = ['base', self.proc_id, None]
 
             url_type = self.datatrees[ptype].data_value(["url-type"], int, default = 2)
-            url = self.datatrees[ptype].get_url(pdata)
-            if url == None:
-                self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
-                update_counter(ptype)
-                return
+            for retry in (0, 1):
+                url = self.datatrees[ptype].get_url(pdata)
+                if url == None:
+                    self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
+                    update_counter(ptype)
+                    self.page_status = self.functions.page_urlerror
+                    return
 
-            if self.print_roottree:
-                if self.roottree_output == sys.stdout:
-                    self.roottree_output.write(u'pdata = %s' % pdata)
-                    prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
-                    for index in range(len(url)):
-                        self.roottree_output.write(('%s = %s'% (prtdata[index], url[index])).encode('utf-8', 'replace'))
+                if self.print_roottree:
+                    if self.roottree_output == sys.stdout:
+                        self.roottree_output.write(u'pdata = %s' % pdata)
+                        prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
+                        for index in range(len(url)):
+                            self.roottree_output.write(('%s = %s'% (prtdata[index], url[index])).encode('utf-8', 'replace'))
+
+                    else:
+                        self.roottree_output.write(u'pdata = %s\n' % pdata)
+                        prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
+                        for index in range(len(url)):
+                            self.roottree_output.write((u'%s = %s\n'% (prtdata[index], url[index])))
+
+                update_counter(ptype, True)
+                self.page_status, page, pcode = self.functions.get_page(url)
+                if self.is_data_value(['alt-url-code']) and pcode != None and int(pcode) ==  self.source_data['alt-url-code']:
+                    self.config.queues['cache'].put({'task':'update', 'parent': self, 'toggle_alt_url': {'sourceid': self.proc_id}})
+                    self.sourcedbdata['use_alt_url'] = not self.sourcedbdata['use_alt_url']
+                    switch_url()
 
                 else:
-                    self.roottree_output.write(u'pdata = %s\n' % pdata)
-                    prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
-                    for index in range(len(url)):
-                        self.roottree_output.write((u'%s = %s\n'% (prtdata[index], url[index])))
+                    break
 
-            update_counter(ptype, True)
-            page = self.functions.get_page(url)
-            if page in (None, '', '{}') or self.datatrees[ptype].init_data(page):
-                self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
-                update_counter(ptype)
-                if self.print_roottree:
-                    self.roottree_output.write(u'No Data\n')
+            if self.page_status == self.functions.page_OK:
+                if page in (None, '', '{}'):
+                    self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
+                    self.page_status = self.functions.page_nodata
 
+                elif self.datatrees[ptype].init_data(page) or self.datatrees[ptype].searchtree == None:
+                    self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
+                    self.page_status = self.functions.page_data_error
+
+            if self.page_status == self.functions.page_nodata:
                 return None
 
-            if self.datatrees[ptype].searchtree == None:
-                self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
+            if self.page_status != self.functions.page_OK:
                 update_counter(ptype)
                 if self.print_roottree:
                     self.roottree_output.write(u'No Data\n')
@@ -2140,6 +2332,7 @@ class FetchData(Thread):
                     if not isinstance(cd, datetime.date):
                         self.config.log([self.config.text('fetch', 27, (url[0], )),])
                         update_counter(ptype)
+                        self.page_status = self.functions.page_wrongdate
                         return None
 
                     elif self.night_date_switch > 0 and self.current_fetchdate.hour < self.night_date_switch and (self.current_ordinal - cd.toordinal()) == 1:
@@ -2156,10 +2349,12 @@ class FetchData(Thread):
                             # offset
                             pass
                         update_counter(ptype)
+                        self.page_status = self.functions.page_wrongdate
                         return None
 
             if self.datatrees[ptype].extract_datalist():
                 update_counter(ptype)
+                self.page_status = self.functions.page_data_error
                 return None
 
             self.data = self.datatrees[ptype].result
@@ -2195,19 +2390,22 @@ class FetchData(Thread):
                 self.datatrees[ptype].init_data_def(self.data_value("base", dict))
 
             if len(self.data) == 0:
-                update_counter(ptype)
+                #~ update_counter(ptype)
+                self.page_status = self.functions.page_nodata
                 return None
 
             return self.data
 
         except dtWarning as e:
-            self.config.log('An error: "%s"\n   occured while extracting a %s DataTree for %s\n' % (e.message, ptype, self.source))
+            self.config.log(self.config.text('fetch', 14, (e.message, ptype, self.source)))
             self.functions.update_counter('fail', self.proc_id)
+            self.page_status = self.functions.page_data_error
             return None
 
         except:
             self.config.log([self.config.text('fetch', 29, (ptype, self.source)), traceback.format_exc()], 1)
             self.functions.update_counter('fail', self.proc_id)
+            self.page_status = self.functions.page_unknownfail
             return None
 
     def get_channels(self, data_list = None):
@@ -2232,7 +2430,7 @@ class FetchData(Thread):
             #extract the data
             for retry in (0, 1):
                 channel_list = self.get_page_data(ptype)
-                if channel_list != None:
+                if self.page_status in (self.functions.page_OK, self.functions.page_urlerror, self.functions.page_nodata):
                     break
 
         else:
@@ -2707,7 +2905,9 @@ class FetchData(Thread):
 
             laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and isinstance(ls['laststop'], datetime.datetime) else None
 
-        # Determine which days to fetch
+        max_fetch_days = 4
+        max_failure_count = 4
+        # Just process the days retrieved from the cache
         if self.config.args.only_cache:
             for channelid, chanid in self.chanids.items():
                 if do_final_processing(channelid) == -1:
@@ -2725,6 +2925,8 @@ class FetchData(Thread):
                     for day in site_range:
                         if day == 0 or cached[channelid][day] != True:
                             fetch_range[channelid].append(day)
+                            if len(fetch_range[channelid]) == max_fetch_days:
+                                break
 
             # tvgids.nl, npo.nl, vpro.nl, primo.eu, oorboekje.nl
             elif (url_type & 3) == 2:
@@ -2734,6 +2936,9 @@ class FetchData(Thread):
                         if day == 0 or cached[channelid][day] != True:
                             fetch_range.append(day)
                             break
+
+                    if len(fetch_range) == max_fetch_days:
+                        break
 
             #humo.be
             elif (url_type & 3) == 3:
@@ -2745,6 +2950,9 @@ class FetchData(Thread):
                             if day == 0 or cached[chan['channelid']][day] != True:
                                 fetch_range[channelgrp].append(day)
                                 break
+
+                        if len(fetch_range[channelgrp]) == max_fetch_days:
+                            break
 
         # We fetch all days in one
         elif (url_type & 12) == 4:
@@ -2886,11 +3094,17 @@ class FetchData(Thread):
             first_fetch = True
             # We fetch every channel separate
             if (url_type & 3) == 1:
+                maxoffset = {}
                 for retry in (0, 1):
                     channel_cnt = 0
                     for channelid, chanid in self.chanids.items():
                         channel_cnt += 1
                         failure_count = 0
+                        empty_count = 0
+                        fetch_count = 0
+                        if not channelid in maxoffset.keys():
+                            maxoffset[channelid] = None
+
                         if self.quit:
                             return
 
@@ -2903,6 +3117,10 @@ class FetchData(Thread):
 
                             base_count = 0
                             for fset in fetch_range[channelid]:
+                                if fset == maxoffset[channelid]:
+                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_name)))
+                                    break
+
                                 self.current_item_count = self.item_count
                                 page_count = 0
                                 while self.current_item_count == self.item_count:
@@ -2913,6 +3131,7 @@ class FetchData(Thread):
                                     if self.get_loaded('page', channelid, base_count):
                                         page_count += 1
                                         base_count += 1
+                                        fetch_count += 1
                                         continue
 
                                     log_fetch()
@@ -2929,13 +3148,21 @@ class FetchData(Thread):
                                                                                             'ahead': fset[0] +fset[1]-1})
 
                                     if strdata == None:
+                                        if self.page_status == self.functions.page_nodata:
+                                            empty_count += 1
+
                                         if retry == 1:
                                             log_fail()
 
                                         failure_count += 1
                                         base_count += 1
                                         page_count += 1
-                                        if failure_count > 10:
+                                        fetch_count += 1
+                                        if failure_count > max_failure_count:
+                                            break
+
+                                        if empty_count > 1:
+                                            maxoffset[channelid] = fset
                                             break
 
                                         continue
@@ -2944,12 +3171,17 @@ class FetchData(Thread):
                                     self.set_loaded('page', channelid, base_count)
                                     page_count += 1
                                     base_count += 1
+                                    fetch_count += 1
 
                                 self.set_loaded('day', channelid, range(fset[0], fset[0] + fset[1]))
 
                         else:
                             page_idx = 0
                             for offset in fetch_range[channelid]:
+                                if offset == maxoffset[channelid]:
+                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_name)))
+                                    break
+
                                 page_idx += 1
                                 # Check if it is already loaded
                                 if (url_type & 12) == 8:
@@ -2973,10 +3205,17 @@ class FetchData(Thread):
                                                                                         'back':-first_day,
                                                                                         'ahead':min(max_days, last_day)-1})
                                 if strdata == None:
+                                    if self.page_status == self.functions.page_nodata:
+                                        empty_count += 1
+
                                     if retry == 1:
                                         log_fail()
 
                                     failure_count += 1
+                                    if empty_count > 1:
+                                        maxoffset[channelid] = offset
+                                        break
+
                                     continue
 
                                 self.parse_basepage(strdata, {'url_type':url_type, 'offset': offset, 'channelid': channelid})
@@ -3625,13 +3864,6 @@ class FetchData(Thread):
                     self.config.infofiles.addto_detail_list(unicode('Name split = %s + %s' % (pgroup, ptitle)))
 
         # Check the Title rename list
-        if ptitle.lower() in self.config.titlerename:
-            self.config.log(self.config.text('fetch', 38, (ptitle, self.config.titlerename[ptitle.lower()])), 64)
-            if self.config.write_info_files:
-                self.config.infofiles.addto_detail_list(unicode('Title renaming %s to %s\n' % (ptitle, self.config.titlerename[ptitle.lower()])))
-
-            ptitle = self.config.titlerename[ptitle.lower()]
-
         if ptitle.lower() in self.config.titlerename:
             self.config.log(self.config.text('fetch', 38, (ptitle, self.config.titlerename[ptitle.lower()])), 64)
             if self.config.write_info_files:

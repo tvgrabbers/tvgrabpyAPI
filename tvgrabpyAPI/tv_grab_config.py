@@ -111,8 +111,8 @@ import os, re, sys, argparse, traceback, datetime, time, codecs, pickle
 import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
-if dtversion()[1:4] < (1,3,1):
-    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.3.1 or higher\n")
+if dtversion()[1:4] < (1,3,2):
+    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.3.2 or higher\n")
     sys.stderr.write('Goto "https://github.com/tvgrabbers/DataTree/releases/latest"\n')
     sys.exit(2)
 
@@ -125,9 +125,9 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 5
-api_patchdate = u'20161118'
+api_patchdate = u'20161204'
 api_alfa = False
-api_beta = True
+api_beta = False
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
@@ -180,8 +180,8 @@ def grabber_main(config):
             return(config.errorstate)
 
         # produce the results and wrap-up
-        config.write_defaults_list()
         config.xml_output.print_string()
+        config.write_defaults_list()
 
         # Create a report
         end_time = datetime.datetime.now()
@@ -238,6 +238,12 @@ class Configure:
                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2227.1 Safari/537.36',
                'Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0']
 
+        self.configure = False
+        self.cache_id = -99
+        self.json_id = -98
+        self.ttvdb1_id = -11
+        self.ttvdb2_id = -12
+        self.imdb3_id = -13
         # Some debug Flags
         self.test_modus = False
         self.write_info_files = False
@@ -289,6 +295,7 @@ class Configure:
 
         self.opt_dict['config_file'] = u'%s/%s.conf' % (self.opt_dict['xmltv_dir'], self.name)
         self.opt_dict['log_file'] = u'%s/%s.log' % (self.opt_dict['xmltv_dir'], self.name)
+        self.opt_dict['ttvdb_log_file'] = u'%s/ttvdb.log' % (self.opt_dict['xmltv_dir'], )
         self.opt_dict['settings_file'] = u'%s/%s.set' % (self.opt_dict['xmltv_dir'], self.name)
         self.opt_dict['cache_file'] = u'%s/program_cache3' % self.opt_dict['xmltv_dir']
         self.program_cache = None
@@ -299,7 +306,7 @@ class Configure:
         self.opt_dict['language'] = 'en'
         self.opt_dict['nice_time'] = [1, 2]
         self.opt_dict['graphic_frontend'] = False
-        self.opt_dict['log_level'] = 175
+        self.opt_dict['log_level'] = 687
         self.opt_dict['match_log_level'] = 11
         self.opt_dict['mail_log'] = False
         self.opt_dict['mailserver'] = 'localhost'
@@ -358,6 +365,7 @@ class Configure:
         self.chan_count = 0
 
         self.lang = 'en'
+        self.args_lang = None
         self.language = None
         self.texts = None
         self.load_text(self.lang)
@@ -614,11 +622,18 @@ class Configure:
             return(x)
 
         self.only_local_sourcefiles = self.args.only_cache
-        x = self.get_json_datafiles(self.datafile, self.args.configure, True)
+        x = self.get_json_datafiles(self.datafile, self.configure, True)
         if x != None:
             return(x)
 
         self.init_sources()
+        #check for cache
+        if self.validate_option('cache_file') != None:
+            return(2)
+
+        if self.args.clear_cache or self.args.clear_ttvdb:
+            return(0)
+
         # The Source Query options
         for (a, o) in ((self.args.show_sources, 'show_sources'), \
                               (self.args.show_logo_sources, 'show_logo_sources'), \
@@ -627,7 +642,7 @@ class Configure:
                 self.validate_option(o)
                 return(0)
 
-        if self.as_root and not self.args.configure:
+        if self.as_root and not self.configure:
             # Not allowed to run as root except to configure
             self.log([self.text('config', 2)])
             return(0)
@@ -639,13 +654,6 @@ class Configure:
             self.opt_dict['disable_ttvdb'] = self.args.disable_ttvdb
 
         self.validate_option('ttvdb', value = 'v1')
-        #check for cache
-        if self.validate_option('cache_file') != None:
-            return(2)
-
-        if self.args.clear_cache or self.args.clear_ttvdb:
-            return(0)
-
         if self.args.ttvdb_title != None :
             return self.validate_option('check_ttvdb_title')
 
@@ -696,7 +704,7 @@ class Configure:
 
         # Continue validating the settings for the individual channels
         self.validate_option('channel_settings')
-        if not self.args.configure and self.configversion < float('%s.%s' % (self.api_major+2, self.api_minor)):
+        if not self.configure and self.configversion < float('%s.%s' % (self.api_major+2, self.api_minor)):
             # Update to the current version config
             if self.configversion == 1.0 or not os.path.isfile(self.opt_dict['settings_file']):
                 self.write_defaults_list()
@@ -710,7 +718,7 @@ class Configure:
             return(0)
 
         self.write_opts_to_log()
-        if self.args.configure:
+        if self.configure:
             self.args.group_active_channels = self.opt_dict['group_active_channels'] | self.args.group_active_channels
             self.log(self.text('config', 8,(self.opt_dict['config_file'], )))
             if self.get_channels() == 69:
@@ -858,13 +866,19 @@ class Configure:
             self.opt_dict['ttvdb_lookup_level'] = self.max_ttv_level
             series_title = unicode(self.args.ttvdb_title[0], 'utf-8')
             lang = self.xml_language
+            tid = 0
             if len(self.args.ttvdb_title) >1:
-                lang = unicode(self.args.ttvdb_title[1], 'utf-8')[:2]
-                if not lang in self.ttvdb.lang_list:
-                    self.log(self.text('ttvdb', 3, (lang,)))
-                    lang = 'en'
+                for x in self.args.ttvdb_title[1:]:
+                    try:
+                        tid = int(x)
 
-            return self.ttvdb.check_ttvdb_title(series_title, lang)
+                    except:
+                        lang = unicode(x, 'utf-8')[:2]
+                        if not lang in self.ttvdb.lang_list:
+                            self.log(self.text('ttvdb', 3, (lang,)))
+                            lang = 'en'
+
+            return self.ttvdb.check_ttvdb_title(series_title, lang, tid)
 
         elif option == 'disable_source':
             if value in self.channelsource.keys():
@@ -872,7 +886,7 @@ class Configure:
                     if value not in self.opt_dict['disable_source']:
                         self.opt_dict['disable_source'].append(value)
 
-                elif channel.get_source_id(value) != '':
+                else:
                     if value not in channel.opt_dict['disable_source']:
                         channel.opt_dict['disable_source'].append(value)
 
@@ -885,9 +899,8 @@ class Configure:
                     if value not in self.opt_dict['disable_detail_source']:
                         self.opt_dict['disable_detail_source'].append(value)
 
-                elif channel.get_source_id(value) != '':
-                    if value not in channel.opt_dict['disable_detail_source']:
-                        channel.opt_dict['disable_detail_source'].append(value)
+                elif value not in channel.opt_dict['disable_detail_source']:
+                    channel.opt_dict['disable_detail_source'].append(value)
 
         elif option == 'channel_settings':
             for chanid, chanlist in self.combined_channels.items():
@@ -990,14 +1003,15 @@ class Configure:
                 channel.opt_dict['prime_source'] = value
 
         elif option == 'prefered_description':
+
             if channel == None:
                 return
 
             if value == None:
                 value = channel.opt_dict['prefered_description']
 
-            if value in self.channelsource.keys() and channel.get_source_id(value) != '' \
-                and not (value in self.opt_dict['disable_source'] or value in channel.opt_dict['disable_source']):
+            if value in self.channelsource.keys() and \
+                not (value in self.opt_dict['disable_source'] or value in channel.opt_dict['disable_source']):
                     channel.opt_dict['prefered_description'] = value
 
             else:
@@ -1079,7 +1093,7 @@ class Configure:
 
             self.log(self.text('config', 18, (self.opt_dict['config_file'], )))
             # get config if available Overrule if set by commandline
-            if not self.read_config() and (self.test_modus or not self.args.configure):
+            if not self.read_config() and (self.test_modus or not self.configure):
                 self.opt_dict['config_file'] = u'%s/%s.conf' % (self.opt_dict['etc_dir'], self.name)
                 self.log([self.text('config', 19, (self.opt_dict['config_file'], ))])
                 if not self.read_config():
@@ -1125,7 +1139,7 @@ class Configure:
                 self.program_cache.cache_request.put({'task':'clean'})
 
             if self.args.clear_ttvdb:
-                self.program_cache.cache_request.put({'task':'clear', 'table':['ttvdb', 'episodes']})
+                self.program_cache.cache_request.put({'task':'clear', 'table':'cttvdb'})
 
         elif option == 'ttvdb':
             if self.opt_dict['disable_ttvdb'] or not is_data_value([value, 'json file'], self.ttvdb_json, str):
@@ -1135,7 +1149,7 @@ class Configure:
             jfile = data_value([value, 'json file'], self.ttvdb_json, str)
             dversion = data_value([value, 'version'], self.ttvdb_json, int, 0)
             jurl = data_value([value, 'json_url'], self.ttvdb_json, str, self.source_url)
-            sdata = self.fetch_func.get_json_data(jfile, dversion, -1, jurl, self.opt_dict['sources'])
+            sdata = self.fetch_func.get_json_data(jfile, dversion, self.ttvdb1_id, jurl, self.opt_dict['sources'])
             if sdata == None:
                 self.opt_dict['disable_ttvdb'] = True
                 return
@@ -1158,6 +1172,15 @@ class Configure:
             else:
                 self.opt_dict['disable_ttvdb'] = True
                 return
+
+            try:
+                self.IO_func.save_oldfile(self.opt_dict['ttvdb_log_file'])
+                self.ttvdb_log_output = self.IO_func.open_file(self.opt_dict['ttvdb_log_file'], mode = 'a')
+                if self.ttvdb_log_output == None:
+                    self.logging.writelog(self.text('config', 17, (self.opt_dict['ttvdb_log_file'], )), 0,1)
+
+            except:
+                self.logging.writelog(self.text('config', 17, (self.opt_dict['ttvdb_log_file'], )), 0,1)
 
             self.ttvdb.start()
 
@@ -1210,14 +1233,19 @@ class Configure:
     def read_commandline(self):
         """Initiate argparser and read the commandline"""
         index = 0
-        if '-l' in sys.argv:
-            index = sys.argv.index('-l') + 1
+        sarg = []
+        for w in sys.argv:
+            sarg.append(unicode(w, 'utf-8'))
 
-        elif '--language' in sys.argv:
-            index = sys.argv.index('--language') + 1
+        if '-l' in sarg:
+            index = sarg.index('-l') + 1
 
-        if index > 0 and is_data_value(index, sys.argv, str) and sys.argv[index] != 'en' and len(sys.argv[index]) == 2:
-                self.load_text(sys.argv[index].lower())
+        elif '--language' in sarg:
+            index = sarg.index('--language') + 1
+
+        if index > 0 and is_data_value(index, sarg, str) and sarg[index] != 'en' and len(sarg[index]) == 2:
+            self.args_lang = sarg[index].lower()
+            self.load_text(sarg[index].lower())
 
         def check_lang(lang):
             name = 'tv_grab_text'
@@ -1371,7 +1399,7 @@ class Configure:
         # Handle the sys.exit(0) exception on --help more gracefull
         try:
             self.args = parser.parse_args()
-
+            self.configure = self.args.configure
             if self.args.help:
                 parser.print_help()
                 return(0)
@@ -1385,7 +1413,7 @@ class Configure:
         self.config_dict = {1:[], 2:[], 3:[], 9:{}}
         f = self.IO_func.open_file(self.opt_dict['config_file'])
         if f == None:
-            if self.test_modus or not self.args.configure:
+            if self.test_modus or not self.configure:
                 self.log(self.text('config', 31))
             return False
 
@@ -1404,7 +1432,7 @@ class Configure:
             if self.configversion < 2.208:
                 self.log(self.text('config', 32), 0)
                 self.opt_dict['legacy_xmltvids'] = True
-                if not self.args.configure:
+                if not self.configure:
                     self.log(self.text('config', 33), 0)
 
         # Read the configuration into the self.config_dict dictionary
@@ -1471,7 +1499,7 @@ class Configure:
                 # Strip the name from the value
                 a = re.split('=',line)
                 cfg_option = a[0].lower().strip()
-                if cfg_option == 'language' and len(a) == 2 and self.args.language == None:
+                if cfg_option == 'language' and len(a) == 2 and self.args_lang == None:
                     self.load_text(a[1].lower().strip())
 
                 # Boolean Values
@@ -1757,8 +1785,11 @@ class Configure:
                                 # We have to validate this value after reading sourcematching.json
                                 self.channels[chanid].prevalidate_opt[cfg_option] = cfg_value
 
-                            else:
+                            elif cfg_option in ('disable_source', 'disable_detail_source'):
                                 self.validate_option(cfg_option, self.channels[chanid], cfg_value)
+
+                            else:
+                                self.channels[chanid].opt_dict[cfg_option] = cfg_value
 
             except:
                 self.log([self.text('config', 40, (section, self.opt_dict['config_file'], )),'%r\n' % (line), traceback.format_exc()])
@@ -2000,7 +2031,7 @@ class Configure:
                 if not "data_version" in self.opt_dict:
                     self.opt_dict["data_version"] = 0
 
-                if pv < nv or (pv == nv and (self.alfa or self.beta)):
+                if pv < nv or (pv == nv and (self.api_alfa or self.api_beta)):
                     loglist = [self.text('config', 8, type = 'other')]
                     if is_gitdata_value("version_message", str):
                         loglist.append(githubdata["version_message"])
@@ -2716,7 +2747,7 @@ class Configure:
         f.write(u'global_timeout = %s\n' % self.opt_dict['global_timeout'])
         f.write(u'max_simultaneous_fetches = %s\n' % self.opt_dict['max_simultaneous_fetches'])
         f.write(u'\n')
-        for i in range(41, 52):
+        for i in range(41, 53):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3423,17 +3454,17 @@ class Configure:
         fetch_fail = self.fetch_func.get_counter('fail', 'total') \
                             + self.fetch_func.get_counter('failjson', 'total')
         log_array.append( self.text('config', 77, (fetch_count, fetch_fail), type = 'stats'))
-        log_array.append(self.text('config', 78, (self.fetch_func.get_counter('detail', -99), ), type = 'stats'))
-        log_array.append(self.text('config', 79, (self.fetch_func.get_counter('lookup', -1), ), type = 'stats'))
-        log_array.append(self.text('config', 80, (self.fetch_func.get_counter('lookup_fail', -1), ), type = 'stats'))
+        log_array.append(self.text('config', 78, (self.fetch_func.get_counter('detail', self.cache_id), ), type = 'stats'))
+        log_array.append(self.text('config', 79, (self.fetch_func.get_counter('lookup', self.ttvdb1_id), ), type = 'stats'))
+        log_array.append(self.text('config', 80, (self.fetch_func.get_counter('lookup_fail', self.ttvdb1_id), ), type = 'stats'))
         if self.args.only_cache:
             self.log(log_array, 1, 3)
             return
 
         if fetch_count > 0:
             log_array.extend([self.text('config', 81, ((end - start).total_seconds()/fetch_count, ), type = 'stats'), '\n'])
-        log_array.append(self.text('config', 82, (self.fetch_func.get_counter('detail', -1), ), type = 'stats'))
-        log_array.extend([self.text('config', 83, (self.fetch_func.get_counter('fail', -1), ), type = 'stats'), '\n'])
+        log_array.append(self.text('config', 82, (self.fetch_func.get_counter('detail', self.ttvdb1_id), ), type = 'stats'))
+        log_array.extend([self.text('config', 83, (self.fetch_func.get_counter('fail', self.ttvdb1_id), ), type = 'stats'), '\n'])
         for s, source in self.channelsource.items():
             if source.detail_processor:
                 log_array.append(self.text('config', 84, (self.fetch_func.get_counter('base', s), source.source), type = 'stats'))
@@ -3447,6 +3478,20 @@ class Configure:
 
         self.log(log_array, 4, 3)
     # write_statistics()
+
+    def log_queues(self):
+        log_array = ['\n']
+        for source in self.detail_sources:
+            log_array.append(self.text('fetch', 9, \
+                (self.channelsource[source].detail_request.qsize(), self.channelsource[source].source), type = 'stats'))
+
+        if not self.opt_dict['disable_ttvdb']:
+            log_array.append(self.text('fetch', 9, \
+                (self.ttvdb.detail_request.qsize(), 'theTVdb.com'), type = 'stats'))
+
+        return log_array
+
+    # log_queues()
 
     def close(self):
         try:
