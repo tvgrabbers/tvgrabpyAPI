@@ -40,7 +40,7 @@ setup(
     license='GPL',
     url='https://github.com/tvgrabbers/tvgrabpyAPI',
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX',
         'Programming Language :: Python :: 2.7',

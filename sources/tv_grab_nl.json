@@ -1493,7 +1493,8 @@
 		"Cooking":[
 			["magazine", "culinair"],
 			["amusement", "kookprogramma"],
-			["informatief, amusement", "kookprogramma"]],
+			["informatief, amusement", "kookprogramma"],
+			["vrije tijd", "koken"]],
 		"Health":[
 			["magazine", "medisch"],
 			["informatief", "gezondheid"],
