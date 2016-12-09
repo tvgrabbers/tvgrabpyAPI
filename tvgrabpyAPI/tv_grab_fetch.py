@@ -522,6 +522,9 @@ class DataTree(DataTreeShell, Thread):
         return string_items
 
     def add_on_link_functions(self, fid, data = None, default = None):
+        def link_warning(text, severity=4):
+            self.warn('%s on function: "%s"\n   Using link_data: %s' % (text, fid, data), dtLinkWarning, severity, 3)
+
         def split_kommastring(dstring):
 
             return re.sub('\) ([A-Z])', '), \g<1>', \
@@ -833,6 +836,21 @@ class DataTree(DataTreeShell, Thread):
 
                     else:
                         self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' % (self.source.source, data[0][index], data[1][index]))
+
+            # strip data[1] from the start of data[0] if present and make sure it's unicode
+            elif fid == 109:
+                if not is_data_value(0, data, str):
+                    link_warning('Missing or invalid data value 0')
+                    if default != None:
+                        return default
+
+                    return u''
+
+                if is_data_value(1, data, str) and data[0].strip().lower()[:len(data[1])] == data[1].lower():
+                    return unicode(data[0][len(data[1]):]).strip()
+
+                else:
+                    return unicode(data[0]).strip()
 
         except:
             self.config.log([self.config.text('fetch', 11, ('link', fid, self.source.source)), traceback.format_exc()], 1)
@@ -1848,6 +1866,7 @@ class FetchData(Thread):
         # Flag to stop the thread
         self.quit = False
         self.ready = False
+        self.has_started = False
         self.state = 0
         self.active = True
         self.lastrequest = None
@@ -2014,19 +2033,14 @@ class FetchData(Thread):
 
         try:
             self.init_channel_source_ids()
+            self.has_started = True
             # Check if the source is not deactivated and if so set them all loaded
-            if self.proc_id in self.config.opt_dict['disable_source']:
-                self.set_loaded('channel')
-                self.ready = True
-
-            else:
+            if not (self.proc_id in self.config.opt_dict['disable_source'] or self.is_virtual):
                 # Load and proccess al the program pages
-                if self.load_pages() == -1:
-                    self.set_loaded('channel')
-                    self.state = 0
-                    self.ready = True
-                    return
+                self.load_pages()
 
+            self.ready = True
+            self.set_loaded('channel')
             self.state = 0
             if self.config.write_info_files:
                 self.config.infofiles.check_new_channels(self, self.config.source_channels)
@@ -2558,7 +2572,7 @@ class FetchData(Thread):
                     log_array.append(self.config.text('fetch', 8, (offset, self.config.opt_dict['days']), type = 'report'))
 
                 elif (url_type & 12) == 4:
-                    log_array.append(self.config.text('fetch', 9, (self.config.opt_dict['days']), type = 'report'))
+                    log_array.append(self.config.text('fetch', 9, (self.config.opt_dict['days'],), type = 'report'))
 
                 elif (url_type & 12) == 8:
                     log_array.append(self.config.text('fetch', 10, (page_idx, len(fetch_range)), type = 'report'))

@@ -487,10 +487,11 @@ def load_texts():
                 37: u'De titel "%s" wordt gesplitst\n',
                 38: u'Hernoem "%s" naar "%s"\n',
                 39: u'%s gaf twee lege pagina\'s voor zender: %s.\n    We gaan er van uit dat de rest ook leeg is!\n',
-                51: u'Geen data van %s voor zender: %s\n',
+                51: u'Geen data van %s voor zender: %s (%s)\n',
                 52: u'De detail bron: %s is gestopt.\n',
                 53: u'Dus we stoppen met wachten voor de onderhanden detailverzoeken voor %s\n',
-                54: u' en %s'
+                54: u' en %s',
+                55: u'%s is gestopt voordat het de zender data heeft vrijgegeven. We stoppen met wachten!\n'
                 },
             u'report':{
                 1: u'Nu wordt %s(xmltvid=%s%s) van %s opgehaald\n',

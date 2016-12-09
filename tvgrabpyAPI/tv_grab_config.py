@@ -153,6 +153,14 @@ def grabber_main(config):
                 return(x)
 
         # Start the Channel threads, but wait a second so the sources have properly initialized any child channel
+        while True:
+            for source in config.channelsource.values():
+                if not source.has_started:
+                    break
+
+            else:
+                break
+
         time.sleep(1)
         counter = 0
         channel_threads = []
@@ -169,6 +177,7 @@ def grabber_main(config):
             channel_threads.append(channel)
 
         # Synchronize
+        config.logging.check_threats = True
         for index in config.detail_sources:
             config.channelsource[index].join()
 

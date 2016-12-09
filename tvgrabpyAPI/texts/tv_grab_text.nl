@@ -1326,7 +1326,7 @@ sI39
 V%s gaf twee lege pagina's voor zender: %s.\u000a    We gaan er van uit dat de rest ook leeg is!\u000a
 p434
 sI51
-VGeen data van %s voor zender: %s\u000a
+VGeen data van %s voor zender: %s (%s)\u000a
 p435
 sI52
 VDe detail bron: %s is gestopt.\u000a
@@ -1337,163 +1337,166 @@ p437
 sI54
 V en %s
 p438
-sssVIO
+sI55
+V%s is gestopt voordat het de zender data heeft vrijgegeven. We stoppen met wachten!\u000a
 p439
-(dp440
-g265
+sssVIO
+p440
 (dp441
+g265
+(dp442
 I1
 VDe Database wordt gecontroleerd.\u000a
-p442
+p443
 sI2
 VWe wachten op alle overgebleven programma-threads om af te sluiten.\u000a
-p443
+p444
 ssg35
-(dp444
+(dp445
 I1
 VHet bestand: "%s" is niet gevonden of kon niet worden geopend.\u000a
-p445
+p446
 sI2
 V%s is niet met %s gecodeerd.\u000a
-p446
+p447
 sI3
 V%s heeft een ongeldige codering %s.\u000a
-p447
+p448
 sI10
 VWanneer je hulp wilt, voeg dan ajb je configuratie en log bestanden bij!\u000a
-p448
+p449
 sI11
 VEen onverwachte fout is opgetreden in de %s thread:\u000a
-p449
+p450
 sI12
 VEen onverwachte fout is opgetreden:\u000a
-p450
+p451
 sI13
 VEen onbekend log-bericht: %s van type %s\u000a
-p451
+p452
 sI14
 Vbij het verzamelen van de basis-pagina's\u000a
-p452
+p453
 sI15
 VDe huidige detail url is: %s\u000a
-p453
+p454
 sI16
 Vbij het ophalen van de detail pagina's\u000a
-p454
+p455
 sI20
 VEr is geen cache bestand opgegeven. De cache functionaliteit wordt uitgeschakeld!\u000a
-p455
+p456
 sI21
 VDe cache folder is niet toegankelijk. De cache functionaliteit wordt uitgeschakeld!\u000a
-p456
+p457
 sI22
 VEen fout bij het laden van de database: %s.db (mogelijke corruptie)\u000a
-p457
+p458
 sI23
 VWe proberen de backup te laden
-p458
+p459
 sI24
 VHet laden van de database: %s.db is mislukt\u000a
-p459
+p460
 sI25
 VDe cache functionaliteit wordt uitgeschakeld
-p460
+p461
 sI26
 VDatabase Fout\u000a
-p461
-sssVttvdb
 p462
-(dp463
+sssVttvdb
+p463
+(dp464
 Vfrontend
-p464
-(dp465
+p465
+(dp466
 I0
 g34
 sI1
 VDe serie "%s" is al opgeslagen met ttvdbID: %s -> %s
-p466
+p467
 sI2
 V    voor de talen: (%s)\u000a
-p467
+p468
 sI3
 VDe serie "%s" is nog niet bekend!\u000a
-p468
+p469
 sI4
 VEr is geen verwijzing voor %s gevonden op theTVDB.com
-p469
+p470
 sI5
 VtheTVDB Zoek resultaten:
-p470
+p471
 sI6
 VGeef een keuze (eerste nummer, q om te annuleren):
-p471
+p472
 sI7
 VVerwijder het oude record
-p472
+p473
 sI8
 V"%s" met de aliassen "%s" en "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p473
+p474
 sI9
 V"%s" met alias "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p474
+p475
 sI10
 V"%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p475
+p476
 sI11
 V\u000aHet "%s" bestand voor "%s" id = %s met %s episodes wordt opgehaald!\u000a
-p476
+p477
 sI12
 V  Episode %4.0f van %s wordt verwerkt\u000a
-p477
+p478
 sI13
 V    Wil je dit vervangen met %s ("%s")? <y/n>\u000a
-p478
+p479
 sI14
 VHet opgegeven ttvdbid %s is onbekend op theTVDB.com!
-p479
+p480
 sI15
 VDruk ajb op y of op n.
-p480
+p481
 sI16
 V    Wil je het toevoegen als %s ("%s")? <y/n>\u000a
-p481
+p482
 ssg35
-(dp482
+(dp483
 I16
 VEr is geen episode data voor %s gevonden op theTVDB.com\u000a
-p483
+p484
 sI1
 VSorry, thetvdb.com is uitgeschakeld!\u000a
-p484
+p485
 sI2
 VSvp geef een serie titel!\u000a
-p485
+p486
 sI3
 VOngeldige taalcode: "%s" gegeven. "en" wordt gebruikt\u000a
-p486
+p487
 sI11
 VFout bij het ophalen van een ID van theTVdb.com\u000a
-p487
+p488
 sI12
 VFout bij het ophalen van de afleveringen van theTVDB.com\u000a
-p488
+p489
 sI13
 V   Geen ttvdb id voor "%s" op zender %s\u000a
-p489
+p490
 sI14
 Vttvdb verwijzing voor "%s: %s"\u000a
-p490
+p491
 sI15
 Vttvdb mislukking voor "%s: %s" op zender %s\u000a
-p491
-ssssVversion
 p492
+ssssVversion
+p493
 (I1
 I0
 I0
-tp493
+tp494
 sVlanguage
-p494
-VNederlands
 p495
+VNederlands
+p496
 s.

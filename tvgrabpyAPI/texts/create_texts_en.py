@@ -479,10 +479,11 @@ def load_texts():
                 37: u'Splitting title "%s"\n',
                 38: u'Renaming "%s" to "%s"\n',
                 39: u'%s returned two empty pages for channel: %s.\n    We assume the rest to be empty!\n',
-                51: u'No Data from %s for channel: %s\n',
+                51: u'No Data from %s for channel: %s (%s)\n',
                 52: u'Detail sources: %s died.\n',
                 53: u'So we stop waiting for the pending details for channel %s\n',
-                54: u' and %s'
+                54: u' and %s',
+                55: u'%s has died before setting the channel ready. We stop waiting!\n'
                 },
             u'report':{
                 1: u'Now fetching %s(xmltvid=%s%s) from %s\n',

@@ -1324,7 +1324,7 @@ sI39
 V%s returned two empty pages for channel: %s.\u000a    We assume the rest to be empty!\u000a
 p432
 sI51
-VNo Data from %s for channel: %s\u000a
+VNo Data from %s for channel: %s (%s)\u000a
 p433
 sI52
 VDetail sources: %s died.\u000a
@@ -1335,166 +1335,169 @@ p435
 sI54
 V and %s
 p436
-sssVIO
+sI55
+V%s has died before setting the channel ready. We stop waiting!\u000a
 p437
-(dp438
-g263
+sssVIO
+p438
 (dp439
+g263
+(dp440
 I1
 VVerifying the database\u000a
-p440
+p441
 sI2
 VWaiting for all remaining threads to finish\u000a
-p441
+p442
 ssg35
-(dp442
+(dp443
 I1
 VFile: "%s" not found or could not be accessed.\u000a
-p443
+p444
 sI2
 V%s is not encoded in %s.\u000a
-p444
+p445
 sI3
 V%s has invalid encoding %s.\u000a
-p445
+p446
 sI10
 VIf you want assistence, please attach your configuration and log files!\u000a
-p446
+p447
 sI11
 VAn unexpected error has occured in the %s thread:\u000a
-p447
+p448
 sI12
 VAn unexpected error has occured:\u000a
-p448
+p449
 sI13
 VUnrecognized log-message: %s of type %s\u000a
-p449
+p450
 sI14
 VWhile fetching the base pages\u000a
-p450
+p451
 sI15
 VThe current detail url is: %s\u000a
-p451
+p452
 sI16
 VWhile fetching the detail pages\u000a
-p452
+p453
 sI20
 VNo cachefile given. Cache function disabled!\u000a
-p453
+p454
 sI21
 VThe cache directory is not accesible. Cache function disabled!\u000a
-p454
+p455
 sI22
 VError loading the database: %s.db (possibly corrupt)\u000a
-p455
+p456
 sI23
 VTrying to load a backup copy
-p456
+p457
 sI24
 VFailed to load the database: %s.db\u000a
-p457
+p458
 sI25
 VDisableing Cache function
-p458
+p459
 sI26
 VDatabase Error\u000a
-p459
-sssVttvdb
 p460
-(dp461
+sssVttvdb
+p461
+(dp462
 Vfrontend
-p462
-(dp463
+p463
+(dp464
 I0
 g34
 sI1
 VThe series "%s" is already saved under ttvdbID: %s -> %s
-p464
+p465
 sI2
 V    for the languages: (%s)\u000a
-p465
+p466
 sI3
 VThe series "%s" is not jet known!\u000a
-p466
+p467
 sI4
 VNo match for %s is found on theTVDB.com
-p467
+p468
 sI5
 VtheTVDB Search Results:
-p468
+p469
 sI6
 VEnter choice (first number, q to abort):
-p469
+p470
 sI7
 VRemoving old instance
-p470
+p471
 sI8
 VAdding "%s" under aliasses "%s" and "%s" as ttvdbID: %s to the database for lookups!
-p471
+p472
 sI9
 VAdding "%s" under alias "%s" as ttvdbID: %s to the database for lookups!
-p472
+p473
 sI10
 VAdding "%s" ttvdbID: %s to the database for lookups!
-p473
+p474
 sI11
 V\u000aFetching the "%s" file for "%s" id = %s with %s episodes!\u000a
-p474
+p475
 sI12
 V  Processing episode %4.0f of %s\u000a
-p475
+p476
 sI13
 V    Do you want to replace it with %s ("%s")? <y/n>\u000a
-p476
+p477
 sI14
 VThe given ttvdbid %s is unknown on theTVDB.com!
-p477
+p478
 sI15
 VPlease press y or n.
-p478
+p479
 sI16
 V    Do you want to add it as %s ("%s")? <y/n>\u000a
-p479
+p480
 ssg35
-(dp480
+(dp481
 I16
 VNo episode data for %s found on theTVDB.com\u000a
-p481
+p482
 sI1
 VSorry, thetvdb.com lookup is disabled!\u000a
-p482
+p483
 sI2
 VPlease supply a series title!\u000a
-p483
+p484
 sI3
 VInvalid language code: "%s" supplied falling back to "en"\u000a
-p484
+p485
 sI4
 V\u000a
-p485
+p486
 sI11
 VError retreiving an ID from theTVdb.com\u000a
-p486
+p487
 sI12
 VError retreiving episodes from theTVDB.com\u000a
-p487
+p488
 sI13
 V  No ttvdb id for "%s" on channel %s\u000a
-p488
+p489
 sI14
 Vttvdb  lookup for "%s: %s"\u000a
-p489
+p490
 sI15
 Vttvdb failure for "%s: %s" on channel %s\u000a
-p490
-ssssVversion
 p491
+ssssVversion
+p492
 (I1
 I0
 I0
-tp492
+tp493
 sVlanguage
-p493
-VEnglish
 p494
+VEnglish
+p495
 s.

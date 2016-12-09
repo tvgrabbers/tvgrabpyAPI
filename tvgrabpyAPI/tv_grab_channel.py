@@ -30,6 +30,7 @@ class Channel_Config(Thread):
         self.source = None
 
         self.source_data = {}
+        self.has_started = False
         # Flag to indicate all data is processed
         self.ready = False
         # Flags to indicate the data is in
@@ -115,7 +116,6 @@ class Channel_Config(Thread):
 
             return
 
-        self.state = 1
         if not self.is_child:
             self.child_data.set()
 
@@ -132,21 +132,25 @@ class Channel_Config(Thread):
                     self.merge_order.append(ps)
 
             for index in self.config.source_order:
-                if (self.get_source_id(index) != '') and index != ps and not self.get_opt('disable_source', index):
+                if self.get_source_id(index) == '' or self.get_opt('disable_source', index):
+                    # There is no channelid for this source or this source is disabled
+                    self.source_ready(index).set()
+
+                elif index != ps:
                     if self.get_source_id(index) in self.config.channelsource[index].no_genric_matching:
                         last_merge.append(index)
 
                     else:
                         self.merge_order.append(index)
 
-                elif index != ps:
-                    self.source_ready(index).set()
 
             self.merge_order.extend(last_merge)
+            self.has_started = True
             # Retrieve and merge the data from the available sources.
             for index in self.merge_order:
                 channelid = self.get_source_id(index)
                 self.source = index
+                self.state = 1
                 while not self.source_ready(index).is_set():
                     # Wait till the event is set by the source, but check every 5 seconds for an unexpected break or wether the source is still alive
                     self.source_ready(index).wait(5)
@@ -155,7 +159,10 @@ class Channel_Config(Thread):
                         return
 
                     # Check if the source is still alive
-                    if not self.config.channelsource[index].is_alive():
+                    if self.config.channelsource[index].has_started and not self.config.channelsource[index].is_alive():
+                        if not self.config.channelsource[index].is_virtual:
+                            self.config.log(self.config.text('fetch', 55, (self.config.channelsource[index].source,)))
+
                         self.source_ready(index).set()
                         break
 
@@ -165,7 +172,7 @@ class Channel_Config(Thread):
                     if not is_data_value(channelid, self.config.channelsource[index].program_data, list, True):
                         # Nothing was returned. We log unless it is a virtual source
                         if not self.config.channelsource[index].is_virtual:
-                            self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_name)))
+                            self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_name, self.chanid)))
 
                         continue
 
@@ -221,14 +228,17 @@ class Channel_Config(Thread):
                                 return
 
                             # Check if the child is still alive
-                            if not self.config.channels[c['chanid']].is_alive():
+                            if self.config.channels[c['chanid']].has_started and not self.config.channels[c['chanid']].is_alive():
+                                self.config.log(self.config.text('fetch', 55, ('%s (%s)' % \
+                                    (self.config.channels[c['chanid']].chan_name, c['chanid']),)))
                                 break
 
                         self.state = 0
                         self.source = None
                         if not isinstance(self.config.channels[c['chanid']].channel_node, ChannelNode) \
                           or self.config.channels[c['chanid']].channel_node.program_count() == 0:
-                            self.config.log(self.config.text('fetch', 51, (self.config.channels[c['chanid']].chan_name, self.chan_name)))
+                            self.config.log(self.config.text('fetch', 51, ('%s (%s)' % \
+                                (self.config.channels[c['chanid']].chan_name, c['chanid']), self.chan_name, self.chanid)))
 
                         elif self.child_data.is_set():
                             if self.channel_node == None:
@@ -2005,7 +2015,7 @@ class ProgramNode():
                 else:
                     return False
 
-                self.name = data['name']
+                self.name = data['name'].strip()
                 self.match_name = re.sub('[-,. ]', '', self.config.fetch_func.remove_accents(data['name']).lower()).strip()
 
             else:
@@ -2046,7 +2056,7 @@ class ProgramNode():
                 else:
                     return False
 
-                self.name = pnode.name
+                self.name = pnode.name.strip()
                 self.match_name = pnode.match_name
 
             else:
@@ -2701,7 +2711,7 @@ class ProgramNode():
                 if self.is_set('episode title'):
                     self.tdict['episode title'][ 'prime'] = etprime if etprime != 'none' else ''
 
-                self.name = self.tdict['name']['prime']
+                self.name = self.tdict['name']['prime'].strip()
 
             if len(self.tdict['numbering']['values']) >1:
                 pass

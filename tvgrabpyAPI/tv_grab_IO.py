@@ -226,6 +226,7 @@ class Logging(Thread):
         self.log_string = []
         self.all_at_details = False
         self.print_live_threads = False
+        self.check_threats = False
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -326,7 +327,7 @@ class Logging(Thread):
                     last_queuelog = datetime.datetime.now()
                     self.send_queue_log()
 
-                if (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
+                if self.check_threats and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
                     lastcheck = datetime.datetime.now()
                     self.check_thread_sanity()
 
@@ -464,11 +465,9 @@ class Logging(Thread):
                             continue
 
                         sc = self.config.channelsource[s]
-                        if sc.is_alive() and sc.state < 2:
-                            continue
-
-                        # The source already finished the basepages
-                        t.source_data[s].set()
+                        if sc.has_started and ((sc.state & 7) != 1 or not sc.is_alive()):
+                            # The source already finished the basepages
+                            t.source_data[s].set()
 
                     elif state == 2:
                         # Waiting for a child channel source
@@ -477,6 +476,7 @@ class Logging(Thread):
                             continue
 
                         sc = self.config.channels[s]
+                        if sc.has_started and ((sc.state & 7) > 2 or not sc.is_alive()):
                         if sc.is_alive() and sc.state < 3:
                             continue
 
