@@ -124,10 +124,10 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 5
-api_patchdate = u'20161204'
+api_patch = 6
+api_patchdate = u'20161209'
 api_alfa = False
-api_beta = False
+api_beta = True
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
