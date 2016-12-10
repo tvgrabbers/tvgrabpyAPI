@@ -125,7 +125,7 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 6
-api_patchdate = u'20161209'
+api_patchdate = u'20161210'
 api_alfa = False
 api_beta = True
 
@@ -2317,8 +2317,8 @@ class Configure:
             if len(clist) > 0:
                 self.combined_channels[chanid] = clist
 
-        #~ if configuring:
-            #~ self.opt_dict["data_version"] = dv
+        if configuring:
+            self.opt_dict["data_version"] = dv
 
         logarray = []
         self.merge_into = gitdata_dict("merge_into")
