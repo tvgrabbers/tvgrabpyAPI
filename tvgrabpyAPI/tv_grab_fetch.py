@@ -2141,7 +2141,7 @@ class FetchData(Thread):
         self.current_date = datetime.datetime.now(pytz.utc)
         self.current_sitedate = self.config.in_tz(self.current_date, self.site_tz)
         self.current_fetchdate = self.config.in_fetch_tz(self.current_date)
-        self.current_ordinal = self.current_date.toordinal()
+        self.current_ordinal = self.current_fetchdate.toordinal()
         self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'sources': {'sourceid': self.proc_id, 'name': self.source}})
         self.sourcedbdata = self.get_cache_return()
         if self.is_data_value(['alt-url-code']) and self.sourcedbdata['use_alt_url']:

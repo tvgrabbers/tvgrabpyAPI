@@ -477,7 +477,6 @@ class Logging(Thread):
 
                         sc = self.config.channels[s]
                         if sc.has_started and ((sc.state & 7) > 2 or not sc.is_alive()):
-                        if sc.is_alive() and sc.state < 3:
                             continue
 
                         # The child already produced the data
