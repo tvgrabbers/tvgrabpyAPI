@@ -177,7 +177,7 @@ def grabber_main(config):
             channel_threads.append(channel)
 
         # Synchronize
-        config.logging.check_threats = True
+        config.logging.check_threads = True
         for index in config.detail_sources:
             config.channelsource[index].join()
 

@@ -225,8 +225,9 @@ class Logging(Thread):
         self.log_output = None
         self.log_string = []
         self.all_at_details = False
+        self.check_threads = False
         self.print_live_threads = False
-        self.check_threats = False
+        self.log_thread_checks = True
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
@@ -311,7 +312,7 @@ class Logging(Thread):
                             if tn not in ('logging', 'MainThread') and t.is_alive():
                                 alive = True
                                 if self.print_live_threads:
-                                    print '%s is still alive in state %s'.encode('utf-8', 'replace') % (t.name, t.state)
+                                    self.writelog('%s is still alive in state %s' % (t.name, t.state))
 
                                 time.sleep(5)
 
@@ -327,7 +328,7 @@ class Logging(Thread):
                     last_queuelog = datetime.datetime.now()
                     self.send_queue_log()
 
-                if self.check_threats and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
+                if self.check_threads and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
                     lastcheck = datetime.datetime.now()
                     self.check_thread_sanity()
 
@@ -468,6 +469,8 @@ class Logging(Thread):
                         if sc.has_started and ((sc.state & 7) != 1 or not sc.is_alive()):
                             # The source already finished the basepages
                             t.source_data[s].set()
+                            if self.log_thread_checks:
+                                self.writelog('Setting source_data from %s (state %s) ready for %s.\n' % (sc.source, sc.state, t.chan_name))
 
                     elif state == 2:
                         # Waiting for a child channel source
@@ -477,10 +480,10 @@ class Logging(Thread):
 
                         sc = self.config.channels[s]
                         if sc.has_started and ((sc.state & 7) > 2 or not sc.is_alive()):
-                            continue
-
-                        # The child already produced the data
-                        sc.child_data.set()
+                            # The child already produced the data
+                            sc.child_data.set()
+                            if self.log_thread_checks:
+                                self.writelog('Setting child_data from %s (state %s) ready for %s.\n' % (sc.chan_name, sc.state, t.chan_name))
 
                     elif state == 4:
                         # Waiting for details
