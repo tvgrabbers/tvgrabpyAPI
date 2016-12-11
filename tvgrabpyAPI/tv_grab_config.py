@@ -2540,8 +2540,8 @@ class Configure:
 
                 # Move Dutch/Flemish channels from other to main if any sources places them there
                 for k, v in self.override_groups.items():
-                if 'group' in channel and channel['group'] == k and self.channels[chanid].group in v:
-                    self.channels[chanid].group = channel['group']
+                    if 'group' in channel and channel['group'] == k and self.channels[chanid].group in v:
+                        self.channels[chanid].group = channel['group']
 
                 # Set the Icon
                 icon ={}
@@ -3327,9 +3327,10 @@ class Configure:
                     if not (k1 in source.cattrans.keys()):
                         source.cattrans[k1] = {}
                         source.cattrans[k1]['default'] = [self.cattrans_unknown.lower().strip(),'']
-                        source.cattrans[k1][k2] = v
+                        if k2 not in ('',' '):
+                            source.cattrans[k1][k2] = v
 
-                    elif not k2 in source.cattrans[k1]:
+                    elif k2 not in ('',' ') and not k2 in source.cattrans[k1].keys():
                         source.cattrans[k1][k2] = v
 
                 # format for export
