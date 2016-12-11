@@ -227,7 +227,7 @@ class Logging(Thread):
         self.all_at_details = False
         self.check_threads = False
         self.print_live_threads = False
-        self.log_thread_checks = True
+        self.log_thread_checks = False
         try:
             codecs.lookup(locale.getpreferredencoding())
             self.local_encoding = locale.getpreferredencoding()
