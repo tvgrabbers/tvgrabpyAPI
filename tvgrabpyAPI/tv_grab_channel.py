@@ -2956,17 +2956,24 @@ class XMLoutput():
         Add a starttag with optional attributestring, textstring and optionally close it.
         Give it the proper ident.
         '''
+        if isinstance(attribs, dict):
+            a = ''
+            for k, v in attribs.items():
+                a = '%s %s=%s' % (a, k, saxutils.quoteattr(v))
+
+            attribs = a
+
         if attribs != '':
             attribs = ' %s' % attribs
 
         if close and text == '':
-            return u'%s<%s%s/>\n' % (''.rjust(ident), self.xmlescape(tag), self.xmlescape(attribs))
+            return u'%s<%s%s/>\n' % (''.rjust(ident), self.xmlescape(tag), attribs)
 
         if close and text != '':
-            return u'%s<%s%s>%s</%s>\n' % (''.rjust(ident), self.xmlescape(tag), self.xmlescape(attribs), self.xmlescape(text), self.xmlescape(tag))
+            return u'%s<%s%s>%s</%s>\n' % (''.rjust(ident), self.xmlescape(tag), attribs, self.xmlescape(text), self.xmlescape(tag))
 
         else:
-            return u'%s<%s%s>%s\n' % (''.rjust(ident), self.xmlescape(tag), self.xmlescape(attribs), self.xmlescape(text))
+            return u'%s<%s%s>%s\n' % (''.rjust(ident), self.xmlescape(tag), attribs, self.xmlescape(text))
 
     def add_endtag(self, tag, ident = 0):
         '''
@@ -2985,9 +2992,9 @@ class XMLoutput():
             xmltvid = self.config.channels[chanid].xmltvid
 
         self.xml_channels[xmltvid] = []
-        self.xml_channels[xmltvid].append(self.add_starttag('channel', 2, 'id="%s%s"' % \
-            (xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')))
-        self.xml_channels[xmltvid].append(self.add_starttag('display-name', 4, 'lang="%s"' % (self.config.xml_language), \
+        self.xml_channels[xmltvid].append(self.add_starttag('channel', 2, {'id':"%s%s" % \
+            (xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')}))
+        self.xml_channels[xmltvid].append(self.add_starttag('display-name', 4, {'lang': self.config.xml_language}, \
             self.config.channels[chanid].chan_name, True))
         if (self.config.channels[chanid].get_opt('logos')):
             if self.config.channels[chanid].icon_source in self.logo_provider.keys():
@@ -3009,10 +3016,10 @@ class XMLoutput():
                         lname = lname.split('?')[0]
 
                 full_logo_url = lpath + lname
-                self.xml_channels[xmltvid].append(self.add_starttag('icon', 4, 'src="%s"' % full_logo_url, '', True))
+                self.xml_channels[xmltvid].append(self.add_starttag('icon', 4, {'src': full_logo_url}, '', True))
 
             elif self.config.channels[chanid].icon_source == 99:
-                self.xml_channels[xmltvid].append(self.add_starttag('icon', 4, 'src="%s"' % self.config.channels[chanid].icon, '', True))
+                self.xml_channels[xmltvid].append(self.add_starttag('icon', 4, {'src':self.config.channels[chanid].icon}, '', True))
 
         self.xml_channels[xmltvid].append(self.add_endtag('channel', 2))
 
@@ -3033,6 +3040,7 @@ class XMLoutput():
         if not isinstance(channel_node, ChannelNode):
             return
         program = channel_node.first_node
+        lang = {'lang': self.config.xml_language}
         while isinstance(program, ProgramNode):
             if abs(program.stop - program.start) < datetime.timedelta(minutes = 1):
                 self.config.log(self.config.text('merge', 2, ('%s: %s' % (program.get_title(), program.get_start_stop()), channel_node.name)), 4, 3)
@@ -3042,28 +3050,28 @@ class XMLoutput():
             xml = []
 
             # Start/Stop
-            attribs = 'start="%s" stop="%s" channel="%s%s"' % \
-                (self.format_timezone(program.start), self.format_timezone(program.stop), \
-                xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')
-
+            attribs = {'start': self.format_timezone(program.start),
+                            'stop': self.format_timezone(program.stop),
+                            'channel':"%s%s" % \
+            (xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')}
             #~ if 'clumpidx' in program and program['clumpidx'] != '':
                 #~ attribs += 'clumpidx="%s"' % program['clumpidx']
 
             xml.append(self.add_starttag('programme', 2, attribs))
 
             # Title
-            xml.append(self.add_starttag('title', 4, 'lang="%s"' % (self.config.xml_language), program.name, True))
+            xml.append(self.add_starttag('title', 4, lang, program.name, True))
             if program.is_set('originaltitle') and program.is_set('country') :
-                xml.append(self.add_starttag('title', 4, 'lang="%s"' % (program.get_value('country').lower()), program.get_value('originaltitle'), True))
+                xml.append(self.add_starttag('title', 4, {'lang': program.get_value('country').lower()}, program.get_value('originaltitle'), True))
 
             # Subtitle
             if program.is_set('episode title') and program.get_value('episode title') != program.name:
-                xml.append(self.add_starttag('sub-title', 4, 'lang="%s"' % (self.config.xml_language), program.get_value('episode title') ,True))
+                xml.append(self.add_starttag('sub-title', 4, lang, program.get_value('episode title') ,True))
 
             # Description
             desc_line = program.get_description()
             if desc_line != '':
-                xml.append(self.add_starttag('desc', 4, 'lang="%s"' % (self.config.xml_language), desc_line,True))
+                xml.append(self.add_starttag('desc', 4, lang, desc_line,True))
 
             # Process credits section if present.
             # This will generate director/actor/presenter info.
@@ -3075,7 +3083,7 @@ class XMLoutput():
                         for name in rlist:
                             if isinstance(name, dict) and 'name'in name:
                                 if 'role'in name and name['role'] != None:
-                                    xml.append(self.add_starttag((role), 6, 'role="%s"' % (name['role']), name['name'],True))
+                                    xml.append(self.add_starttag((role), 6, {'role': name['role']}, name['name'],True))
 
                                 else:
                                     xml.append(self.add_starttag((role), 6, '', name['name'],True))
@@ -3099,10 +3107,10 @@ class XMLoutput():
                 xml.append(self.add_starttag('category', 4 , '', cat, True))
 
             else:
-                xml.append(self.add_starttag('category', 4, 'lang="%s"' % (self.config.xml_language), cat, True))
+                xml.append(self.add_starttag('category', 4, lang, cat, True))
 
             if program.is_set('subgenre'):
-                xml.append(self.add_starttag('keyword', 4, 'lang="%s"' % (self.config.xml_language), program.get_value('subgenre').capitalize(), True))
+                xml.append(self.add_starttag('keyword', 4, lang, program.get_value('subgenre').capitalize(), True))
 
             # An available url
             if program.is_set('infourl'):
@@ -3194,14 +3202,14 @@ class XMLoutput():
                             kstring += (self.config.rating['unique_codes'][k]['code'] + ': ')
 
                         else:
-                            xml.append(self.add_starttag('rating', 4, 'system="%s"' % (self.config.rating['name'])))
+                            xml.append(self.add_starttag('rating', 4, {'system': self.config.rating['name']}))
                             if self.config.opt_dict['ratingstyle'] == 'long':
                                 xml.append(self.add_starttag('value', 6, '', self.config.rating['unique_codes'][k]['text'], True))
 
                             else:
                                 xml.append(self.add_starttag('value', 6, '', self.config.rating['unique_codes'][k]['code'], True))
 
-                            xml.append(self.add_starttag('icon', 6, 'src="%s"' % self.config.rating['unique_codes'][k]['icon'], '', True))
+                            xml.append(self.add_starttag('icon', 6, {'src': self.config.rating['unique_codes'][k]['icon']}, '', True))
                             xml.append(self.add_endtag('rating', 4))
                         break
 
@@ -3212,18 +3220,18 @@ class XMLoutput():
                             kstring += k.upper()
 
                         else:
-                            xml.append(self.add_starttag('rating', 4, 'system="%s"' % (self.config.rating['name'])))
+                            xml.append(self.add_starttag('rating', 4, {'system': self.config.rating['name']}))
                             if self.config.opt_dict['ratingstyle'] == 'long':
                                 xml.append(self.add_starttag('value', 6, '', self.config.rating['addon_codes'][k]['text'], True))
 
                             else:
                                 xml.append(self.add_starttag('value', 6, '', self.config.rating['addon_codes'][k]['code'], True))
 
-                            xml.append(self.add_starttag('icon', 6, 'src="%s"' % self.config.rating['addon_codes'][k]['icon'], '', True))
+                            xml.append(self.add_starttag('icon', 6, {'src': self.config.rating['addon_codes'][k]['icon']}, '', True))
                             xml.append(self.add_endtag('rating', 4))
 
                 if self.config.opt_dict['ratingstyle'] == 'single' and kstring != '':
-                    xml.append(self.add_starttag('rating', 4, 'system="%s"' % (self.config.rating['name'])))
+                    xml.append(self.add_starttag('rating', 4, {'system': self.config.rating['name']}))
                     xml.append(self.add_starttag('value', 6, '', kstring, True))
                     xml.append(self.add_endtag('rating', 4))
 
