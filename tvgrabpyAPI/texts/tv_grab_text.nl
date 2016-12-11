@@ -244,7 +244,7 @@ sI51
 V# 256 DataTreeGrab Warnings\u000a
 p84
 sI52
-V# 512 Geef elke 5 min de Queue status op het scherm weer
+V# 512 Geef elke 5 min de Queue status op het scherm weer\u000a
 p85
 sI53
 g34

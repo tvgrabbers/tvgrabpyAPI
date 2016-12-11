@@ -251,7 +251,7 @@ def load_texts():
                 49: u'# 64 Toon alle titel hernoemingen\n',
                 50: u'# 128 Toon alle TTVDB mislukkingen\n',
                 51: u'# 256 DataTreeGrab Warnings\n',
-                52: u'# 512 Geef elke 5 min de Queue status op het scherm weer',
+                52: u'# 512 Geef elke 5 min de Queue status op het scherm weer\n',
                 53: u'',
                 61: u'# Welke samenvoeg resultaten gaan naar het log/scherm (heeft log_level 32 nodig)\n',
                 62: u'# 0 = Log niets\n',
