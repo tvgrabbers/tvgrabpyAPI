@@ -197,7 +197,6 @@ def grabber_main(config):
         config.write_statistics(start_time, end_time)
 
     except:
-        #~ traceback.print_exc()
         config.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': None})
         return(99)
 
@@ -697,8 +696,6 @@ class Configure:
                               (self.args.max_overlap, 'max_overlap')):
             if a != None:
                 self.opt_dict[o] = a
-                #~ for chanid in self.channels.keys():
-                    #~ self.channels[chanid].opt_dict[o] = self.opt_dict[o]
 
         self.offset = self.opt_dict['offset']
         for (a, o) in ((self.args.use_utc, 'use_utc'), \
@@ -2054,7 +2051,6 @@ class Configure:
 
             except:
                 log_failure()
-                #~ traceback.print_exc()
                 return 2
 
             # Read in the tables needed for normal grabbing
@@ -2062,7 +2058,6 @@ class Configure:
             self.tuple_values = gitdata_dict("tuple_values")
             self.xml_output.logo_provider = gitdata_dict("logo_provider", 1)
             self.xml_output.logo_source_preference = gitdata_value("logo_source_preference", list)
-            #~ self.ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
             self.ttvdb_ids = gitdata_dict("ttvdb_ids")
             self.coutrytrans = gitdata_dict("coutrytrans")
             self.notitlesplit = gitdata_value("notitlesplit", list)
@@ -2135,7 +2130,6 @@ class Configure:
 
         except:
             log_failure()
-            #~ traceback.print_exc()
             return 2
 
         source_url = gitdata_value("source-url", str)
@@ -2187,10 +2181,6 @@ class Configure:
             if s not in self.sources.keys():
                 del self.prime_source_groups[g]
         logo_provider = gitdata_dict("logo_provider", 1)
-        #~ ttvdb_aliasses = gitdata_dict("ttvdb_aliasses")
-        #~ for k, v in ttvdb_aliasses.items():
-            #~ self.ttvdb_aliasses[k] = v
-
         ttvdb_ids = gitdata_dict("ttvdb_ids")
         for k, v in ttvdb_ids.items():
             self.ttvdb_ids[k] = v
@@ -2210,6 +2200,7 @@ class Configure:
             if g not in self.group_language.keys():
                 self.group_language[g] = 'en'
 
+        self.override_groups = gitdata_dict("override_groups", 1)
         self.ttvdb_langs = gitdata_value("ttvdb langs", list, ['en'])
         self.ttvdb_disabled_groups = gitdata_value("ttvdb disable groups", list)
         self.channel_grouping = gitdata_dict("channel_grouping", 1)
@@ -2547,16 +2538,10 @@ class Configure:
                 if self.channels[chanid].group >= 99:
                     self.channels[chanid].group = data_value('group', channel, int, 99)
 
-                #~ # Move Dutch/Flemish channels from other to main if any sources places them there
-                #~ if 'group' in channel and channel['group'] == 1 and self.channels[chanid].group == 7:
-                    #~ self.channels[chanid].group = channel['group']
-
-                #~ if 'group' in channel and channel['group'] == 2 and self.channels[chanid].group == 9:
-                    #~ self.channels[chanid].group = channel['group']
-
-                #~ # Force Regional radio group
-                #~ if 'group' in channel and channel['group'] == 17 and self.channels[chanid].group == 11:
-                    #~ self.channels[chanid].group = channel['group']
+                # Move Dutch/Flemish channels from other to main if any sources places them there
+                for k, v in self.override_groups.items():
+                if 'group' in channel and channel['group'] == k and self.channels[chanid].group in v:
+                    self.channels[chanid].group = channel['group']
 
                 # Set the Icon
                 icon ={}

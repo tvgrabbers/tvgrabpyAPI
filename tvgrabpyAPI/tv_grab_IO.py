@@ -1274,7 +1274,7 @@ class ProgramCache(Thread):
 
                 self.check_indexes(t)
 
-            #~ # We add if not jet there some defaults
+            # We add if not jet there some defaults
             for a, t in self.config.ttvdb_ids.items():
                 if self.query_id('ttvdb_alias', {'alias': a}) == None:
                     self.add('ttvdb_alias', {'tid': t['tid'], 'name': t['name'], 'alias': a, 'tdate': None})
@@ -1314,7 +1314,6 @@ class ProgramCache(Thread):
 
             else:
                 pkstring += u"))"
-            #~ pkstring += u") ON CONFLICT REPLACE)" if self.get_iprop(table, 'PRIMARY', "replace on conflict", False) else u"))"
 
         create_string = u"%s%s"% (create_string, pkstring)
         if self.get_tprop(table, "no rowid") and sqlite3.sqlite_version_info >= (3, 8, 2):
@@ -3159,7 +3158,6 @@ class test_Source():
                               (self.args.chanid, 'chanid')):
             if a != None:
                 self.opt_dict[o] = a
-                              #~ (self.args.chanid, 'chanid'), \
 
         if not os.path.exists(self.opt_dict['report_dir']):
             os.mkdir(self.opt_dict['report_dir'])

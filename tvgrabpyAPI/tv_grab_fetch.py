@@ -566,7 +566,6 @@ class DataTree(DataTreeShell, Thread):
                     return default
 
                 # It's a single list of dicts created through the "name" keyword
-                #~ if len(data) == 1 and isinstance(data[0], (list,tuple)):
                 if is_data_value(0, data, list) and (len(data) == 1 or is_data_value(1, data, int)):
                     modus = data_value(1, data, int, 0)
                     for item in data[0]:
@@ -604,7 +603,6 @@ class DataTree(DataTreeShell, Thread):
                 # data[0] is a list of list of names
                 # data[1] is a list of roles
                 # data[2] is an optional list of characters matching data[0]
-                #~ if isinstance(data[1], (list,tuple)):
                 if is_data_value(0, data, list) and is_data_value(1, data, list):
                     for item in range(len(data[0])):
                         if item >= len(data[1]):
@@ -734,7 +732,6 @@ class DataTree(DataTreeShell, Thread):
                             self.config.infofiles.addto_detail_list(u'new %s rating => %s' % (self.source.source, data[0]))
 
                 elif is_data_value(0, data, list):
-                #~ elif isinstance(data[0], (list,tuple)):
                     unique_added = False
                     for item in data[0]:
                         if item.lower() in self.source.rating.keys():
@@ -854,7 +851,6 @@ class DataTree(DataTreeShell, Thread):
 
         except:
             self.config.log([self.config.text('fetch', 11, ('link', fid, self.source.source)), traceback.format_exc()], 1)
-            #~ self.config.log([self.config.text('fetch', 11, ('link', fid, source.source)), self.config.text('fetch', 12, (data,)), traceback.format_exc()], 1)
             return default
 
 # end DataTree()
@@ -1427,12 +1423,6 @@ class theTVDB_v1(Thread):
                 # There already is a lookup underway
                 return {'state': 3, 'tid': tid}
 
-            #~ # Check if this tid is already known
-            #~ if not new_fetch:
-                #~ data = self.get_cache_return('ttvdbname', tid)
-                #~ if len(data) > 0:
-
-
             self.queried_titles[name.lower()] = tid
             if series_name.lower() != name.lower():
                 self.queried_titles[series_name.lower()] = tid
@@ -1513,7 +1503,7 @@ class theTVDB_v1(Thread):
                     self.episodetrees[queryid].join()
 
             else:
-                #~ dtree.searchtree.show_progress = False
+                dtree.searchtree.show_progress = False
                 if keycount > 500:
                     # It's to big so we stay with only the English data collection in the background
                     dtree.export = True
@@ -1921,7 +1911,6 @@ class FetchData(Thread):
             self.is_virtual = self.data_value('is_virtual', bool, default = False)
             self.config.sourceid_by_name[self.source] = self.proc_id
             self.detail_processor = self.data_value('detail_processor', bool, default = False)
-            #~ self.detail_check = self.data_value('detail_check', str)
             self.without_full_timings = self.data_value('without-full-timings', bool, default = False)
             self.no_genric_matching = self.data_value('no_genric_matching', list)
             self.empty_channels = self.data_value('empty_channels', list)
@@ -2404,7 +2393,6 @@ class FetchData(Thread):
                 self.datatrees[ptype].init_data_def(self.data_value("base", dict))
 
             if len(self.data) == 0:
-                #~ update_counter(ptype)
                 self.page_status = self.functions.page_nodata
                 return None
 
@@ -3663,9 +3651,6 @@ class FetchData(Thread):
                 tdict[k] = v
 
             elif k in self.config.key_values['int'] and isinstance(v, int):
-                #~ if k == 'episode' and v > 1000:
-                    #~ continue
-
                 tdict[k] = v
 
             elif k in self.config.key_values['list'] and isinstance(v, list) and len(v) > 0:

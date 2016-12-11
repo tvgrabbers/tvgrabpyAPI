@@ -530,9 +530,10 @@ class Channel_Config(Thread):
 
         if self.get_opt('fast'):
             log_array.append(self.config.text('fetch', 3, (self.functions.get_counter('fail', self.config.cache_id, self.chanid), ), type = 'stats'))
-            log_array.append('\n')
-            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
-            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+            if not self.get_opt('disable_ttvdb'):
+                log_array.append('\n')
+                log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('detail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+                log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
 
         else:
             fail = 0
@@ -543,14 +544,12 @@ class Channel_Config(Thread):
 
             log_array.append(self.config.text('fetch', 7, (fail,), type = 'stats'))
             log_array.append(self.config.text('fetch', 8, (self.functions.get_counter('fail', self.config.cache_id, self.chanid), ), type = 'stats'))
-            log_array.append('\n')
-            log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
-            log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+            if not self.get_opt('disable_ttvdb'):
+                log_array.append('\n')
+                log_array.append(self.config.text('fetch', 4, (self.functions.get_counter('lookup', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+                log_array.append(self.config.text('fetch', 5, (self.functions.get_counter('lookup_fail', self.config.ttvdb1_id, self.chanid), ), type = 'stats'))
+
             log_array.extend(self.config.log_queues())
-            #~ log_array.append('\n')
-            #~ for source in self.config.detail_sources:
-                #~ log_array.append(self.config.text('fetch', 9, \
-                    #~ (self.config.channelsource[source].detail_request.qsize(), self.config.channelsource[source].source), type = 'stats'))
 
         log_array.append('\n')
         self.config.log(log_array, 4, 3)
@@ -2278,9 +2277,6 @@ class ProgramNode():
                         if key in ('season', 'episode', 'episodecount') and self.tdict[key]['values'][index] == 0:
                             continue
 
-                        #~ if key in ('title', 'genres') and self.tdict[key]['values'][index][1] == '':
-                            #~ continue
-
                         vcnt= self.tdict[key]['rank'][index]
                         self.tdict[key]['prime'] = self.tdict[key]['values'][index]
 
@@ -2715,7 +2711,6 @@ class ProgramNode():
 
             if len(self.tdict['numbering']['values']) >1:
                 pass
-                #~ print '  ', self.tdict['numbering']['sources']
 
     def get_value(self, key, source = None):
         if key == 'start':
@@ -3054,9 +3049,6 @@ class XMLoutput():
                             'stop': self.format_timezone(program.stop),
                             'channel':"%s%s" % \
             (xmltvid, self.config.channels[chanid].get_opt('compat') and self.config.compat_text or '')}
-            #~ if 'clumpidx' in program and program['clumpidx'] != '':
-                #~ attribs += 'clumpidx="%s"' % program['clumpidx']
-
             xml.append(self.add_starttag('programme', 2, attribs))
 
             # Title
