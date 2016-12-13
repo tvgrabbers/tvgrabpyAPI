@@ -9,10 +9,10 @@
 		"the line-up)",
 		"program_version and version_message are here."],
 	"data_version":1,
-	"program_version":[3,0,0],
-	"version_message":["\n",
-		"\n",
-		"\n"],
+	"program_version":[3,0,1],
+	"version_message":["This version contains several fixes to issues found since the last release\n",
+		"    like a potential race condition between the sources and the channels\n",
+		"    that can result in no data for some channels.\n"],
 	"warning_message":{
 		"1":["Nickelodeon and Spike changes, use the following:\n",
 			"         0-89: Nickelodeon 24/7.\n",
@@ -59,7 +59,7 @@
 			"cattransid":null},
 		"3":{
 			"json file":"source-tvgids.nl",
-			"version":8,
+			"version":9,
 			"cattrans type":1,
 			"cattransid":0},
 		"1":{
@@ -481,6 +481,7 @@
 			"0-464": "728310311078",
 			"0-465": "660696615380",
 			"0-466": "675503655063",
+			"0-467": "763312167446",
 			"1-e-entertainment": "728310311071",
 			"1-journaal-24": "24443943149",
 			"1-politiek-24": "24443943152",
