@@ -279,7 +279,7 @@ class Configure:
         self.opt_dict['etc_dir'] = u'/etc/tvgrabpyAPI'
         self.opt_dict['var_dir'] = u'/var/lib/tvgrabpyAPI'
         self.api_source_url = 'https://raw.githubusercontent.com/tvgrabbers/sourcematching/master'
-        self.api_update_url = 'https://github.com/tvgrabbers/tvgrabnlpy/releases/latest'
+        self.api_update_url = 'https://github.com/tvgrabbers/tvgrabpyAPI/releases/latest'
         self.source_url = self.api_source_url
         self.update_url = self.api_update_url
         self.source_dir =  self.opt_dict['var_dir']
