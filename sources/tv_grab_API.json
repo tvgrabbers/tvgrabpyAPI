@@ -2,9 +2,9 @@
 	"This is generic data used by the tv_grab_API and gets downloaded on every run"],
 	"data_version":0,
 	"program_version":[1,0,6],
-	"version_message":["\n",
-		"\n",
-		"\n"],
+	"version_message":["This version contains several fixes to issues found since the last release\n",
+		"    like a potential race condition between the sources and the channels\n",
+		"    that can result in no data for some channels.\n"],
 	"data_keys":{
 		"text":["prog_ID","gen_ID","detail_url","group name","name","episode title",
 			"originaltitle","description","genre","subgenre","org-genre","org-subgenre",

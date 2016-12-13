@@ -10,9 +10,9 @@
 		"program_version and version_message are here."],
 	"data_version":1,
 	"program_version":[3,0,1],
-	"version_message":["This version contains several fixes to issues found since the last release\n",
-		"    like a potential race condition between the sources and the channels\n",
-		"    that can result in no data for some channels.\n"],
+	"version_message":["\n",
+		"\n",
+		"\n"],
 	"warning_message":{
 		"1":["Nickelodeon and Spike changes, use the following:\n",
 			"         0-89: Nickelodeon 24/7.\n",
