@@ -3120,7 +3120,7 @@ class FetchData(Thread):
                             base_count = 0
                             for fset in fetch_range[channelid]:
                                 if fset == maxoffset[channelid]:
-                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_name)))
+                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
                                     break
 
                                 self.current_item_count = self.item_count
@@ -3181,7 +3181,7 @@ class FetchData(Thread):
                             page_idx = 0
                             for offset in fetch_range[channelid]:
                                 if offset == maxoffset[channelid]:
-                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_name)))
+                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
                                     break
 
                                 page_idx += 1
@@ -3410,7 +3410,7 @@ class FetchData(Thread):
                     # Give it the Unknown Program Title Name, to mark it as a groupslot.
                     program['name'] = self.config.unknown_program_title
                     tdict['is_gap'] = True
-                    #~ self.config.log(self.config.text('fetch', 33, (program['prog_ID'], self.config.channels[chanid].chan_name, self.source)))
+                    #~ self.config.log(self.config.text('fetch', 33, (program['prog_ID'], self.config.channels[chanid].chan_descr, self.source)))
                     #~ continue
 
                 if 'stop-time' in program.keys() and isinstance(program['stop-time'], datetime.datetime):

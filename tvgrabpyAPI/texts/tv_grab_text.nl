@@ -1326,7 +1326,7 @@ sI39
 V%s gaf twee lege pagina's voor zender: %s.\u000a    We gaan er van uit dat de rest ook leeg is!\u000a
 p434
 sI51
-VGeen data van %s voor zender: %s (%s)\u000a
+VGeen data van %s voor zender: %s\u000a
 p435
 sI52
 VDe detail bron: %s is gestopt.\u000a
@@ -1338,7 +1338,7 @@ sI54
 V en %s
 p438
 sI55
-V%s is gestopt voordat het de zender data heeft vrijgegeven. We stoppen met wachten!\u000a
+V%s is gestopt voordat het de %s zender data heeft vrijgegeven. We stoppen met wachten!\u000a
 p439
 sssVIO
 p440

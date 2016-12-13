@@ -56,6 +56,7 @@ class Channel_Config(Thread):
         self.chanid = chanid
         self.xmltvid = self.chanid
         self.chan_name = name
+        self.chan_descr ='%s (%s)' % (self.chan_name, self.chanid)
         self.group = group
         self.source_id = {}
         self.icon_source = -1
@@ -159,9 +160,9 @@ class Channel_Config(Thread):
                         return
 
                     # Check if the source is still alive
-                    if self.config.channelsource[index].has_started and not self.config.channelsource[index].is_alive():
+                    if self.config.channelsource[index].has_started and not self.config.channelsource[index].is_alive() and not self.source_ready(index).is_set():
                         if not self.config.channelsource[index].is_virtual:
-                            self.config.log(self.config.text('fetch', 55, (self.config.channelsource[index].source,)))
+                            self.config.log(self.config.text('fetch', 55, (self.config.channelsource[index].source, self.chan_descr)))
 
                         self.source_ready(index).set()
                         break
@@ -172,7 +173,7 @@ class Channel_Config(Thread):
                     if not is_data_value(channelid, self.config.channelsource[index].program_data, list, True):
                         # Nothing was returned. We log unless it is a virtual source
                         if not self.config.channelsource[index].is_virtual:
-                            self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_name, self.chanid)))
+                            self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_descr)))
 
                         continue
 
@@ -220,31 +221,29 @@ class Channel_Config(Thread):
                     if c['chanid'] in self.config.channels:
                         self.source = c['chanid']
                         self.state = 2
-                        while not self.config.channels[c['chanid']].child_data.is_set():
+                        child_chan = self.config.channels[c['chanid']]
+                        while not child_chan.child_data.is_set():
                             # Wait till the event is set by the child, but check every 5 seconds for an unexpected break or wether the child is still alive
-                            self.config.channels[c['chanid']].child_data.wait(5)
+                            child_chan.child_data.wait(5)
                             if self.quit:
                                 self.ready = True
                                 return
 
                             # Check if the child is still alive
-                            if self.config.channels[c['chanid']].has_started and not self.config.channels[c['chanid']].is_alive():
-                                self.config.log(self.config.text('fetch', 55, ('%s (%s)' % \
-                                    (self.config.channels[c['chanid']].chan_name, c['chanid']),)))
+                            if child_chan.has_started and not child_chan.is_alive() and not child_chan.child_data.is_set():
+                                self.config.log(self.config.text('fetch', 55, (child_chan.chan_descr, self.chan_descr)))
                                 break
 
                         self.state = 0
                         self.source = None
-                        if not isinstance(self.config.channels[c['chanid']].channel_node, ChannelNode) \
-                          or self.config.channels[c['chanid']].channel_node.program_count() == 0:
-                            self.config.log(self.config.text('fetch', 51, ('%s (%s)' % \
-                                (self.config.channels[c['chanid']].chan_name, c['chanid']), self.chan_name, self.chanid)))
+                        if not isinstance(child_chan.channel_node, ChannelNode) or child_chan.channel_node.program_count() == 0:
+                            self.config.log(self.config.text('fetch', 51, (child_chan.chan_descr, self.chan_descr)))
 
                         elif self.child_data.is_set():
                             if self.channel_node == None:
                                 self.channel_node = ChannelNode(self.config, self)
 
-                            self.channel_node.merge_channel(self.config.channels[c['chanid']].channel_node)
+                            self.channel_node.merge_channel(child_chan.channel_node)
 
             # It's a not active child so we let the parent handle the rest
             if self.is_child and not self.active:
@@ -333,7 +332,7 @@ class Channel_Config(Thread):
 
                             log_string += self.config.text('fetch', 54, ('theTVdb.com', ))
 
-                        self.config.log([self.config.text('fetch', 52, (log_string, )), self.config.text('fetch', 53, (self.chan_name,))])
+                        self.config.log([self.config.text('fetch', 52, (log_string, )), self.config.text('fetch', 53, (self.chan_descr,))])
                         break
 
                 self.state = 0
@@ -367,7 +366,7 @@ class Channel_Config(Thread):
             self.ready = True
 
         except:
-            self.config.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': self.chan_name})
+            self.config.logging.log_queue.put({'fatal': [traceback.format_exc(), '\n'], 'name': self.chan_descr})
             self.ready = True
             return(97)
 
@@ -632,6 +631,7 @@ class ChannelNode():
             self.chanid = channel_config.chanid
             self.max_overlap = datetime.timedelta(minutes = self.channel_config.get_opt('max_overlap'))
             self.name = channel_config.chan_name
+            self.chan_descr = channel_config.chan_descr
             self.shortname = self.name[:15] if len(self.name) > 15 else self.name
             self.current_stats = {}
             self.adding_stats = {}

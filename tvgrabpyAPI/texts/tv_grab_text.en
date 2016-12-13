@@ -1324,7 +1324,7 @@ sI39
 V%s returned two empty pages for channel: %s.\u000a    We assume the rest to be empty!\u000a
 p432
 sI51
-VNo Data from %s for channel: %s (%s)\u000a
+VNo Data from %s for channel: %s\u000a
 p433
 sI52
 VDetail sources: %s died.\u000a
@@ -1336,7 +1336,7 @@ sI54
 V and %s
 p436
 sI55
-V%s has died before setting the channel ready. We stop waiting!\u000a
+V%s has died before setting the %s channel ready. We stop waiting!\u000a
 p437
 sssVIO
 p438

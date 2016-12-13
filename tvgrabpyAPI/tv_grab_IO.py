@@ -470,7 +470,7 @@ class Logging(Thread):
                             # The source already finished the basepages
                             t.source_data[s].set()
                             if self.log_thread_checks:
-                                self.writelog('Setting source_data from %s (state %s) ready for %s.\n' % (sc.source, sc.state, t.chan_name))
+                                self.writelog('Setting source_data from %s (state %s) ready for %s.\n' % (sc.source, sc.state, t.chan_descr))
 
                     elif state == 2:
                         # Waiting for a child channel source
@@ -483,7 +483,7 @@ class Logging(Thread):
                             # The child already produced the data
                             sc.child_data.set()
                             if self.log_thread_checks:
-                                self.writelog('Setting child_data from %s (state %s) ready for %s.\n' % (sc.chan_name, sc.state, t.chan_name))
+                                self.writelog('Setting child_data from %s (state %s) ready for %s.\n' % (sc.chan_descr, sc.state, t.chan_descr))
 
                     elif state == 4:
                         # Waiting for details
@@ -522,7 +522,7 @@ class Logging(Thread):
                                     d += self.functions.get_counter('queue', s, t.chanid)
 
                                 if d > 0:
-                                    self.config.log([self.config.text('fetch', 21, (channel.chan_name, d)), self.config.text('fetch', 22)])
+                                    self.config.log([self.config.text('fetch', 21, (channel.chan_descr, d)), self.config.text('fetch', 22)])
 
                                 t.detail_data.set()
                                 t.detail_return.put('last_detail')
@@ -550,7 +550,7 @@ class Logging(Thread):
                                 if t.state == 5:
                                     ttvdb_cnt += t.ttvdb_counter
                                     if t.ttvdb_counter > 0:
-                                        self.config.log([self.config.text('fetch', 20, (channel.chan_name, t.ttvdb_counter)), self.config.text('fetch', 22)])
+                                        self.config.log([self.config.text('fetch', 20, (channel.chan_descr, t.ttvdb_counter)), self.config.text('fetch', 22)])
 
                                     t.ttvdb_counter = 0
 
