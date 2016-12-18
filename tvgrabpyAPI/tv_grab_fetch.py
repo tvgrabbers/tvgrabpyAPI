@@ -2626,6 +2626,9 @@ class FetchData(Thread):
 
         def do_final_processing(channelid):
             chanid = self.chanids[channelid]
+            if not chanid in self.config.channelprogram_rename.keys():
+                self.config.channelprogram_rename[chanid] = {}
+
             good_programs = []
             pgaps = []
             # Some sanity Check
@@ -2640,6 +2643,10 @@ class FetchData(Thread):
                         continue
 
                     p['name'] = unicode(p['name'])
+                    pname = p['name'].lower().strip()
+                    if pname in self.config.channelprogram_rename[chanid].keys():
+                        p['name'] = self.config.channelprogram_rename[chanid][pname]
+
                     if index < plen - 1:
                         p2 = self.program_data[channelid][index + 1]
                         if 'stop from length' in p.keys() and p['stop from length'] and not 'last of the page' in p.keys():
