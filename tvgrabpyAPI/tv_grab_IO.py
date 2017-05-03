@@ -3275,8 +3275,8 @@ class test_Source():
 
     def open_output(self):
         if self.opt_dict['test_modus'] in ('channels', 'base', 'detail'):
-            self.source.test_output = self.config.IO_func.open_file('%s/dataparse.txt' % (self.opt_dict['report_dir']), 'w')
-            self.source.roottree_output = self.config.IO_func.open_file('%s/datatree.txt' % (self.opt_dict['report_dir']), 'w')
+            self.source.test_output = self.config.IO_func.open_file('%s/%s' % (self.opt_dict['report_dir'], self.opt_dict['parse_file']), 'w')
+            self.source.roottree_output = self.config.IO_func.open_file('%s/%s' % (self.opt_dict['report_dir'], self.opt_dict['tree_file']), 'w')
             self.source.raw_output = self.config.IO_func.open_file('%s/rawdata.txt' % (self.opt_dict['report_dir']), 'w')
             self.source.data_output = self.config.IO_func.open_file('%s/output.txt' % (self.opt_dict['report_dir']), 'w')
 

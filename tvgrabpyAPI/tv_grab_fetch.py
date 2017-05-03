@@ -51,6 +51,17 @@ class Functions():
         self.page_data_error = 6
         self.page_wrongdate = 7
         self.page_unknownfail = 9
+        self.page_status={}
+        self.page_status[0]='page_OK'
+        self.page_status[1]='page_urlerror'
+        self.page_status[2]='page_timeout'
+        self.page_status[3]='page_httperror'
+        self.page_status[4]='page_jsonerror'
+        self.page_status[5]='page_nodata'
+        self.page_status[6]='page_data_error'
+        self.page_status[7]='page_wrongdate'
+        self.page_status[8]=''
+        self.page_status[9]='page_unknownfail'
 
     # end init()
 
@@ -2308,7 +2319,12 @@ class FetchData(Thread):
             if self.page_status != self.functions.page_OK:
                 update_counter(ptype)
                 if self.print_roottree:
-                    self.roottree_output.write(u'No Data\n')
+                    if self.page_status > self.functions.page_nodata:
+                        self.roottree_output.write(u'Data Error. Status = %s\n' % self.functions.page_status[self.page_status])
+                        self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
+
+                    else:
+                        self.roottree_output.write(u'No Data. Status = %s\n' % self.functions.page_status[self.page_status])
 
                 return None
 
@@ -3425,12 +3441,17 @@ class FetchData(Thread):
                 elif "alt-stop-time" in program and isinstance(program["alt-stop-time"], datetime.datetime):
                     tdict['stop-time'] = program["alt-stop-time"]
 
+                plength = None
+                if "length" in program and isinstance(program['length'], datetime.timedelta):
+                    plength = program["length"]
+                    tdict["length"] = plength
+
                 if 'start-time' in program.keys() and isinstance(program['start-time'], datetime.datetime):
                     tdict['start-time'] = program['start-time']
                 elif "alt-start-time" in program and isinstance(program["alt-start-time"], datetime.datetime):
                     tdict['start-time'] = program["alt-start-time"]
-                elif "length" in program and isinstance(program['length'], datetime.timedelta) and 'stop-time' in tdict.keys():
-                    tdict['start-time'] = tdict['stop-time'] - program['length']
+                elif plength != None and 'stop-time' in tdict.keys():
+                    tdict['start-time'] = tdict['stop-time'] - plength
                     tdict['start from length'] = True
                 elif self.data_value(["base", "data-format"], str) == "text/html" and isinstance(last_stop, datetime.datetime):
                     tdict['start-time'] = last_stop
@@ -3439,9 +3460,13 @@ class FetchData(Thread):
                     self.config.log(self.config.text('fetch', 34, (program['name'], tdict['channel'], self.source)))
                     continue
 
-                if not 'stop-time' in tdict.keys() and "length" in program and isinstance(program['length'], datetime.timedelta):
-                    tdict['stop-time'] = tdict['start-time'] + program['length']
-                    tdict['stop from length'] = True
+                if plength != None:
+                    if not 'stop-time' in tdict.keys():
+                        tdict['stop-time'] = tdict['start-time'] + plength
+                        tdict['stop from length'] = True
+
+                    else:
+                        alength = tdict['stop-time'] - tdict['start-time']
 
                 if self.without_full_timings and self.data_value(["base", "data-format"], str) == "text/html":
                     # This is to catch the midnight date change for HTML pages with just start(stop) times without date
@@ -3467,7 +3492,7 @@ class FetchData(Thread):
 
                 # Add any known value that does not need further processing
                 for k, v in self.process_values(program).items():
-                    if k in ('channelid', 'video', 'start-time', 'stop-time'):
+                    if k in ('channelid', 'video', 'start-time', 'stop-time', 'length'):
                         continue
 
                     tdict[k] = v
