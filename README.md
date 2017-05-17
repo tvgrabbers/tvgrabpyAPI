@@ -4,7 +4,7 @@
 
 ## New [DataTreeGrab module v1.3.3](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.3)
 
-With a significant speed increase of in my use case 30% (from 68 minutes to 48 minutes)
+**17-05-2017** With a significant speed increase of in my use case 30% (from 68 minutes to 48 minutes)
 
 ### Summary
 
