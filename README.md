@@ -2,6 +2,10 @@
 
 [Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
 
+## New [DataTreeGrab module v1.3.3](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.3)
+
+With a significant speed increase of in my use case 30% (from 68 minutes to 48 minutes)
+
 ### Summary
 
 tv_grab_py_API is an API for creating xmltv compatible tv grabbers. It is the succesor of [tv_grab_nl_py version 2.2](https://github.com/tvgrabbers/tvgrabnlpy) making all of its functionallity available to the rest of the world.
