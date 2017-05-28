@@ -954,7 +954,7 @@ class ChannelNode():
             pn = ProgramNode(self, source, pp)
             if pn.is_valid:
                 pn.is_groupslot = is_groupslot
-                pn.scandate = programs[index]['scandate']
+                pn.scandate = pp['scandate']
                 dlist.append(pn)
 
         def check_gaps(pp, is_groupslot = False):
