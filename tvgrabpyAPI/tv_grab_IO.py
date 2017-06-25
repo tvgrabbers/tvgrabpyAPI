@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 # from __future__ import print_function
 
 import codecs, locale, re, os, sys, io, shutil, difflib
-import traceback, smtplib, sqlite3, argparse
+import traceback, smtplib, sqlite3, argparse, pickle
 import datetime, time, calendar, pytz
 import tv_grab_channel, tv_grab_config, test_json_struct
 from threading import Thread, Lock, RLock
@@ -15,7 +15,7 @@ from Queue import Queue, Empty
 from copy import deepcopy, copy
 from email.mime.text import MIMEText
 from xml.sax import saxutils
-from DataTreeGrab import is_data_value, data_value
+from DataTreeGrab import *
 
 
 class Functions():
@@ -90,6 +90,8 @@ class Functions():
         try:
             if 'b' in mode:
                 file_handler =  io.open(file_name, mode = mode)
+            elif encoding == 'pickle':
+                file_handler =  open(file_name, mode = mode)
             else:
                 file_handler =  io.open(file_name, mode = mode, encoding = encoding)
 
@@ -103,6 +105,19 @@ class Functions():
         return file_handler
 
     # end open_file ()
+
+    def read_pickle(self, file_name):
+        #~ return pickle.load(open(file_name, 'r'))
+        fle = self.open_file(file_name, 'r', 'pickle')
+        if fle != None:
+            data = pickle.load(fle)
+            fle.close()
+            return data
+
+        else:
+            return None
+
+    # end read_pickle()
 
     def get_line(self, fle, byteline, isremark = False, encoding = None):
         """
@@ -2583,14 +2598,14 @@ class InfoFiles():
             source.get_channels()
 
         for channelid, channel in source.all_channels.items():
-            if not (channelid in source_channels[source.proc_id].values() or channelid in source.empty_channels):
+            if not (channelid in source_channels[source.proc_id].values() or channelid in source.source_data['empty_channels']):
                 self.lineup_changes.append( u'New channel on %s => %s (%s)\n' % (source.source, channelid, channel['name']))
 
         for chanid, channelid in source_channels[source.proc_id].items():
-            if not (channelid in source.all_channels.keys() or channelid in source.empty_channels):
+            if not (channelid in source.all_channels.keys() or channelid in source.source_data['empty_channels']):
                 self.lineup_changes.append( u'Removed channel on %s => %s (%s)\n' % (source.source, channelid, chanid))
 
-        for channelid in source.empty_channels:
+        for channelid in source.source_data['empty_channels']:
             if not channelid in source.all_channels.keys():
                 self.lineup_changes.append( u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source))
 
@@ -2834,6 +2849,153 @@ class InfoFiles():
 
 # end InfoFiles
 
+class DD_Convert(DataDef_Convert):
+    def convert_sourcefile(self, source_data, cattrans_type = None, file_name = None):
+        with self.tree_lock:
+            self.empty_values = data_value("empty-values", source_data, list, [None, ""])
+            self.csource_data = {}
+            self.csource_data["dtversion"] = self.dtversion()
+            self.csource_data["file-name"] = data_value("file-name", source_data, str)
+            self.csource_data["name"] = data_value("name", source_data, str)
+            self.csource_data["language"] = data_value("language", source_data, str, "en")
+            try:
+                self.csource_data["site-timezone"] = data_value("site-timezone", source_data, str, "utc")
+                self.csource_data["site-tz"] = pytz.timezone(self.csource_data['site-timezone'])
+
+            except:
+                self.csource_data["site-timezone"] = "utc"
+                self.csource_data["site-tz"] = pytz.utc
+
+            self.csource_data["version"] = data_value("version", source_data, int)
+            self.csource_data["api-version"] = data_value("api-version", source_data, list, [1,0,0])
+            if self.csource_data["name"] in ("thetvdb.v1", "thetvdb.v2"):
+                for ptype in ("seriesid", "last_updated", "seriesname", "episodes", \
+                    "login", "error", "episodecount", "episode"):
+                    if is_data_value([ptype, "data", "key-path"], source_data, list) or \
+                      is_data_value([ptype, "data", "iter"], source_data, list):
+                        source_data[ptype]["timezone"] = self.csource_data["site-timezone"]
+                        self.convert_data_def(data_value(ptype, source_data, dict), include_url = True, include_links = True)
+                        self.csource_data[ptype] = deepcopy(self.cdata_def)
+                        self.csource_data[ptype]["empty-values"] = self.empty_values
+                        self.csource_data[ptype]["default-item-count"]
+                        self.csource_data["lang-list"] = data_value("lang-list", source_data, list)
+
+            else:
+                self.csource_data["detail_processor"] = data_value("detail_processor", source_data, bool, False)
+                self.csource_data["is_virtual"] = data_value("is_virtual", source_data, bool, False)
+                self.csource_data["without-full-timings"] = data_value("without-full-timings", source_data, bool, False)
+                self.csource_data["night-date-switch"] = data_value("night-date-switch", source_data, int, 0)
+                self.csource_data["no_genric_matching"] = data_value("no_genric_matching", source_data, list)
+                self.csource_data["empty_channels"] = data_value("empty_channels", source_data, list)
+                self.csource_data["alt-channels"] = data_value("alt-channels", source_data, dict)
+                self.csource_data["rating"] = data_value("rating", source_data, dict)
+                self.csource_data["cattrans"] = {}
+                if cattrans_type == 1:
+                    for k, v in data_value("cattrans", source_data, dict).items():
+                        k = k.lower().strip()
+                        if isinstance(v, dict):
+                            self.csource_data["cattrans"][k] ={}
+                            for k2, gg in v.items():
+                                k2 = k2.lower().strip()
+                                self.csource_data["cattrans"][k][k2] = gg
+
+                elif cattrans_type == 2:
+                    self.csource_data["cattrans_keywords"] = data_value("cattrans_keywords", source_data, dict)
+                    for k, v in data_value("cattrans", source_data, dict).items():
+                        k = k.lower().strip()
+                        self.csource_data["cattrans"][k] = v
+
+                self.csource_data["channel_list"] = {}
+                self.csource_data["channel_defs"] = []
+                self.csource_data["base_defs"] = []
+                self.csource_data["detail_defs"] = []
+                self.csource_data["alt-url-code"] = data_value(['alt-url-code'], source_data, int, None)
+                self.csource_data["base"] = {}
+                self.csource_data["base"]["value-filters"] = {}
+                for ptype, ddl in (("channels", "channel_defs"),
+                        ("base-channels", "channel_defs"),
+                        ("base", "base_defs"),
+                        ("detail", "detail_defs"),
+                        ("detail2", "detail_defs")):
+                    if is_data_value([ptype, "data", "key-path"], source_data, list) or \
+                      is_data_value([ptype, "data", "iter"], source_data, list):
+                        source_data[ptype]["timezone"] = self.csource_data["site-timezone"]
+                        self.convert_data_def(data_value(ptype, source_data, dict), include_url = True, include_links = True)
+                        self.csource_data[ptype] = deepcopy(self.cdata_def)
+                        self.csource_data[ddl].append(ptype)
+                        self.csource_data[ptype]["empty-values"] = self.empty_values
+                        del self.csource_data[ptype]["default-item-count"]
+                        self.csource_data[ptype]['normal-url'] = self.csource_data[ptype]['url']
+                        if is_data_value(['alt-url-code'], source_data) and is_data_value([ptype, 'alt-url'], source_data):
+                            self.csource_data[ptype]['alt-url'] = source_data[ptype]['alt-url']
+
+                        else:
+                            self.csource_data[ptype]['alt-url'] = self.csource_data[ptype]['url']
+
+                        if ptype == "base":
+                            self.csource_data[ptype]["max days"] = data_value([ptype, "max days"], source_data, int, 14)
+                            if self.cdata_def["url-type"] & 3 == 3:
+                                self.csource_data[ptype]["url-channel-groups"] = \
+                                    data_value([ptype, "url-channel-groups"], source_data, list)
+
+                            if self.cdata_def["url-type"] & 12 == 0:
+                                self.csource_data[ptype]["data"]["today"] = \
+                                    self.convert_path_def(data_value([ptype, "data", "today"], \
+                                    source_data, list), self.ddtype, dtpathWithValue)
+
+                                self.csource_data[ptype]["data"]["date-check"] = \
+                                    self.convert_path_def(data_value([ptype, "data", "date-check"], \
+                                    source_data, list), self.ddtype, dtpathWithValue)
+
+                            if self.cdata_def["url-type"] & 12 == 8:
+                                self.csource_data[ptype]["url-date-range"] = \
+                                    data_value([ptype, "url-date-range"], source_data, (str, int))
+
+                                self.csource_data[ptype]["url-date-week-start"] = \
+                                    data_value([ptype, "url-date-week-start"], source_data, (str, int))
+
+                            if self.cdata_def["url-type"] & 12 == 12:
+                                self.csource_data[ptype]["default-item-count"] = \
+                                    data_value([ptype, "default-item-count"], source_data, int, 0)
+
+                                self.csource_data[ptype]["data"]["total-item-count"] = \
+                                    self.convert_path_def(data_value([ptype, "data", "total-item-count"], \
+                                    source_data, list), self.ddtype, dtpathWithValue)
+
+                                self.csource_data[ptype]["data"]["page-item-count"] = \
+                                    self.convert_path_def(data_value([ptype, "data", "page-item-count"], \
+                                    source_data, list), self.ddtype, dtpathWithValue)
+
+                        if ptype  in ("detail", "detail2"):
+                            self.csource_data[ptype]["provides"] = data_value([ptype, "provides"], source_data, list)
+
+                if not "channels" in self.csource_data["channel_defs"] and is_data_value(["channels", "data"], source_data, dict):
+                    self.csource_data["channel_list"] = data_value(["channels", "data"], source_data, dict)
+                    self.csource_data["channel_defs"].append("channel_list")
+
+                if len(self.csource_data["detail_defs"]) == 0:
+                    self.csource_data["detail_processor"] = False
+
+            if file_name != None:
+                try:
+                    pickle.dump(self.csource_data, open(file_name, 'w'), 2)
+
+                except:
+                    pass
+
+    def write_csource_data(self, output = sys.stdout, data = None):
+        with self.tree_lock:
+            if data == None:
+                data = self.csource_data
+
+            if output in (sys.stdout, sys.stderr):
+                output.write(data.encode('utf-8', 'replace'))
+
+            else:
+                output.write(u'%s\n' % data)
+
+# end DD_Convert()
+
 class test_JSON(test_json_struct.test_JSON):
     def __init__(self, name = 'tv_grab_test'):
         self.config = tv_grab_config.Configure(name)
@@ -2874,6 +3036,7 @@ class test_JSON(test_json_struct.test_JSON):
 class test_Source():
     def __init__(self):
         self.test_json = test_JSON('tv_grab_test')
+        self.conv_dd = DD_Convert()
         self.config = self.test_json.config
         self.cache_return = Queue()
         self.no_config = True
@@ -2941,6 +3104,16 @@ class test_Source():
                     self.config.log('Errors were encountered. See %s/test-%s.txt\n' % (self.opt_dict['report_dir'], source_name))
                     return(x)
 
+                # Load the source
+                self.source = self.config.init_sources(sid)
+                self.config.channelsource[sid] = self.source
+                self.source.print_tags = True
+                self.source.print_roottree = True
+                self.source.show_parsing = True
+                self.source.print_searchtree = True
+                self.source.show_result = True
+                self.source.init_channel_source_ids()
+                self.test_conversion()
                 if self.opt_dict['test_modus'] == 'channels':
                     if not 'channels' in self.test_json.found_data_defs and not 'base-channels' in self.test_json.found_data_defs:
                         self.config.log('There is no "channels" or "base-channels" data_def found in %s to test with!\n' % source_name)
@@ -2964,15 +3137,6 @@ class test_Source():
                     self.config.log('Please select a valid test_modus!')
                     return(0)
 
-                # Load the source
-                self.source = self.config.init_sources(sid)
-                self.config.channelsource[sid] = self.source
-                #~ self.source.print_tags = True
-                self.source.print_roottree = True
-                self.source.show_parsing = True
-                self.source.print_searchtree = True
-                self.source.show_result = True
-
             self.open_output()
             if self.opt_dict['test_modus'] == 'channels':
                 return self.test_channels()
@@ -2994,6 +3158,19 @@ class test_Source():
         except:
             self.config.log(['Some unexpected error ocurred.\n', traceback.format_exc()])
             return(1)
+
+    def test_conversion(self):
+        fle = self.config.IO_func.open_file('%s/conv-%s.txt' % \
+            (self.opt_dict['report_dir'], self.source.name), 'w')
+
+        if is_data_value("dtversion", self.source.source_data, tuple):
+            self.conv_dd.write_csource_data(fle, self.source.source_data)
+
+        else:
+            self.conv_dd.convert_sourcefile(self.source.source_data, self.source.cattrans_type)
+            self.conv_dd.write_csource_data(fle)
+
+        fle.close()
 
     def test_channels(self):
         self.source.init_channel_source_ids()
@@ -3056,11 +3233,13 @@ class test_Source():
             counter = 0
             detailids = {}
             for p in self.source.data:
-                for k in ('detail_url', 'name', 'start-time'):
+                for k in ('detail_url', 'name', 'start-time', 'channelid'):
                     if not k in p.keys():
                         break
 
                 else:
+                    if p['channelid'] != self.config.channels[self.opt_dict['chanid']].get_source_id(self.source.proc_id):
+                        continue
                     counter += 1
                     detailids[counter] = p['detail_url']
                     self.config.log('[%3.0f] %s: %s\n' % (counter, self.config.in_output_tz(p['start-time']).strftime('%d %b %H:%M'), p['name']), log_target = 1)

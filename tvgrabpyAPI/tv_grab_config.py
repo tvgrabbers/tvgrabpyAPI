@@ -107,12 +107,12 @@
 from __future__ import unicode_literals
 # from __future__ import print_function
 
-import os, re, sys, argparse, traceback, datetime, time, codecs, pickle
+import os, re, sys, argparse, traceback, datetime, time, codecs
 import tv_grab_IO, tv_grab_fetch, tv_grab_channel, pytz
 from DataTreeGrab import is_data_value, data_value
 from DataTreeGrab import version as dtversion
-if dtversion()[1:4] < (1,3,2):
-    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.3.2 or higher\n")
+if dtversion()[1:4] < (1,4,0):
+    sys.stderr.write("tv_grab_py_API requires DataTreeGrab 1.4.0 or higher\n")
     sys.stderr.write('Goto "https://github.com/tvgrabbers/DataTree/releases/latest"\n')
     sys.exit(2)
 
@@ -124,10 +124,10 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 6
-api_patchdate = u'20161213'
+api_patch = 7
+api_patchdate = u'20170625'
 api_alfa = False
-api_beta = False
+api_beta = True
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
@@ -463,8 +463,8 @@ class Configure:
         name = 'tv_grab_text'
         fle_name = u'%s/texts/%s.%s' % (self.api_path, name, lang)
         try:
-            if os.path.isfile(fle_name):
-                fle_dict = pickle.load(open(fle_name,'r'))
+            fle_dict = self.IO_func.read_pickle(fle_name)
+            if fle_dict != None:
                 self.lang = fle_dict['lang']
                 self.language = fle_dict['language']
                 if self.texts == None:
@@ -509,7 +509,7 @@ class Configure:
                 return self.texts['config']['error'][0] % (module, type, tno)
 
         except:
-            return u'xError creating message text! (%s, %s: %s)\n' % (module, type, tno)
+            return u'Error creating message text! (%s, %s: %s)\n' % (module, type, tno)
     # end text()
 
     def in_tz(self, cdate, tz = None):
@@ -563,21 +563,12 @@ class Configure:
 
             dversion = data_value('version', v, int, 0)
             jurl = data_value("json_url", v, str, self.source_url)
-            sdata = self.fetch_func.get_json_data(v['json file'], dversion, sid, jurl, self.opt_dict['sources'])
+            ctype = data_value('cattrans type', v, int, None)
+            sdata = self.fetch_func.get_json_data(v['json file'], dversion, sid, jurl, self.opt_dict['sources'], ctype)
             if sdata == None:
                 disable_source(sid)
                 return
 
-            raw_json = self.fetch_func.raw_json[v['json file']]
-            if raw_json != '' and not self.test_modus:
-                dv = sdata["version"] if ("version" in sdata and isinstance(sdata["version"], int)) else 0
-                # The file was downloaded. Check if it is already saved locally
-                fle = self.IO_func.open_file('%s/%s.%s.json' % (self.opt_dict['sources'], v['json file'], dv), 'w', 'utf-8')
-                if fle != None:
-                    fle.write(raw_json)
-                    fle.close()
-
-            ctype = data_value('cattrans type', v, int, None)
             self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, sdata, ctype)
             if ctype == None:
                 return self.channelsource[sid]
@@ -945,7 +936,8 @@ class Configure:
             if channel.group in self.prime_source_groups and channel.get_source_id(self.prime_source_groups[channel.group]) != '' \
                 and not (self.prime_source_groups[channel.group] in self.opt_dict['disable_source'] \
                 or self.prime_source_groups[channel.group] in channel.opt_dict['disable_source'] \
-                or channel.get_source_id(self.prime_source_groups[channel.group]) in self.channelsource[self.prime_source_groups[channel.group]].no_genric_matching):
+                or channel.get_source_id(self.prime_source_groups[channel.group]) \
+                in self.channelsource[self.prime_source_groups[channel.group]].source_data['no_genric_matching']):
                     # A group default in sourcematching.json
                     def_value = self.prime_source_groups[channel.group]
 
@@ -953,7 +945,7 @@ class Configure:
                 for s in self.prime_source_order:
                     if channel.get_source_id(s) != '' \
                         and not (s in self.opt_dict['disable_source'] or s in channel.opt_dict['disable_source'] \
-                        or channel.get_source_id(s) in self.channelsource[s].no_genric_matching):
+                        or channel.get_source_id(s) in self.channelsource[s].source_data['no_genric_matching']):
                             # The first available not set in no_genric_matching
                             def_value = s
                             break
@@ -986,7 +978,7 @@ class Configure:
 
             if self.opt_dict['always_use_json']:
                 for v in (json_value, custom_value):
-                    if v != None and not channel.get_source_id(v) in self.channelsource[v].no_genric_matching:
+                    if v != None and not channel.get_source_id(v) in self.channelsource[v].source_data['no_genric_matching']:
                         value = v
                         break
 
@@ -995,7 +987,7 @@ class Configure:
 
             else:
                 for v in (custom_value, json_value):
-                    if v != None and not channel.get_source_id(v) in self.channelsource[v].no_genric_matching:
+                    if v != None and not channel.get_source_id(v) in self.channelsource[v].source_data['no_genric_matching']:
                         value = v
                         break
 
@@ -1159,15 +1151,6 @@ class Configure:
             if sdata == None:
                 self.opt_dict['disable_ttvdb'] = True
                 return
-
-            raw_json = self.fetch_func.raw_json[jfile]
-            if raw_json != '':
-                dv = data_value(["version"], sdata, int, 0)
-                # The file was downloaded. Check if it is already saved locally
-                fle = self.IO_func.open_file('%s/%s.%s.json' % (self.opt_dict['sources'], jfile, dv), 'w', 'utf-8')
-                if fle != None:
-                    fle.write(raw_json)
-                    fle.close()
 
             if value == 'v1':
                 self.ttvdb = tv_grab_fetch.theTVDB_v1(self, sdata)
@@ -1925,14 +1908,14 @@ class Configure:
                     if len(tg) == 1:
                         tg.append('')
 
-                    if not gg[0].lower().strip() in self.channelsource[source].cattrans.keys():
-                        self.channelsource[source].cattrans[gg[0].lower().strip()] = {}
+                    if not gg[0].lower().strip() in self.channelsource[source].source_data['cattrans'].keys():
+                        self.channelsource[source].source_data['cattrans'][gg[0].lower().strip()] = {}
 
                     if len(gg) < 2 or gg[1].strip() == '':
-                        self.channelsource[source].cattrans[gg[0].lower().strip()]['default'] = tg
+                        self.channelsource[source].source_data['cattrans'][gg[0].lower().strip()]['default'] = tg
 
                     else:
-                        self.channelsource[source].cattrans[gg[0].lower().strip()][gg[1].lower().strip()] = tg
+                        self.channelsource[source].source_data['cattrans'][gg[0].lower().strip()][gg[1].lower().strip()] = tg
 
                 elif type in self.cattranstype[2].keys():
                     # split of the translation (if present) or supply an empty one
@@ -1943,7 +1926,7 @@ class Configure:
                     if len(a[1]) > 20:
                         continue
 
-                    self.channelsource[source].cattrans[a[1].lower().strip()] = a[0].strip()
+                    self.channelsource[source].source_data['cattrans'][a[1].lower().strip()] = a[0].strip()
 
             except:
                 self.log([self.text('config', 41, (self.opt_dict['settings_file'], )), traceback.format_exc()])
@@ -2491,7 +2474,7 @@ class Configure:
                 reverse_channels[index][v]['chan_scid'] = unicode(i[1])
 
             for chan_scid in self.channelsource[index].all_channels.keys():
-                if not (chan_scid in self.channelsource[index].empty_channels):
+                if not (chan_scid in self.channelsource[index].source_data['empty_channels']):
                     source_keys[index].append(chan_scid)
 
         for index in self.sourceid_order:
@@ -2513,12 +2496,12 @@ class Configure:
                     chan['hd'] = True
 
                 # These channels are for show, but we like the icons from source 2, 6 and 5!
-                if (chan_scid in self.channelsource[index].empty_channels):
+                if (chan_scid in self.channelsource[index].source_data['empty_channels']):
                     chan['scid'] = ''
                     chan_scid = ''
 
                 if not chanid in self.channels:
-                    if (chan_scid in self.channelsource[index].empty_channels):
+                    if (chan_scid in self.channelsource[index].source_data['empty_channels']):
                         continue
 
                     self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, chan['name'] )
@@ -3324,19 +3307,19 @@ class Configure:
 
                 # remove doubles and sort
                 for (k1, k2), v in source.new_cattrans.items():
-                    if not (k1 in source.cattrans.keys()):
-                        source.cattrans[k1] = {}
-                        source.cattrans[k1]['default'] = [self.cattrans_unknown.lower().strip(),'']
+                    if not (k1 in source.source_data['cattrans'].keys()):
+                        source.source_data['cattrans'][k1] = {}
+                        source.source_data['cattrans'][k1]['default'] = [self.cattrans_unknown.lower().strip(),'']
                         if k2 not in ('',' '):
-                            source.cattrans[k1][k2] = v
+                            source.source_data['cattrans'][k1][k2] = v
 
-                    elif k2 not in ('',' ') and not k2 in source.cattrans[k1].keys():
-                        source.cattrans[k1][k2] = v
+                    elif k2 not in ('',' ') and not k2 in source.source_data['cattrans'][k1].keys():
+                        source.source_data['cattrans'][k1][k2] = v
 
                 # format for export
                 gl1 = []
                 gl = []
-                for k, v in source.cattrans.items():
+                for k, v in source.source_data['cattrans'].items():
 
                     for sg in v.keys():
                         if sg == 'default':
@@ -3376,11 +3359,11 @@ class Configure:
                 gs = set(source.new_cattrans)
                 gl = []
                 for k, v in gs:
-                    if not (k in source.cattrans):
-                        source.cattrans[k] = v
+                    if not (k in source.source_data['cattrans']):
+                        source.source_data['cattrans'][k] = v
 
                 # format for export
-                for k, v in source.cattrans.iteritems():
+                for k, v in source.source_data['cattrans'].iteritems():
                     gl.append(u'%s = %s\n' % (v, k))
                 gl.sort()
 

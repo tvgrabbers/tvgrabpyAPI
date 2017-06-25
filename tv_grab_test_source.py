@@ -8,8 +8,8 @@ from __future__ import unicode_literals
 # Modules we need
 #~ import sys, locale, traceback, json
 #~ import time, datetime, pytz
-import tvgrabpyAPI, sys, locale
-from tvgrabpyAPI import tv_grab_IO
+import sys, locale
+from tvgrabpyAPI import tv_grab_IO, version
 
 try:
     unichr(42)
@@ -26,8 +26,8 @@ if sys.version_info[:2] >= (3,0):
 
 locale.setlocale(locale.LC_ALL, '')
 
-if tvgrabpyAPI.version()[1:4] < (1,0,4):
-    sys.stderr.write("tv_grab_nl3_py requires tv_grab_nl_API 1.0.0 or higher\n")
+if version()[1:4] < (1,0,7):
+    sys.stderr.write("tv_grab_nl3_py requires tv_grab_nl_API 1.0.7 or higher\n")
     sys.exit(2)
 
 if __name__ == '__main__':

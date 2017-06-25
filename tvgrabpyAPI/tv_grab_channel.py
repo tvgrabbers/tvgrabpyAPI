@@ -126,7 +126,7 @@ class Channel_Config(Thread):
             last_merge = []
             ps = self.opt_dict['prime_source']
             if (self.get_source_id(ps) != '') and not self.get_opt('disable_source', ps):
-                if self.get_source_id(ps) in self.config.channelsource[ps].no_genric_matching:
+                if self.get_source_id(ps) in self.config.channelsource[ps].source_data['no_genric_matching']:
                     last_merge.append(ps)
 
                 else:
@@ -138,7 +138,7 @@ class Channel_Config(Thread):
                     self.source_ready(index).set()
 
                 elif index != ps:
-                    if self.get_source_id(index) in self.config.channelsource[index].no_genric_matching:
+                    if self.get_source_id(index) in self.config.channelsource[index].source_data['no_genric_matching']:
                         last_merge.append(index)
 
                     else:
