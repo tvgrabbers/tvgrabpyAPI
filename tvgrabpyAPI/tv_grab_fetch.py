@@ -2309,7 +2309,6 @@ class FetchData(Thread):
 
             if self.print_roottree:
                 self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
-                #~ self.print_roottree = False
 
             # We reset the timezone
             self.datatrees[ptype].set_timezone()
@@ -3168,6 +3167,7 @@ class FetchData(Thread):
 
                                         if empty_count > 1:
                                             maxoffset[channelid] = fset
+                                            self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
                                             break
 
                                         continue
@@ -3219,6 +3219,7 @@ class FetchData(Thread):
                                     failure_count += 1
                                     if empty_count > 1:
                                         maxoffset[channelid] = offset
+                                        self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
                                         break
 
                                     continue
@@ -3487,22 +3488,7 @@ class FetchData(Thread):
                 #~ self.config.genre_list.append((tdict['genre'].lower(), tdict['subgenre'].lower()))
 
                 if self.show_result:
-                    start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
-                    if self.data_output == sys.stdout:
-                        self.data_output.write('%s: %s' % (channelid, start))
-                        for k, v in tdict.items():
-                            if isinstance(v, (str, unicode)):
-                                self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
-                            else:
-                                self.data_output.write('        %s: %s' % (k, v))
-
-                    else:
-                        self.data_output.write('%s: %s\n' % (channelid, start))
-                        for k, v in tdict.items():
-                            if isinstance(v, (str, unicode)):
-                                self.data_output.write('        %s: "%s"\n' % (k, v))
-                            else:
-                                self.data_output.write('        %s: %s\n' % (k, v))
+                    self.print_result(tdict, channelid)
 
             if len(channelids) > 0:
                 for channelid in channelids:
@@ -3534,42 +3520,44 @@ class FetchData(Thread):
 
         tdict = self.process_values(values)
         if self.show_result:
-            start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
-            channelid = ''
-            if self.data_output == sys.stdout:
-                self.data_output.write('%s: %s' % (pdata['channelid'], start))
-                for k, v in tdict.items():
-                    if isinstance(v, (str, unicode)):
-                        self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
-                    else:
-                        self.data_output.write('        %s: %s' % (k, v))
-
-            else:
-                self.data_output.write('%s: %s\n' % (pdata['channelid'], start))
-                for k, v in tdict.items():
-                    if isinstance(v, (str, unicode)):
-                        self.data_output.write('        %s: "%s"\n' % (k, v))
-
-                    elif isinstance(v, list):
-                        vv = '        %s: ' % (k, )
-                        for item in v:
-                            if isinstance(item, (str, unicode)):
-                                vv = '%s"%s"\n                ' % (vv, item)
-
-                            elif k == 'actor' and isinstance(item, dict):
-                                vv = '%s%s: "%s"\n                ' % (vv, item['role'], item['name'])
-
-                            else:
-                                vv = '%s%s\n                ' % (vv, item)
-
-                        self.data_output.write(vv.rstrip(' '))
-
-                    else:
-                        self.data_output.write('        %s: %s\n' % (k, v))
+            self.print_result(tdict, pdata['channelid'])
 
         return tdict
 
     # Helper functions
+    def print_result(self, tdict, channelid):
+        start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
+        if self.data_output == sys.stdout:
+            self.data_output.write('%s: %s' % (channelid, start))
+            for k, v in tdict.items():
+                if isinstance(v, (str, unicode)):
+                    self.data_output.write('        %s: "%s"'.encode('utf-8', 'replace') % (k, v))
+                else:
+                    self.data_output.write('        %s: %s' % (k, v))
+
+        else:
+            self.data_output.write('%s: %s\n' % (channelid, start))
+            for k, v in tdict.items():
+                if isinstance(v, (str, unicode)):
+                    self.data_output.write('        %s: "%s"\n' % (k, v))
+
+                elif isinstance(v, list):
+                    vv = '        %s: ' % (k, )
+                    for item in v:
+                        if isinstance(item, (str, unicode)):
+                            vv = '%s"%s"\n                ' % (vv, item)
+
+                        elif k == 'actor' and isinstance(item, dict):
+                            vv = '%s%s: "%s"\n                ' % (vv, item['role'], item['name'])
+
+                        else:
+                            vv = '%s%s\n                ' % (vv, item)
+
+                    self.data_output.write(vv.rstrip(' '))
+
+                else:
+                    self.data_output.write('        %s: %s\n' % (k, v))
+
     def get_cache_return(self):
         if self.quit:
             return -1
