@@ -2590,8 +2590,9 @@ class InfoFiles():
             self.fetch_list = self.functions.open_file(self.config.opt_dict['xmltv_dir'] + '/fetched-programs3','w')
             self.raw_output =  self.functions.open_file(self.config.opt_dict['xmltv_dir']+'/raw_output3', 'w')
 
-    def check_new_channels(self, source, source_channels,):
-        if not self.write_info_files or self.config.opt_dict['only_cache']:
+    def check_new_channels(self, source, source_channels):
+        if not self.write_info_files or self.config.opt_dict['only_cache'] \
+          or source.proc_id in self.config.opt_dict['disable_source']:
             return
 
         if source.all_channels == {}:
@@ -3107,7 +3108,7 @@ class test_Source():
                 # Load the source
                 self.source = self.config.init_sources(sid)
                 self.config.channelsource[sid] = self.source
-                self.source.print_tags = True
+                #~ self.source.print_tags = True
                 self.source.print_roottree = True
                 self.source.show_parsing = True
                 self.source.print_searchtree = True

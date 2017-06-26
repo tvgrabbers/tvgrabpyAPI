@@ -590,7 +590,7 @@ class Configure:
             for s, v in self.sources.items():
                 init_source(s, v)
 
-        elif sid in self.sources.keys():
+        elif sid in self.available_sources:
             return init_source(sid, self.sources[sid])
 
     # end init_sources()
@@ -878,7 +878,7 @@ class Configure:
             return self.ttvdb.check_ttvdb_title(series_title, lang, tid)
 
         elif option == 'disable_source':
-            if value in self.channelsource.keys():
+            if value in self.available_sources:
                 if channel == None:
                     if value not in self.opt_dict['disable_source']:
                         self.opt_dict['disable_source'].append(value)
@@ -2123,25 +2123,28 @@ class Configure:
             self.source_url = source_url
 
         self.sources = gitdata_dict("sources", 1)
-        self.source_count = max(self.sources.keys()) + 1
+        self.available_sources = self.sources.keys()
+        self.source_count = max(self.available_sources) + 1
         # Check on disabled sources
         active_sources = gitdata_value("active_sources", list)
         self.sourceid_order = gitdata_value("sourceid_order", list)
         self.detail_sources = gitdata_value("detail_sources", list)
-        for c in self.sources.keys():
+        for c in self.available_sources:
             if c not in active_sources:
                 self.validate_option('disable_source', value = c)
 
         # Remove any source that's not (jet) there
         self.source_order = active_sources[:]
         for s in active_sources:
-            if not s in self.sources.keys():
+            if not s in self.available_sources:
                 self.source_order.remove(s)
+                if s not in self.opt_dict['disable_source']:
+                    self.opt_dict['disable_source'].append(s)
 
         # Remove any source that's not (jet) there
         self.prime_source_order = gitdata_value("prime_source_order", list)
         for s in self.prime_source_order[:]:
-            if not s in self.sources.keys():
+            if not s in self.available_sources:
                 self.prime_source_order.remove(s)
 
         self.xml_language = gitdata_value("language", str, 'en').lower()
@@ -2155,13 +2158,13 @@ class Configure:
         self.prime_source = gitdata_dict("prime_source")
         # Remove any source that's not (jet) there
         for c, s in self.prime_source.items():
-            if s not in self.sources.keys():
+            if s not in self.available_sources:
                 del self.prime_source[c]
 
         self.prime_source_groups = gitdata_dict("prime_source_groups", 1)
         # Remove any source that's not (jet) there
         for g, s in self.prime_source_groups.items():
-            if s not in self.sources.keys():
+            if s not in self.available_sources:
                 del self.prime_source_groups[g]
         logo_provider = gitdata_dict("logo_provider", 1)
         ttvdb_ids = gitdata_dict("ttvdb_ids")
@@ -2618,7 +2621,7 @@ class Configure:
         log_array.append(u'ratingstyle = %s' % (self.opt_dict['ratingstyle']))
         log_array.append(u'mark_hd = %s' % (self.opt_dict['mark_hd']))
         log_array.append(u'use_utc = %s' % (self.opt_dict['use_utc']))
-        for index in self.source_order:
+        for index in self.available_sources:
             if index in self.opt_dict['disable_source']:
                 log_array.append(self.text('config', 64, (index, self.channelsource[index].source)))
 
