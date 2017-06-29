@@ -627,7 +627,7 @@ sI76
 V   Duration: %s\u000a
 p194
 sI77
-V%6.0f page(s) fetched, of which %s failed\u000a
+V%6.0f page(s) fetched, of which %s without data and %s failed\u000a
 p195
 sI78
 V%6.0f cache hits\u000a
@@ -648,10 +648,10 @@ sI83
 V%6.0f failure(s) on theTVDB.com\u000a
 p201
 sI84
-V%6.0f   base page(s) fetched from %s\u000a
+V%6.0f   base page(s) fetched from %s, of which %s without data\u000a
 p202
 sI85
-V%6.0f detail page(s) fetched from %s\u000a
+V%6.0f detail page(s) fetched from %s, of which %s without data\u000a
 p203
 sI86
 V%6.0f failure(s) on %s\u000a

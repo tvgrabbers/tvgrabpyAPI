@@ -74,7 +74,8 @@ class Functions():
         if not isinstance(cnt_change, int) or cnt_change == 0:
             return
 
-        if not cnt_type in ('base', 'detail', 'fail', 'lookup', 'lookup_fail', 'queue', 'jsondata', 'failjson', 'exclude'):
+        if not cnt_type in ('base', 'detail', 'empty-base', 'empty-detail', 'fail',
+            'lookup', 'lookup_fail', 'queue', 'jsondata', 'failjson', 'exclude'):
             return
 
         if not isinstance(cnt_change, int) or cnt_change == 0:
@@ -185,10 +186,10 @@ class Functions():
     # end get_page()
 
     def get_json_data(self, name, version = None, source = None, url = None, fpath = None, ctype = None):
-        conv_dd = DD_Convert(warngoal = self.config.logging.log_queue)
         if source == None:
             source = self.json_id
 
+        conv_dd = DD_Convert(self.config, warngoal = self.config.logging.log_queue, caller_id = source)
         local_name = '%s.%s' % (name, version) if isinstance(version, int) and not self.config.test_modus else name
         self.raw_json[name] = ''
         # Try to find the source files locally
@@ -2114,6 +2115,33 @@ class FetchData(Thread):
     # The fetching functions
     def init_channel_source_ids(self):
         """Get the list of requested channels for this source from the channel configurations"""
+        def check_for_channelid(cid, chan = None, is_child = False):
+            if chan == None:
+                if cid in self.config.channels.keys():
+                    chan = self.config.channels[cid]
+
+                else:
+                    return
+
+            channelid = chan.get_source_id(self.proc_id)
+            if channelid != '':
+                self.groupitems[channelid] = 0
+                self.program_data[channelid] = []
+                # Unless it is in empty channels we add it else set it ready
+                if channelid in self.source_data['empty_channels'] or self.proc_id in chan.opt_dict['disable_source']:
+                    self.set_loaded('channel', channelid)
+
+                else:
+                    if is_child:
+                        chan.is_child = True
+
+                    self.channels[cid] = channelid
+                    if not channelid in self.all_chanids.keys():
+                        self.all_chanids[channelid] = [cid]
+
+                    elif not cid in self.all_chanids[channelid]:
+                        self.all_chanids[channelid].append(cid)
+
         self.current_date = datetime.datetime.now(pytz.utc)
         self.current_sitedate = self.config.in_tz(self.current_date, self.site_tz)
         self.current_fetchdate = self.config.in_fetch_tz(self.current_date)
@@ -2127,51 +2155,19 @@ class FetchData(Thread):
 
         self.sourcedbdata = self.get_cache_return()
         if self.source_data['alt-url-code'] != None and self.sourcedbdata['use_alt_url']:
-            for ptype in ('base', 'base-channels', 'channels', 'detail', 'detail2'):
+            for ptype in self.config.data_def_names["source"]:
                 self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
 
         for chanid, channel in self.config.channels.iteritems():
             # Is the channel active and this source for the channel not disabled
-            if channel.active and not self.proc_id in channel.opt_dict['disable_source']:
-                # Is there a sourceid for this channel
-                if channel.get_source_id(self.proc_id) != '':
-                    channelid = channel.get_source_id(self.proc_id)
-                    self.groupitems[channelid] = 0
-                    self.program_data[channelid] = []
-                    # Unless it is in empty channels we add it else set it ready
-                    if channelid in self.source_data['empty_channels']:
-                        self.set_loaded('channel', channelid)
-
-                    else:
-                        self.channels[chanid] = channelid
-                        if not channelid in self.all_chanids.keys():
-                            self.all_chanids[channelid] = [chanid]
-
-                        elif not chanid in self.all_chanids[channelid]:
-                            self.all_chanids[channelid].append(chanid)
-
+            if channel.active:
+                # Is there a channelid for this channel
+                check_for_channelid(chanid, channel)
                 # Does the channel have child channels
                 if chanid in self.config.combined_channels.keys():
                     # Then see if any of the childs has a sourceid for this source and does not have this source disabled
                     for c in self.config.combined_channels[chanid]:
-                        if c['chanid'] in self.config.channels.keys():
-                            vchannel = self.config.channels[c['chanid']]
-                            if vchannel.get_source_id(self.proc_id) != '':
-                                channelid = vchannel.get_source_id(self.proc_id)
-                                self.groupitems[channelid] = 0
-                                self.program_data[channelid] = []
-                                # Unless it is in empty channels we add and mark it as a child else set it ready
-                                if channelid in self.source_data['empty_channels'] or self.proc_id in vchannel.opt_dict['disable_source']:
-                                    self.set_loaded('channel', channelid)
-
-                                else:
-                                    vchannel.is_child = True
-                                    self.channels[c['chanid']] = channelid
-                                    if not channelid in self.all_chanids.keys():
-                                        self.all_chanids[channelid] = [c['chanid']]
-
-                                    elif not c['chanid'] in self.all_chanids[channelid]:
-                                        self.all_chanids[channelid].append(c['chanid'])
+                        check_for_channelid(c['chanid'], is_child = True)
 
         for channelid, chanidlist in self.all_chanids.items():
             if len(chanidlist) == 1:
@@ -2199,7 +2195,7 @@ class FetchData(Thread):
         The then by the DataTree extracted data is return
         """
         def switch_url():
-            for ptype in ('base', 'base-channels', 'channels', 'detail', 'detail2'):
+            for ptype in self.config.data_def_names["source"]:
                 if ptype in self.source_data.keys():
                     if self.sourcedbdata['use_alt_url']:
                         self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
@@ -2211,40 +2207,47 @@ class FetchData(Thread):
                         if ptype in self.datatrees.keys():
                             self.datatrees[ptype].data_def['url'] = self.source_data[ptype]['url']
 
-        def update_counter(ptype, success = False):
-            if ptype in ('detail', 'detail2'):
+        def update_counter(ptype, pstatus = "fail"):
+            if ptype in self.config.data_def_names["detail"]:
                 c = pdata['channel'] if ('channel' in pdata.keys()) else None
-                if success:
+                if pstatus == "fetched":
                     self.functions.update_counter('detail', self.proc_id, c)
 
-                else:
-                    self.functions.update_counter('fail', self.proc_id, c)
+                elif pstatus == "empty":
+                    self.functions.update_counter('empty-detail', self.proc_id, c)
 
-            elif success:
+                else:
+                    self.functions.update_counter(pstatus, self.proc_id, c)
+
+            elif pstatus == "fetched":
                 self.functions.update_counter('base', self.proc_id)
 
+            elif pstatus == "empty":
+                self.functions.update_counter('empty-base', self.proc_id)
+
             else:
-                self.functions.update_counter('fail', self.proc_id)
+                self.functions.update_counter(pstatus, self.proc_id)
 
         self.page_status = self.functions.page_OK
         try:
             if pdata == None:
                 pdata = {}
 
-            if not ptype in self.datatrees.keys() or not isinstance(self.datatrees[ptype], DataTreeShell):
+            #~ if not ptype in self.datatrees.keys() or not isinstance(self.datatrees[ptype], DataTreeShell):
+            if not is_data_value(ptype, self.datatrees, DataTreeShell):
                 self.datatrees[ptype] = DataTree(self, self.source_data[ptype], 'always', self.proc_id)
 
             # For the url we use the fetch timezone and date, not the site timezone and page date
             self.datatrees[ptype].set_timezone(self.config.fetch_tz)
             self.datatrees[ptype].set_current_date(self.current_ordinal)
             # Set the counter for the statistics and some other defaults
-            if ptype in ('channels', 'base-channels'):
+            if ptype in self.config.data_def_names["channel"]:
                 pdata['start'] = 0
                 pdata['end'] = 0
                 pdata[ 'offset'] = 0
                 counter = ['base', self.proc_id, None]
 
-            elif ptype in ('detail', 'detail2'):
+            elif ptype in self.config.data_def_names["detail"]:
                 counter = ['detail', self.proc_id, pdata['channel']]
 
             else:
@@ -2252,6 +2255,7 @@ class FetchData(Thread):
 
             url_type = self.source_data[ptype]["url-type"]
             for retry in (0, 1):
+                # Get the URL
                 url = self.datatrees[ptype].get_url(pdata, False)
                 if url == None:
                     self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
@@ -2272,8 +2276,10 @@ class FetchData(Thread):
                         for index in range(len(url)):
                             self.roottree_output.write((u'%s = %s\n'% (prtdata[index], url[index])))
 
-                update_counter(ptype, True)
+                update_counter(ptype, "fetched")
+                # Get the Page
                 self.page_status, page, pcode = self.functions.get_page(url)
+                # Do an URL swap if needed and try again
                 if pcode != None and int(pcode) ==  self.source_data['alt-url-code']:
                     self.config.queues['cache'].put({'task':'update', 'parent': self,
                                                     'toggle_alt_url': {'sourceid': self.proc_id}})
@@ -2288,11 +2294,19 @@ class FetchData(Thread):
                     self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
                     self.page_status = self.functions.page_nodata
 
+                # Find the startnode
                 elif self.datatrees[ptype].init_data(page) or self.datatrees[ptype].searchtree == None:
                     self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
                     self.page_status = self.functions.page_data_error
 
             if self.page_status == self.functions.page_nodata:
+                update_counter(ptype, "empty")
+                if self.print_roottree:
+                    self.roottree_output.write(u'No Data. Status = %s\n' % self.functions.page_status[self.page_status])
+
+                if self.config.write_info_files:
+                    self.config.infofiles.add_url_failure('No Data: %s\n' % url)
+
                 return None
 
             if self.page_status != self.functions.page_OK:
@@ -2310,7 +2324,7 @@ class FetchData(Thread):
             if self.print_roottree:
                 self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
 
-            # We reset the timezone
+            # We reset the timezone and check if needed on the right date
             self.datatrees[ptype].set_timezone()
             if ptype == 'base':
                 # We set the current date
@@ -2354,9 +2368,22 @@ class FetchData(Thread):
                     self.current_item_count = self.datatrees[ptype].searchtree.find_data_value(\
                         self.source_data[ptype]['data']["page-item-count"])
 
-            if self.datatrees[ptype].extract_datalist():
+            # Extract the data
+            dtcode = self.datatrees[ptype].extract_datalist()
+            if dtcode == dtNoData:
+                update_counter(ptype, "empty")
+                self.page_status = self.functions.page_nodata
+                if self.config.write_info_files:
+                    self.config.infofiles.add_url_failure('No DataTree Data: %s\n' % url)
+
+                return None
+
+            elif dtcode != dtDataOK:
                 update_counter(ptype)
                 self.page_status = self.functions.page_data_error
+                if self.config.write_info_files:
+                    self.config.infofiles.add_url_failure('DataTree Error %s: %s\n' % (dtcode, url))
+
                 return None
 
             self.data = self.datatrees[ptype].result
@@ -2393,7 +2420,11 @@ class FetchData(Thread):
                 self.datatrees[ptype].init_data_def(self.source_data["base"])
 
             if len(self.data) == 0:
+                update_counter(ptype, "empty")
                 self.page_status = self.functions.page_nodata
+                if self.config.write_info_files:
+                    self.config.infofiles.add_url_failure('No DataTree Data: %s\n' % url)
+
                 return None
 
             return self.data

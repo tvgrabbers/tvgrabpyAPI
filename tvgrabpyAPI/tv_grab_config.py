@@ -2037,6 +2037,10 @@ class Configure:
                 return 2
 
             # Read in the tables needed for normal grabbing
+            self.data_def_names = gitdata_dict("data_defs")
+            self.data_def_names["source"] = self.data_def_names["channel"][:]
+            self.data_def_names["source"].extend(self.data_def_names["base"][:])
+            self.data_def_names["source"].extend(self.data_def_names["detail"][:])
             self.key_values = gitdata_dict("data_keys")
             self.tuple_values = gitdata_dict("tuple_values")
             self.xml_output.logo_provider = gitdata_dict("logo_provider", 1)
@@ -3434,7 +3438,9 @@ class Configure:
                             + self.fetch_func.get_counter('jsondata', 'total')
         fetch_fail = self.fetch_func.get_counter('fail', 'total') \
                             + self.fetch_func.get_counter('failjson', 'total')
-        log_array.append( self.text('config', 77, (fetch_count, fetch_fail), type = 'stats'))
+        fetch_empty = self.fetch_func.get_counter('empty-base', 'total') \
+                            + self.fetch_func.get_counter('empty-detail', 'total')
+        log_array.append( self.text('config', 77, (fetch_count, fetch_fail, fetch_empty), type = 'stats'))
         log_array.append(self.text('config', 78, (self.fetch_func.get_counter('detail', self.cache_id), ), type = 'stats'))
         log_array.append(self.text('config', 79, (self.fetch_func.get_counter('lookup', self.ttvdb1_id), ), type = 'stats'))
         log_array.append(self.text('config', 80, (self.fetch_func.get_counter('lookup_fail', self.ttvdb1_id), ), type = 'stats'))
@@ -3448,13 +3454,16 @@ class Configure:
         log_array.extend([self.text('config', 83, (self.fetch_func.get_counter('fail', self.ttvdb1_id), ), type = 'stats'), '\n'])
         for s, source in self.channelsource.items():
             if source.detail_processor:
-                log_array.append(self.text('config', 84, (self.fetch_func.get_counter('base', s), source.source), type = 'stats'))
-                log_array.append(self.text('config', 85, (self.fetch_func.get_counter('detail', s), source.source), type = 'stats'))
+                log_array.append(self.text('config', 84, (self.fetch_func.get_counter('base', s), \
+                    source.source, self.fetch_func.get_counter('empty-base', s)), type = 'stats'))
+                log_array.append(self.text('config', 85, (self.fetch_func.get_counter('detail', s), \
+                    source.source, self.fetch_func.get_counter('empty-detail', s)), type = 'stats'))
                 log_array.extend([self.text('config', 86, (self.fetch_func.get_counter('fail', s), source.source), type = 'stats'), '\n'])
 
         for s, source in self.channelsource.items():
             if not (source.is_virtual or source.detail_processor):
-                log_array.append(self.text('config', 84, (self.fetch_func.get_counter('base', s), source.source), type = 'stats'))
+                log_array.append(self.text('config', 84, (self.fetch_func.get_counter('base', s),\
+                    source.source, self.fetch_func.get_counter('empty-base', s)), type = 'stats'))
                 log_array.extend([self.text('config', 86, (self.fetch_func.get_counter('fail', s), source.source), type = 'stats'), '\n'])
 
         self.log(log_array, 4, 3)

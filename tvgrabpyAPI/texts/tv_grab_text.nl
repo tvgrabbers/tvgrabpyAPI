@@ -629,7 +629,7 @@ sI76
 V        Duur: %s\u000a
 p196
 sI77
-V%6.0f pagina('s) opgehaald, waarvan %s faalden\u000a
+V%6.0f pagina('s) opgehaald, waarvan %s zonder data en %s faalden\u000a
 p197
 sI78
 V%6.0f cache vonst(en)\u000a
@@ -650,10 +650,10 @@ sI83
 V%6.0f mislukking(en) op theTVDB.com\u000a
 p203
 sI84
-V%6.0f  basis pagina('s) opgehaald van %s\u000a
+V%6.0f  basis pagina('s) opgehaald van %s, waarvan %s zonder data\u000a
 p204
 sI85
-V%6.0f detail pagina('s) opgehaald van %s\u000a
+V%6.0f detail pagina('s) opgehaald van %s, waarvan %s zonder data\u000a
 p205
 sI86
 V%6.0f mislukking(en) op %s\u000a

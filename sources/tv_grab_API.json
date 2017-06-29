@@ -5,6 +5,12 @@
 	"version_message":["This version contains several fixes to issues found since the last release\n",
 		"    like a potential race condition between the sources and the channels\n",
 		"    that can result in no data for some channels.\n"],
+	"data_defs":{
+		"channel":["channel","base-channel"],
+		"base":["base"],
+		"detail":["detail","detail2"],
+		"thetvdb.v1":["seriesid","last_updated","seriesname","episodes"],
+		"thetvdb.v2":["login","error","seriesid","seriesname","episodes","episodecount","episode"]},
 	"data_keys":{
 		"text":["prog_ID","gen_ID","detail_url","group name","name","episode title",
 			"originaltitle","description","genre","subgenre","org-genre","org-subgenre",
@@ -27,7 +33,7 @@
 	"ttvdb":{
 		"v1":{
 			"json file":"source-thetvdb.v1",
-			"version":3},
+			"version":5},
 		"v2":{
 			"json file":"source-thetvdb.v2",
 			"version":0}},
@@ -75,8 +81,30 @@
 		"39": "https://wp27-images-nl-dynamic.horizon.tv/ChannelLogos/02/",
 		"40": "https://wp28-images-nl-dynamic.horizon.tv/ChannelLogos/02/"},
 	"ttvdb_ids":{
+		"Bordertown":{"name":"Bordertown (2016)","tid":275120},
+		"Brotherhood":{"name":"Brotherhood (2015)","tid":296474},
+		"Bull":{"name":"Bull (2016)","tid":311945},
 		"Castle":{"name":"Castle (2009)","tid":83462},
+		"Catastrophe":{"name":"Catastrophe (2015)","tid":289771},
+		"Dallas":{"name":"Dallas (2012)","tid":242521},
+		"Danni Lowinski":{"name":"Danni Lowinski (NL)","tid":267960},
+		"Dr. Bull":{"name":"Bull (2016)","tid":311945},
+		"Empire":{"name":"Empire (2015)","tid":281617},
 		"Father Brown":{"name":"Father Brown (2013)","tid":265834},
+		"Genius":{"name":"Genius (2017)","tid":322399},
+		"Genius: Einstein":{"name":"Genius (2017)","tid":322399},
+		"Golden Boy":{"name":"Golden Boy (2013)","tid":259093},
+		"Jessie":{"name":"Jessie (2011)","tid":252312},
+		"Lab Rats":{"name":"Lab Rats (2012)","tid":256394},
+		"Last Man Standing":{"name":"Last Man Standing (2011)","tid":248834},
+		"Louie":{"name":"Louie (2010)","tid":155201},
+		"MacGyver":{"name":"MacGyver (2016)","tid":311902},
+		"Maigret":{"name":"Maigret (2016)","tid":309212},
+		"Nashville":{"name":"Nashville (2012)","tid":259055},
+		"Sirens":{"name":"Sirens (2014)","tid":269897},
+		"Teachers":{"name":"Teachers (2016)","tid":300714},
+		"The Comedians":{"name":"The Comedians (2015)","tid":290176},
+		"The Goldbergs":{"name":"The Goldbergs (2013)","tid":269653},
 		"The Player":{"name":"The Player (2015)","tid":295642}},
 	"coutrytrans":{
 		"ARE":"AE",

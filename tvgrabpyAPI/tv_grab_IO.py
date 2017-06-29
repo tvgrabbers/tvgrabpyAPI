@@ -2851,6 +2851,10 @@ class InfoFiles():
 # end InfoFiles
 
 class DD_Convert(DataDef_Convert):
+    def __init__(self, config, data_def = None, warnaction = "default", warngoal = sys.stderr, caller_id = 0):
+        self.config = config
+        DataDef_Convert.__init__(self, data_def, warnaction, warngoal, caller_id)
+
     def convert_sourcefile(self, source_data, cattrans_type = None, file_name = None):
         with self.tree_lock:
             self.empty_values = data_value("empty-values", source_data, list, [None, ""])
@@ -2870,8 +2874,7 @@ class DD_Convert(DataDef_Convert):
             self.csource_data["version"] = data_value("version", source_data, int)
             self.csource_data["api-version"] = data_value("api-version", source_data, list, [1,0,0])
             if self.csource_data["name"] in ("thetvdb.v1", "thetvdb.v2"):
-                for ptype in ("seriesid", "last_updated", "seriesname", "episodes", \
-                    "login", "error", "episodecount", "episode"):
+                for ptype in self.config.data_def_names[self.csource_data["name"]]:
                     if is_data_value([ptype, "data", "key-path"], source_data, list) or \
                       is_data_value([ptype, "data", "iter"], source_data, list):
                         source_data[ptype]["timezone"] = self.csource_data["site-timezone"]
@@ -2967,7 +2970,7 @@ class DD_Convert(DataDef_Convert):
                                     self.convert_path_def(data_value([ptype, "data", "page-item-count"], \
                                     source_data, list), self.ddtype, dtpathWithValue)
 
-                        if ptype  in ("detail", "detail2"):
+                        if ptype in self.config.data_def_names["detail"]:
                             self.csource_data[ptype]["provides"] = data_value([ptype, "provides"], source_data, list)
 
                 if not "channels" in self.csource_data["channel_defs"] and is_data_value(["channels", "data"], source_data, dict):
@@ -3037,8 +3040,8 @@ class test_JSON(test_json_struct.test_JSON):
 class test_Source():
     def __init__(self):
         self.test_json = test_JSON('tv_grab_test')
-        self.conv_dd = DD_Convert()
         self.config = self.test_json.config
+        self.conv_dd = DD_Convert(self.config)
         self.cache_return = Queue()
         self.no_config = True
         self.lineup = None
