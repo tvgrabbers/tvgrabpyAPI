@@ -51,6 +51,16 @@ class Functions():
 
     # end log()
 
+    def remove_file(self, fle):
+        if os.path.isfile(fle) and os.access(fle, os.W_OK):
+            try:
+                os.remove(fle)
+
+            except:
+                pass
+
+    # end remove_file()
+
     def save_oldfile(self, fle, save_ext='old'):
         """ save the old file to .old if it exists """
         save_fle = '%s.%s' % (fle, save_ext)
@@ -2797,7 +2807,9 @@ class InfoFiles():
             self.config.logging.send_mail(self.lineup_changes, self.config.opt_dict['mail_info_address'], '%s lineup changes' % self.config.name)
 
         if self.config.opt_dict['mail_log'] and len(self.url_failure) > 0:
-            self.config.logging.send_mail(self.url_failure, self.config.opt_dict['mail_info_address'], '%s url failures' % self.config.name)
+            self.url_failure.sort()
+            self.config.logging.send_mail(self.url_failure, self.config.opt_dict['mail_info_address'],
+                '%s url failures' % self.config.name)
 
         if self.fetch_list != None:
             chan_list = []
@@ -2857,7 +2869,7 @@ class DD_Convert(DataDef_Convert):
 
     def convert_sourcefile(self, source_data, cattrans_type = None, file_name = None):
         with self.tree_lock:
-            self.empty_values = data_value("empty-values", source_data, list, [None, ""])
+            self.empty_values = data_value("empty-values", source_data, list, [None, "", "-"])
             self.csource_data = {}
             self.csource_data["dtversion"] = self.dtversion()
             self.csource_data["file-name"] = data_value("file-name", source_data, str)

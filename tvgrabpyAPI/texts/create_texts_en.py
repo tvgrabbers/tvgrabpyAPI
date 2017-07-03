@@ -398,15 +398,15 @@ def load_texts():
                 74: u' Start time: %s\n',
                 75: u'   End time: %s\n',
                 76: u'   Duration: %s\n',
-                77: u'%6.0f page(s) fetched, of which %s without data and %s failed\n',
+                77: u'%6.0f page(s) fetched, of which %s failed and %s returned no data\n',
                 78: u'%6.0f cache hits\n',
                 79: u'%6.0f succesful ttvdb.com lookups\n',
                 80: u'%6.0f    failed ttvdb.com lookups\n',
                 81: u'  Time/page: %s seconds\n',
                 82: u'%6.0f page(s) fetched from theTVDB.com\n',
                 83: u'%6.0f failure(s) on theTVDB.com\n',
-                84: u'%6.0f   base page(s) fetched from %s, of which %s without data\n',
-                85: u'%6.0f detail page(s) fetched from %s, of which %s without data\n',
+                84: u'%6.0f   base page(s) fetched from %s, of which %s returned no data\n',
+                85: u'%6.0f detail page(s) fetched from %s, of which %s returned no data\n',
                 86: u'%6.0f failure(s) on %s\n'
                 },
             u'other':{

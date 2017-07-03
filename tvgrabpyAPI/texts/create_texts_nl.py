@@ -406,15 +406,15 @@ def load_texts():
                 74: u'  Start tijd: %s\n',
                 75: u'   Eind tijd: %s\n',
                 76: u'        Duur: %s\n',
-                77: u'%6.0f pagina(\'s) opgehaald, waarvan %s zonder data en %s faalden\n',
+                77: u'%6.0f pagina(\'s) opgehaald, waarvan er %s faalden en %s geen data opleverden\n',
                 78: u'%6.0f cache vonst(en)\n',
                 79: u'%6.0f succesvolle ttvdb.com verwijzingen\n',
                 80: u'%6.0f   misluktte ttvdb.com verwijzingen\n',
                 81: u' Tijd/pagina: %s seconds\n',
                 82: u'%6.0f pagina(\'s) opgehaald van theTVDB.com\n',
                 83: u'%6.0f mislukking(en) op theTVDB.com\n',
-                84: u'%6.0f  basis pagina(\'s) opgehaald van %s, waarvan %s zonder data\n',
-                85: u'%6.0f detail pagina(\'s) opgehaald van %s, waarvan %s zonder data\n',
+                84: u'%6.0f  basis pagina(\'s) opgehaald van %s, waarvan %s geen data opleverden\n',
+                85: u'%6.0f detail pagina(\'s) opgehaald van %s, waarvan %s geen data opleverden\n',
                 86: u'%6.0f mislukking(en) op %s\n'
                 },
             u'other':{
