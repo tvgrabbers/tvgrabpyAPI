@@ -13,7 +13,6 @@ from tv_grab_channel import ProgramNode
 from tv_grab_IO import DD_Convert
 from threading import Thread, RLock, Semaphore, Event
 from xml.sax import saxutils
-from xml.etree import cElementTree as ET
 from Queue import Queue, Empty
 from copy import deepcopy, copy
 try:
@@ -25,6 +24,13 @@ try:
     unichr(42)
 except NameError:
     unichr = chr    # Python 3
+
+class dtError(dtErrorConstants):
+    def __init__(self):
+        self.dtWrongDate = 11
+        self.dtErrorTexts[self.dtWrongDate] = 'Wrong Page Date!'
+
+dte = dtError()
 
 class Functions():
     """Some general Fetch functions"""
@@ -43,25 +49,6 @@ class Functions():
         self.ttvdb1_id = self.config.ttvdb1_id
         self.ttvdb2_id = self.config.ttvdb2_id
         self.imdb3_id = self.config.imdb3_id
-        self.page_wrongdate = 11
-        self.fetch_errors = (dtURLerror, dtTimeoutError, dtHTTPerror, dtJSONerror, dtUnknownError)
-        self.page_status={}
-        self.page_status[dtDataOK]='page_OK'
-        self.page_status[dtURLerror]='page_url error'
-        self.page_status[dtTimeoutError]='page_timeout'
-        self.page_status[dtHTTPerror]='page_http error'
-        self.page_status[dtJSONerror]='page_json error'
-        self.page_status[dtEmpty]='Empty Page'
-        self.page_status[6]='page_start_node error'
-        self.page_status[7]='page_data_def error'
-        self.page_status[8]=''
-        self.page_status[9]=''
-        self.page_status[dtDataInvalid]='page_data_error'
-        self.page_status[self.page_wrongdate]='page_wrongdate'
-        self.page_status[12]=''
-        self.page_status[13]=''
-        self.page_status[dtNoData]='page_nodata'
-        self.page_status[dtUnknownError]='page_unknownfail'
 
     # end init()
 
@@ -166,13 +153,13 @@ class Functions():
             fu.join(self.config.opt_dict['global_timeout']+1)
             page = fu.result
             self.max_fetches.release()
-            if fu.page_status == dtDataOK:
+            if fu.page_status == dte.dtDataOK:
                 if (page == None) or (page =={}) or (isinstance(page, (str, unicode)) and \
                     ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
                     if self.config.write_info_files:
                         self.config.infofiles.add_url_failure('No Data: %s\n' % url)
 
-                    return (dtEmpty, None, fu.status_code)
+                    return (dte.dtEmpty, None, fu.status_code)
 
             return (fu.page_status, page, fu.status_code)
 
@@ -182,7 +169,7 @@ class Functions():
                 self.config.infofiles.add_url_failure('Fetch timeout: %s\n' % url)
 
             self.max_fetches.release()
-            return (dtTimeoutError, None, fu.status_code)
+            return (dte.dtTimeoutError, None, fu.status_code)
     # end get_page()
 
     def get_json_data(self, name, version = None, source = None, url = None, fpath = None, ctype = None):
@@ -354,7 +341,7 @@ class FetchURL(Thread):
         self.is_json = is_json
         self.raw = ''
         self.result = None
-        self.page_status = dtDataOK
+        self.page_status = dte.dtDataOK
         self.url_request = None
         self.status_code = None
 
@@ -403,7 +390,7 @@ class FetchURL(Thread):
 
                 except(ValueError) as e:
                     self.config.log(self.config.text('fetch', 5, (self.url, e)), 1, 1)
-                    self.page_status = dtJSONerror
+                    self.page_status = dte.dtJSONerror
                     if self.config.write_info_files:
                         self.config.infofiles.add_url_failure('JSONError: %s\n' % self.url)
                         self.config.infofiles.write_raw_string(self.url_text)
@@ -415,27 +402,27 @@ class FetchURL(Thread):
 
         except (requests.ConnectionError):
             self.config.log(self.config.text('fetch', 3, (self.url, )), 1, 1)
-            self.page_status = dtURLerror
+            self.page_status = dte.dtURLerror
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('URLError: %s\n' % self.url)
 
         except (requests.HTTPError) as e:
             self.config.log(self.config.text('fetch', 4, (self.url, '%s: %s' \
                 % (e.response.status_code, e.response.reason))), 1, 1)
-            self.page_status = dtHTTPerror
+            self.page_status = dte.dtHTTPerror
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('HTTPError %s: %s: %s\n' \
                     % (e.response.status_code, e.response.reason, self.url))
 
         except (requests.Timeout):
             self.config.log(self.config.text('fetch', 1, (self.config.opt_dict['global_timeout'], self.url)), 1, 1)
-            self.page_status = dtTimeoutError
+            self.page_status = dte.dtTimeoutError
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('Fetch timeout: %s\n' % self.url)
 
         except:
             self.config.log(self.config.text('fetch', 2,  (sys.exc_info()[0], sys.exc_info()[1], self.url)), 0)
-            self.page_status = dtUnknownError
+            self.page_status = dte.dtUnknownError
             if self.config.write_info_files:
                 self.config.infofiles.add_url_failure('%s,%s:\n  %s\n' % (sys.exc_info()[0], sys.exc_info()[1], self.url))
 
@@ -1140,7 +1127,7 @@ class theTVDB_v1(Thread):
 
         self.functions.update_counter('detail', self.proc_id, chanid)
         pstate, page, pcode = self.functions.get_page(url)
-        if pstate != dtDataOK or page == None:
+        if pstate != dte.dtDataOK or page == None:
             self.functions.update_counter('fail', self.proc_id, chanid)
             return None
 
@@ -1880,7 +1867,7 @@ class FetchData(Thread):
         self.config.queues['source'][self.proc_id] = self.detail_request
         self.thread_type = 'source'
         self.config.threads.append(self)
-        self.page_status = dtDataOK
+        self.page_status = dte.dtDataOK
 
         self.all_channels = {}
         self.channels = {}
@@ -2231,14 +2218,22 @@ class FetchData(Thread):
                     self.roottree_output.write('%s\n' % tekst)
 
                 if self.config.write_info_files:
-                    self.config.infofiles.add_url_failure('%s: %s %s\n' % (tekst, url[0], url[3]))
+                    u = url[0]
+                    if len(url[3]) > 0:
+                        u += '?'
+                        for k, v in url[3].items():
+                            u += '%s=%s&' % (k, v)
 
-        self.page_status = dtDataOK
+                        u = u[:-1]
+
+                    self.config.infofiles.add_url_failure('%s: %s\n' % (tekst, u))
+
+        self.page_status = dte.dtDataOK
+        self.data = None
         try:
             if pdata == None:
                 pdata = {}
 
-            #~ if not ptype in self.datatrees.keys() or not isinstance(self.datatrees[ptype], DataTreeShell):
             if not is_data_value(ptype, self.datatrees, DataTreeShell):
                 self.datatrees[ptype] = DataTree(self, self.source_data[ptype], 'always', self.proc_id)
 
@@ -2265,7 +2260,7 @@ class FetchData(Thread):
                 if url == None:
                     self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
                     update_counter(ptype)
-                    self.page_status = dtURLerror
+                    self.page_status = dte.dtURLerror
                     return (self.page_status, None)
 
                 if self.print_roottree:
@@ -2294,25 +2289,25 @@ class FetchData(Thread):
                 else:
                     break
 
-            if self.page_status == dtEmpty:
+            if self.page_status == dte.dtEmpty:
                 update_counter(ptype, "empty",u'No Data.')
-                return (dtEmpty, None)
+                return (dte.dtEmpty, None)
 
-            if self.page_status == dtDataOK:
+            if self.page_status == dte.dtDataOK:
                 # Find the startnode
                 if self.datatrees[ptype].init_data(page) or self.datatrees[ptype].searchtree == None:
                     self.config.log([self.config.text('fetch', 26, (ptype, url[0]))], 1)
-                    self.page_status = dtDataInvalid
+                    self.page_status = dte.dtDataInvalid
 
-            if self.page_status != dtDataOK:
-                if self.page_status in (dtEmpty, dtNoData):
+            if self.page_status != dte.dtDataOK:
+                if self.page_status in (dte.dtEmpty, dte.dtNoData):
                     update_counter(ptype, "empty",u'No Data.')
 
                 else:
                     update_counter(ptype)
                     if self.print_roottree:
                         self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
-                        self.roottree_output.write(u'Data Error. Status = %s' % self.functions.page_status[self.page_status])
+                        self.roottree_output.write(u'Data Error = %s: %s' % (self.page_status, dte.errortext(self.page_status)))
 
                 return (self.page_status, None)
 
@@ -2333,8 +2328,8 @@ class FetchData(Thread):
                         if not isinstance(cd, datetime.date):
                             self.config.log([self.config.text('fetch', 27, (url[0], )),])
                             update_counter(ptype)
-                            self.page_status = self.functions.page_wrongdate
-                            return (self.functions.page_wrongdate, None)
+                            self.page_status = dte.dtWrongDate
+                            return (dte.dtWrongDate, None)
 
                         elif self.source_data['night-date-switch'] > 0 and \
                           self.current_fetchdate.hour < self.source_data['night-date-switch'] and \
@@ -2352,8 +2347,8 @@ class FetchData(Thread):
                                 # offset
                                 pass
                             update_counter(ptype)
-                            self.page_status = self.functions.page_wrongdate
-                            return (self.functions.page_wrongdate, None)
+                            self.page_status = dte.dtWrongDate
+                            return (dte.dtWrongDate, None)
 
                 # We extract the current _item_count and the total_item_count
                 if (url_type & 12) == 12:
@@ -2364,13 +2359,14 @@ class FetchData(Thread):
 
             # Extract the data
             dtcode = self.datatrees[ptype].extract_datalist()
-            if dtcode == dtNoData:
-                self.page_status = dtNoData
+            self.page_status = dtcode
+            if dtcode == dte.dtNoData:
+                self.page_status = dte.dtNoData
                 update_counter(ptype, "empty", 'No DataTree Data')
-                return (dtNoData, None)
+                return (dte.dtNoData, None)
 
-            elif dtcode != dtDataOK:
-                self.page_status = dtDataInvalid
+            elif dtcode != dte.dtDataOK:
+                self.page_status = dte.dtDataInvalid
                 update_counter(ptype, tekst = 'DataTree Error %s' % (dtcode,))
                 return (dtcode, None)
 
@@ -2408,23 +2404,26 @@ class FetchData(Thread):
                 self.datatrees[ptype].init_data_def(self.source_data["base"])
 
             if len(self.data) == 0:
-                self.page_status = dtNoData
+                self.data = None
+                self.page_status = dte.dtNoData
                 update_counter(ptype, "empty", 'No DataTree Data')
-                return (dtNoData, None)
+                return (dte.dtNoData, None)
 
-            return (dtDataOK, self.data)
+            return (dte.dtDataOK, self.data)
 
         except dtWarning as e:
             self.config.log(self.config.text('fetch', 14, (e.message, ptype, self.source)))
             self.functions.update_counter('fail', self.proc_id)
-            self.page_status = dtDataInvalid
-            return (dtDataInvalid, None)
+            self.data = None
+            self.page_status = dte.dtDataInvalid
+            return (dte.dtDataInvalid, None)
 
         except:
             self.config.log([self.config.text('fetch', 29, (ptype, self.source)), traceback.format_exc()], 1)
             self.functions.update_counter('fail', self.proc_id)
-            self.page_status = dtUnknownError
-            return (dtUnknownError, None)
+            self.data = None
+            self.page_status = dte.dtUnknownError
+            return (dte.dtUnknownError, None)
 
     def get_channels(self, data_list = None):
         """The code for the retreiving a list of supported channels"""
@@ -2447,8 +2446,9 @@ class FetchData(Thread):
 
             #extract the data
             for retry in (0, 1):
-                pstatus, channel_list = self.get_page_data(ptype)
-                if pstatus in (dtDataOK, dtURLerror, dtNoData, dtEmpty):
+                self.get_page_data(ptype)
+                if self.page_status in (dte.dtDataOK, dte.dtURLerror, dte.dtNoData, dte.dtEmpty):
+                    channel_list = self.data[:]
                     break
 
         else:
@@ -3160,15 +3160,18 @@ class FetchData(Thread):
                                         time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
 
                                     first_fetch = False
-                                    self.page_status, strdata = self.get_page_data('base',{'channel': channelid,
-                                                                                            'cnt-offset': page_count,
-                                                                                            'start': fset[0],
-                                                                                            'end': fset[0] + fset[1],
-                                                                                            'back':-fset[0],
-                                                                                            'ahead': fset[0] +fset[1]-1})
+                                    self.get_page_data('base',{'channel': channelid,
+                                                                'cnt-offset': page_count,
+                                                                'start': fset[0],
+                                                                'end': fset[0] + fset[1],
+                                                                'back':-fset[0],
+                                                                'ahead': fset[0] +fset[1]-1})
 
-                                    if self.page_status != dtDataOK:
-                                        if self.page_status in (dtNoData, dtEmpty):
+                                    if self.page_status == dte.dtDataOK:
+                                        strdata = self.data[:]
+
+                                    else:
+                                        if self.page_status in (dte.dtNoData, dte.dtEmpty):
                                             empty_count += 1
 
                                         if retry == 1:
@@ -3219,14 +3222,17 @@ class FetchData(Thread):
 
                                 first_fetch = False
                                 log_fetch()
-                                self.page_status, strdata = self.get_page_data('base',{'channel': channelid,
-                                                                                        'offset': offset,
-                                                                                        'start': first_day,
-                                                                                        'end': min(max_days, last_day),
-                                                                                        'back':-first_day,
-                                                                                        'ahead':min(max_days, last_day)-1})
-                                if self.page_status != dtDataOK:
-                                    if self.page_status in (dtNoData, dtEmpty):
+                                self.get_page_data('base',{'channel': channelid,
+                                                            'offset': offset,
+                                                            'start': first_day,
+                                                            'end': min(max_days, last_day),
+                                                            'back':-first_day,
+                                                            'ahead':min(max_days, last_day)-1})
+                                if self.page_status == dte.dtDataOK:
+                                    strdata = self.data[:]
+
+                                else:
+                                    if self.page_status in (dte.dtNoData, dte.dtEmpty):
                                         empty_count += 1
 
                                     if retry == 1:
@@ -3286,13 +3292,16 @@ class FetchData(Thread):
 
                             first_fetch = False
                             log_fetch()
-                            self.page_status, strdata = self.get_page_data('base',{'channels': self.chanids.keys(),
-                                                                                    'offset': offset,
-                                                                                    'start': first_day,
-                                                                                    'end': min(max_days, last_day),
-                                                                                    'back':-first_day,
-                                                                                    'ahead':min(max_days, last_day)-1})
-                            if self.page_status != dtDataOK:
+                            self.get_page_data('base',{'channels': self.chanids.keys(),
+                                                        'offset': offset,
+                                                        'start': first_day,
+                                                        'end': min(max_days, last_day),
+                                                        'back':-first_day,
+                                                        'ahead':min(max_days, last_day)-1})
+                            if self.page_status == dte.dtDataOK:
+                                strdata = self.data[:]
+
+                            else:
                                 if retry == 1:
                                     log_fail()
 
@@ -3340,13 +3349,16 @@ class FetchData(Thread):
 
                                 first_fetch = False
                                 log_fetch()
-                                self.page_status, strdata = self.get_page_data('base',{'channelgrp': channelgrp,
-                                                                                        'offset': offset,
-                                                                                        'start': first_day,
-                                                                                        'end': min(max_days, last_day),
-                                                                                        'back':-first_day,
-                                                                                        'ahead':min(max_days, last_day)-1})
-                                if self.page_status != dtDataOK:
+                                self.get_page_data('base',{'channelgrp': channelgrp,
+                                                            'offset': offset,
+                                                            'start': first_day,
+                                                            'end': min(max_days, last_day),
+                                                            'back':-first_day,
+                                                            'ahead':min(max_days, last_day)-1})
+                                if self.page_status == dte.dtDataOK:
+                                    strdata = self.data[:]
+
+                                else:
                                     if retry == 1:
                                         log_fail()
 
@@ -3519,8 +3531,11 @@ class FetchData(Thread):
             return
 
         ddata = {'channel': pdata['chanid'], 'detailid': pdata['detail_url']}
-        pstatus, strdata = self.get_page_data(ptype, ddata)
-        if pstatus != dtDataOK:
+        self.get_page_data(ptype, ddata)
+        if self.page_status == dte.dtDataOK:
+            strdata = self.data[:]
+
+        else:
             self.config.log(self.config.text('fetch', 35, (pdata['detail_url'], )), 1)
             return
 
@@ -3832,7 +3847,6 @@ class FetchData(Thread):
                 subgenre = values['subgenre'].strip()
 
         return (genre, subgenre, genre, subgenre)
-        #~ return (genre, subgenre)
 
     def check_title_name(self, values):
         """

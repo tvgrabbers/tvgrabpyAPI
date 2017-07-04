@@ -117,7 +117,6 @@ class Functions():
     # end open_file ()
 
     def read_pickle(self, file_name):
-        #~ return pickle.load(open(file_name, 'r'))
         fle = self.open_file(file_name, 'r', 'pickle')
         if fle != None:
             data = pickle.load(fle)
@@ -2957,11 +2956,11 @@ class DD_Convert(DataDef_Convert):
                             if self.cdata_def["url-type"] & 12 == 0:
                                 self.csource_data[ptype]["data"]["today"] = \
                                     self.convert_path_def(data_value([ptype, "data", "today"], \
-                                    source_data, list), self.ddtype, dtpathWithValue)
+                                    source_data, list), self.ddtype, self.dtc.pathWithValue)
 
                                 self.csource_data[ptype]["data"]["date-check"] = \
                                     self.convert_path_def(data_value([ptype, "data", "date-check"], \
-                                    source_data, list), self.ddtype, dtpathWithValue)
+                                    source_data, list), self.ddtype, self.dtc.pathWithValue)
 
                             if self.cdata_def["url-type"] & 12 == 8:
                                 self.csource_data[ptype]["url-date-range"] = \
@@ -2976,11 +2975,11 @@ class DD_Convert(DataDef_Convert):
 
                                 self.csource_data[ptype]["data"]["total-item-count"] = \
                                     self.convert_path_def(data_value([ptype, "data", "total-item-count"], \
-                                    source_data, list), self.ddtype, dtpathWithValue)
+                                    source_data, list), self.ddtype, self.dtc.pathWithValue)
 
                                 self.csource_data[ptype]["data"]["page-item-count"] = \
                                     self.convert_path_def(data_value([ptype, "data", "page-item-count"], \
-                                    source_data, list), self.ddtype, dtpathWithValue)
+                                    source_data, list), self.ddtype, self.dtc.pathWithValue)
 
                         if ptype in self.config.data_def_names["detail"]:
                             self.csource_data[ptype]["provides"] = data_value([ptype, "provides"], source_data, list)
