@@ -2261,7 +2261,7 @@ class FetchData(Thread):
                     self.config.log([self.config.text('fetch', 25, (ptype, self.source))], 1)
                     update_counter(ptype)
                     self.page_status = dte.dtURLerror
-                    return (self.page_status, None)
+                    return
 
                 if self.print_roottree:
                     if self.roottree_output == sys.stdout:
@@ -2291,7 +2291,7 @@ class FetchData(Thread):
 
             if self.page_status == dte.dtEmpty:
                 update_counter(ptype, "empty",u'No Data.')
-                return (dte.dtEmpty, None)
+                return
 
             if self.page_status == dte.dtDataOK:
                 # Find the startnode
@@ -2309,7 +2309,7 @@ class FetchData(Thread):
                         self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
                         self.roottree_output.write(u'Data Error = %s: %s' % (self.page_status, dte.errortext(self.page_status)))
 
-                return (self.page_status, None)
+                return
 
             if self.print_roottree:
                 self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
@@ -2329,7 +2329,7 @@ class FetchData(Thread):
                             self.config.log([self.config.text('fetch', 27, (url[0], )),])
                             update_counter(ptype)
                             self.page_status = dte.dtWrongDate
-                            return (dte.dtWrongDate, None)
+                            return
 
                         elif self.source_data['night-date-switch'] > 0 and \
                           self.current_fetchdate.hour < self.source_data['night-date-switch'] and \
@@ -2348,7 +2348,7 @@ class FetchData(Thread):
                                 pass
                             update_counter(ptype)
                             self.page_status = dte.dtWrongDate
-                            return (dte.dtWrongDate, None)
+                            return
 
                 # We extract the current _item_count and the total_item_count
                 if (url_type & 12) == 12:
@@ -2363,15 +2363,15 @@ class FetchData(Thread):
             if dtcode == dte.dtNoData:
                 self.page_status = dte.dtNoData
                 update_counter(ptype, "empty", 'No DataTree Data')
-                return (dte.dtNoData, None)
+                return
 
             elif dtcode != dte.dtDataOK:
                 self.page_status = dte.dtDataInvalid
                 update_counter(ptype, tekst = 'DataTree Error %s' % (dtcode,))
-                return (dtcode, None)
+                return
 
-            self.data = self.datatrees[ptype].result
-            self.rawdata = self.datatrees[ptype].searchtree.result
+            self.data = self.datatrees[ptype].result[:]
+            self.rawdata = self.datatrees[ptype].searchtree.result[:]
             if self.show_result:
                 if self.raw_output == sys.stdout:
                     for p in self.rawdata:
@@ -2407,23 +2407,23 @@ class FetchData(Thread):
                 self.data = None
                 self.page_status = dte.dtNoData
                 update_counter(ptype, "empty", 'No DataTree Data')
-                return (dte.dtNoData, None)
+                return
 
-            return (dte.dtDataOK, self.data)
+            return
 
         except dtWarning as e:
             self.config.log(self.config.text('fetch', 14, (e.message, ptype, self.source)))
             self.functions.update_counter('fail', self.proc_id)
             self.data = None
             self.page_status = dte.dtDataInvalid
-            return (dte.dtDataInvalid, None)
+            return
 
         except:
             self.config.log([self.config.text('fetch', 29, (ptype, self.source)), traceback.format_exc()], 1)
             self.functions.update_counter('fail', self.proc_id)
             self.data = None
             self.page_status = dte.dtUnknownError
-            return (dte.dtUnknownError, None)
+            return
 
     def get_channels(self, data_list = None):
         """The code for the retreiving a list of supported channels"""
@@ -2448,7 +2448,7 @@ class FetchData(Thread):
             for retry in (0, 1):
                 self.get_page_data(ptype)
                 if self.page_status in (dte.dtDataOK, dte.dtURLerror, dte.dtNoData, dte.dtEmpty):
-                    channel_list = self.data[:]
+                    channel_list = self.data
                     break
 
         else:
@@ -2950,7 +2950,7 @@ class FetchData(Thread):
                             if len(fetch_range[channelid]) == max_fetch_days:
                                 break
 
-            # tvgids.nl, npo.nl, vpro.nl, primo.eu, oorboekje.nl
+            # tvgids.nl, vpro.nl, primo.eu, oorboekje.nl
             elif (url_type & 3) == 2:
                 fetch_range = []
                 for day in site_range:
@@ -2962,7 +2962,7 @@ class FetchData(Thread):
                     if len(fetch_range) == max_fetch_days:
                         break
 
-            #humo.be
+            #humo.be, npo.nl
             elif (url_type & 3) == 3:
                 fetch_range = {}
                 for channelgrp in changroups:
@@ -3168,7 +3168,7 @@ class FetchData(Thread):
                                                                 'ahead': fset[0] +fset[1]-1})
 
                                     if self.page_status == dte.dtDataOK:
-                                        strdata = self.data[:]
+                                        strdata = self.data
 
                                     else:
                                         if self.page_status in (dte.dtNoData, dte.dtEmpty):
@@ -3229,7 +3229,7 @@ class FetchData(Thread):
                                                             'back':-first_day,
                                                             'ahead':min(max_days, last_day)-1})
                                 if self.page_status == dte.dtDataOK:
-                                    strdata = self.data[:]
+                                    strdata = self.data
 
                                 else:
                                     if self.page_status in (dte.dtNoData, dte.dtEmpty):
@@ -3299,7 +3299,7 @@ class FetchData(Thread):
                                                         'back':-first_day,
                                                         'ahead':min(max_days, last_day)-1})
                             if self.page_status == dte.dtDataOK:
-                                strdata = self.data[:]
+                                strdata = self.data
 
                             else:
                                 if retry == 1:
@@ -3356,7 +3356,7 @@ class FetchData(Thread):
                                                             'back':-first_day,
                                                             'ahead':min(max_days, last_day)-1})
                                 if self.page_status == dte.dtDataOK:
-                                    strdata = self.data[:]
+                                    strdata = self.data
 
                                 else:
                                     if retry == 1:
@@ -3533,7 +3533,7 @@ class FetchData(Thread):
         ddata = {'channel': pdata['chanid'], 'detailid': pdata['detail_url']}
         self.get_page_data(ptype, ddata)
         if self.page_status == dte.dtDataOK:
-            strdata = self.data[:]
+            strdata = self.data
 
         else:
             self.config.log(self.config.text('fetch', 35, (pdata['detail_url'], )), 1)
