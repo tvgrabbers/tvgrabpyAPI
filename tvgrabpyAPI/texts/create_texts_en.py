@@ -90,7 +90,8 @@ def load_texts():
                 68: u'  Source %s (%s) disabled\n',
                 69: u'  Detail Source %s (%s) disabled\n',
                 70: u'Error Opening the old config. Creating a new one.\n',
-                71: u'Error reading the old config\n'
+                71: u'Error reading the old config\n',
+                72: u'The source %s is disabled for this API version!\n  Consider upgrading\n'
                 },
             u'help':{
                 1: u'  A grabber that grabs tvguide data from multiple sources,\n',

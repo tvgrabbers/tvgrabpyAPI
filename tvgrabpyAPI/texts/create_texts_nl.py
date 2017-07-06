@@ -90,7 +90,8 @@ def load_texts():
                 68: u'  De Bron %s (%s) is uitgeschakeld\n',
                 69: u'  De detail Bron %s (%s) is uitgeschakeld\n',
                 70: u'Fout bij het openen van het oude configuratie bestand. Er wordt een nieuwe aangemaakt.\n',
-                71: u'Fout bij het lezen van de oude configuratie\n'
+                71: u'Fout bij het lezen van de oude configuratie\n',
+                72: u'The bron %s is uitgeschakeld voor deze API versie!\n'
                 },
             u'help':{
                 1: u'  Een verzamelaar van TV programmagegevens vanuit meerdere bronnen,\n',
