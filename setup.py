@@ -23,6 +23,24 @@ if name == 'nt':
 else:
     source_dir = u'/var/lib/tvgrabpyAPI'
 
+classifiers=[
+    'Operating System :: Microsoft :: Windows',
+    'Operating System :: POSIX',
+    'Programming Language :: Python :: 2.7',
+    'Intended Audience :: Developers',
+    'Intended Audience :: End Users/Desktop',
+    'License :: Public Domain',
+    'Topic :: Internet :: WWW/HTTP :: Indexing/Search']
+
+if version()[6]:
+    classifiers.append('Development Status :: 3 - Alpha')
+
+elif version()[5]:
+    classifiers.append('Development Status :: 4 - Beta')
+
+else:
+    classifiers.append('Development Status :: 5 - Production/Stable')
+
 setup(
     name = version()[0],
     version =  __version__,
@@ -39,13 +57,5 @@ setup(
     maintainer_email = 'hikavdh at gmail dot com',
     license='GPL',
     url='https://github.com/tvgrabbers/tvgrabpyAPI',
-    classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Operating System :: Microsoft :: Windows',
-        'Operating System :: POSIX',
-        'Programming Language :: Python :: 2.7',
-        'Intended Audience :: Developers',
-        'Intended Audience :: End Users/Desktop',
-        'License :: Public Domain',
-        'Topic :: Internet :: WWW/HTTP :: Indexing/Search']
+    classifiers=classifiers
 )
