@@ -539,11 +539,16 @@ class Configure:
 
     def init_sources(self, sid = None):
         """Initialize the sources named in sourcematching"""
-        def disable_source(s):
+        def disable_source(s, byversion=False, sdata=None, ctype=None):
             # Disable the source as no data file is supplied
-            self.log(self.text('config', 1,(s, )))
             self.validate_option('disable_source', value = s)
-            self.channelsource[s] = tv_grab_fetch.FetchData(self, s, None)
+            if byversion:
+                self.log(self.text('config', 72,(s, )))
+
+            else:
+                self.log(self.text('config', 1,(s, )))
+
+            self.channelsource[s] = tv_grab_fetch.FetchData(self, s, sdata, ctype)
             if s in self.source_order[:]:
                 self.source_order.remove(s)
 
@@ -555,6 +560,20 @@ class Configure:
 
             if s in self.detail_sources[:]:
                 self.detail_sources.remove(s)
+
+        def enable_source(s):
+            # Enable the source for this version
+            if s in self.opt_dict['disable_source']:
+                self.opt_dict['disable_source'].remove(s)
+
+            if s not in self.source_order:
+                self.source_order.append(s)
+
+            if s not in self.sourceid_order:
+                self.sourceid_order.append(s)
+
+            if s not in self.prime_source_order:
+                self.prime_source_order.append(s)
 
         def init_source(sid, v):
             if not 'json file' in v:
@@ -568,6 +587,19 @@ class Configure:
             if sdata == None:
                 disable_source(sid)
                 return
+
+            if self.version(API=True)[1:4] < sdata['api-version']:
+                disable_source(sid, True, sdata, ctype)
+                return
+
+            elif sid in self.opt_dict['disable_source']:
+                if self.version(API=True)[1:4]  in sdata['enable for api']:
+                    enable_source(sid)
+
+            else:
+                if self.version(API=True)[1:4]  in sdata['disable for api']:
+                    disable_source(sid, True, sdata, ctype)
+                    return
 
             self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, sdata, ctype)
             if ctype == None:

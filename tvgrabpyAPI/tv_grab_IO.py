@@ -348,13 +348,14 @@ class Logging(Thread):
 
                     return(0)
 
-                if (datetime.datetime.now() - last_queuelog).total_seconds() > queueloginterfall:
-                    last_queuelog = datetime.datetime.now()
-                    self.send_queue_log()
+                if not self.config.test_modus:
+                    if (datetime.datetime.now() - last_queuelog).total_seconds() > queueloginterfall:
+                        last_queuelog = datetime.datetime.now()
+                        self.send_queue_log()
 
-                if self.check_threads and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
-                    lastcheck = datetime.datetime.now()
-                    self.check_thread_sanity()
+                    if self.check_threads and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
+                        lastcheck = datetime.datetime.now()
+                        self.check_thread_sanity()
 
                 try:
                     message = self.log_queue.get(True, 5)
@@ -2871,6 +2872,16 @@ class DD_Convert(DataDef_Convert):
             self.empty_values = data_value("empty-values", source_data, list, [None, "", "-"])
             self.csource_data = {}
             self.csource_data["dtversion"] = self.dtversion()
+            efa = data_value("enable for api", source_data, list)
+            self.csource_data["enable for api"] = []
+            for av in efa:
+                self.csource_data["enable for api"].append(tuple(av))
+
+            efa = data_value("disable for api", source_data, list)
+            self.csource_data["disable for api"] = []
+            for av in efa:
+                self.csource_data["disable for api"].append(tuple(av))
+
             self.csource_data["file-name"] = data_value("file-name", source_data, str)
             self.csource_data["name"] = data_value("name", source_data, str)
             self.csource_data["language"] = data_value("language", source_data, str, "en")
@@ -2883,7 +2894,7 @@ class DD_Convert(DataDef_Convert):
                 self.csource_data["site-tz"] = pytz.utc
 
             self.csource_data["version"] = data_value("version", source_data, int)
-            self.csource_data["api-version"] = data_value("api-version", source_data, list, [1,0,0])
+            self.csource_data["api-version"] = tuple(data_value("api-version", source_data, list, [1,0,0]))
             if self.csource_data["name"] in ("thetvdb.v1", "thetvdb.v2"):
                 for ptype in self.config.data_def_names[self.csource_data["name"]]:
                     if is_data_value([ptype, "data", "key-path"], source_data, list) or \
@@ -3233,8 +3244,8 @@ class test_Source():
         pdata['end'] = self.opt_dict['offset'] + 1
         pdata['back'] = -self.opt_dict['offset']
         pdata['ahead'] = self.opt_dict['offset']
-        data = self.source.get_page_data('base', pdata)
-        self.source.parse_basepage(data, pdata)
+        self.source.get_page_data('base', pdata)
+        self.source.parse_basepage(self.source.data, pdata)
         self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
         return(0)
 
