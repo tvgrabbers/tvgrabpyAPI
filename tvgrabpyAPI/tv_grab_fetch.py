@@ -367,9 +367,7 @@ class FetchURL(Thread):
             if self.url_request.status_code != requests.codes.ok:
                 if self.status_code == 500 and len(self.url_request.text) > 0 and not self.url_request.text.strip()[0] in ("{", "["):
                     # This probably is an inclomplete read we possibly can fix
-                    pass
-                    #~ if self.config.write_info_files:
-                        #~ self.config.infofiles.write_raw_string(self.url_request.text)
+                    self.page_status = dte.dtIncompleteRead
 
                 else:
                     self.url_request.raise_for_status()
@@ -2230,6 +2228,7 @@ class FetchData(Thread):
 
         self.page_status = dte.dtDataOK
         self.data = None
+        incomplete = False
         try:
             if pdata == None:
                 pdata = {}
@@ -2289,6 +2288,10 @@ class FetchData(Thread):
                 else:
                     break
 
+            if self.page_status == dte.dtIncompleteRead:
+                incomplete = True
+                self.page_status = dte.dtDataOK
+
             if self.page_status == dte.dtEmpty:
                 update_counter(ptype, "empty",u'No Data.')
                 return
@@ -2304,6 +2307,9 @@ class FetchData(Thread):
                     update_counter(ptype, "empty",u'No Data.')
 
                 else:
+                    if incomplete:
+                        self.page_status = dte.dtIncompleteRead
+
                     update_counter(ptype)
                     if self.print_roottree:
                         self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
@@ -2324,7 +2330,8 @@ class FetchData(Thread):
                     self.datatrees[ptype].searchtree.set_current_date(cdate)
                     # We check on the right offset
                     if len(self.source_data[ptype]["data"]["today"]) > 0:
-                        cd = self.datatrees[ptype].searchtree.find_data_value(self.source_data[ptype]["data"]["today"])
+                        cd = self.datatrees[ptype].searchtree.find_data_value(\
+                            self.source_data[ptype]["data"]["today"], searchname = 'for the current date')
                         if not isinstance(cd, datetime.date):
                             self.config.log([self.config.text('fetch', 27, (url[0], )),])
                             update_counter(ptype)
@@ -2353,21 +2360,25 @@ class FetchData(Thread):
                 # We extract the current _item_count and the total_item_count
                 if (url_type & 12) == 12:
                     self.total_item_count = self.datatrees[ptype].searchtree.find_data_value(\
-                        self.source_data[ptype]['data']["total-item-count"])
+                        self.source_data[ptype]['data']["total-item-count"], searchname = 'for the total-item-count')
                     self.current_item_count = self.datatrees[ptype].searchtree.find_data_value(\
-                        self.source_data[ptype]['data']["page-item-count"])
+                        self.source_data[ptype]['data']["page-item-count"], searchname = 'for the page-item-count')
 
             # Extract the data
             dtcode = self.datatrees[ptype].extract_datalist()
             self.page_status = dtcode
-            if dtcode == dte.dtNoData:
-                self.page_status = dte.dtNoData
-                update_counter(ptype, "empty", 'No DataTree Data')
-                return
+            if dtcode != dte.dtDataOK:
+                if incomplete:
+                    self.page_status = dte.dtIncompleteRead
+                    update_counter(ptype, tekst = 'Incomplete Read')
 
-            elif dtcode != dte.dtDataOK:
-                self.page_status = dte.dtDataInvalid
-                update_counter(ptype, tekst = 'DataTree Error %s' % (dtcode,))
+                elif dtcode == dte.dtNoData:
+                    update_counter(ptype, "empty", 'No DataTree Data')
+
+                else:
+                    self.page_status = dte.dtDataInvalid
+                    update_counter(ptype, tekst = 'DataTree Error %s' % (dtcode,))
+
                 return
 
             self.data = self.datatrees[ptype].result[:]
