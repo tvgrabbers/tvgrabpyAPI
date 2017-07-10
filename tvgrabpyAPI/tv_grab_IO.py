@@ -3003,22 +3003,7 @@ class DD_Convert(DataDef_Convert):
                     self.csource_data["detail_processor"] = False
 
             if file_name != None:
-                try:
-                    pickle.dump(self.csource_data, open(file_name, 'w'), 2)
-
-                except:
-                    pass
-
-    def write_csource_data(self, output = sys.stdout, data = None):
-        with self.tree_lock:
-            if data == None:
-                data = self.csource_data
-
-            if output in (sys.stdout, sys.stderr):
-                output.write(data.encode('utf-8', 'replace'))
-
-            else:
-                output.write(u'%s\n' % data)
+                self.store_cdata_def(file_name, self.csource_data)
 
 # end DD_Convert()
 
@@ -3190,11 +3175,11 @@ class test_Source():
             (self.opt_dict['report_dir'], self.source.name), 'w')
 
         if is_data_value("dtversion", self.source.source_data, tuple):
-            self.conv_dd.write_csource_data(fle, self.source.source_data)
+            self.conv_dd.write_cdata_def(fle, self.source.source_data)
 
         else:
             self.conv_dd.convert_sourcefile(self.source.source_data, self.source.cattrans_type)
-            self.conv_dd.write_csource_data(fle)
+            self.conv_dd.write_cdata_def(fle)
 
         fle.close()
 
