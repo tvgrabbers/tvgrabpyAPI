@@ -50,7 +50,7 @@ setup(
     scripts=['tv_grab_nl3.py', 'tv_grab_test_json.py', 'tv_grab_test_source.py'],
     data_files=[(source_dir, ['sources/tv_grab_API.json',
                             'sources/tv_grab_nl.json'])],
-    requires = ['pytz', 'requests', 'DataTreeGrab (>=1.4)'],
+    requires = ['pytz', 'requests', 'DataTreeGrab (>=1.04)'],
     provides = ['%s (%s.%s)' % (version()[0], version()[1], version()[2])],
     long_description = __doc__,
     maintainer = 'Hika van den Hoven',

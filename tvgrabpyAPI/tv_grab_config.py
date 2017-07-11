@@ -125,9 +125,9 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 7
-api_patchdate = u'20170625'
+api_patchdate = u'20170711'
 api_alfa = False
-api_beta = True
+api_beta = False
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
@@ -231,6 +231,8 @@ class Configure:
         self.minor = self.api_minor
         self.patch = self.api_patch
         self.patchdate = self.api_patchdate
+        dtdate = dtversion()[4]
+        self.dtdate = datetime.date(int(dtdate[:4]),int(dtdate[4:6]),int(dtdate[6:]))
         self.alfa = self.api_alfa
         self.beta = self.api_beta
         self.utc_tz = pytz.utc

@@ -430,7 +430,7 @@ def load_texts():
                 8: u'Er is een nieuwere stabiele API release bescikbaar op github!\n',
                 9: u'Ga naar: %s\n',
                 10: u'Er is een nieuwere stabiele frontend release beschikbaar!\n',
-                11: u'Het zender/bron data bestand is nieuwer!\n',
+                11: u'De zender/bron json data is nieuwer!\n',
                 12: u'Draai met "--configure" om dit te implementeren\n'
                 }},
         u'IO':{

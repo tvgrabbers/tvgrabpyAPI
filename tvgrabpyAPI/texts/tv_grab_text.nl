@@ -866,7 +866,7 @@ sI10
 VEr is een nieuwere stabiele frontend release beschikbaar!\u000a
 p277
 sI11
-VHet zender/bron data bestand is nieuwer!\u000a
+VDe zender/bron json data is nieuwer!\u000a
 p278
 sI12
 VDraai met "--configure" om dit te implementeren\u000a

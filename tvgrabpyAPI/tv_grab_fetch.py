@@ -5,7 +5,7 @@
 from __future__ import unicode_literals
 # from __future__ import print_function
 
-import re, sys, traceback, difflib
+import re, sys, traceback, difflib, os
 import time, datetime, pytz, random
 import requests, httplib, socket, json
 from DataTreeGrab import *
@@ -199,12 +199,13 @@ class Functions():
                 self.config.log(traceback.print_exc())
 
         elif isinstance(version, int) or self.config.only_local_sourcefiles:
-            # We try to get the converted pickle in the supplied location
+            # We try to get the converted pickle in the supplied location, but check that it is of the right dt version and date
             try:
                 if fpath != None:
-                    fle = self.config.IO_func.read_pickle('%s/%s.bin' % (fpath, local_name))
-                    if fle != None:
-                        if data_value(["dtversion"], fle, tuple) == conv_dd.dtversion():
+                    fn = '%s/%s.bin' % (fpath, local_name)
+                    if os.path.isfile(fn) and datetime.date.fromtimestamp(os.stat(fn).st_mtime) >= self.config.dtdate:
+                        fle = self.config.IO_func.read_pickle(fn)
+                        if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion():
                             return fle
 
             except:
