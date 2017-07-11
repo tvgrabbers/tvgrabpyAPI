@@ -34,17 +34,17 @@
 	"sources":{
 		"5":{
 			"json file":"source-horizon.tv",
-			"version":21,
+			"version":22,
 			"cattrans type":1,
 			"cattransid":2},
 		"6":{
 			"json file":"source-humo.be",
-			"version":5,
+			"version":6,
 			"cattrans type":1,
 			"cattransid":3},
 		"8":{
 			"json file":"source-nieuwsblad.be",
-			"version":7,
+			"version":8,
 			"cattrans type":null,
 			"cattransid":null},
 		"4":{
@@ -59,7 +59,7 @@
 			"cattransid":null},
 		"9":{
 			"json file":"source-primo.eu",
-			"version":9,
+			"version":10,
 			"cattrans type":1,
 			"cattransid":6},
 		"2":{
@@ -69,17 +69,17 @@
 			"cattransid":null},
 		"3":{
 			"json file":"source-tvgids.nl",
-			"version":13,
+			"version":15,
 			"cattrans type":1,
 			"cattransid":0},
 		"1":{
 			"json file":"source-tvgids.tv",
-			"version":13,
+			"version":15,
 			"cattrans type":2,
 			"cattransid":5},
 		"7":{
 			"json file":"source-vpro.nl",
-			"version":15,
+			"version":17,
 			"cattrans type":1,
 			"cattransid":4},
 		"10":{
@@ -368,7 +368,6 @@
 			"5-561138215256": "baby-tv",
 			"5-561138215258": "tv538",
 			"5-561793575034": "crime-and-investigation",
-			"5-606274087102": "horse-country-tv",
 			"5-728310311076": "food-network",
 			"5-728310311079": "fine-living",
 			"8-zes": "zes"},
@@ -1021,18 +1020,21 @@
 		"0-89":3,
 		"0-91":7,
 		"0-99":5,
+		"0-100":5,
 		"0-101":3,
 		"0-102":3,
 		"0-108":5,
 		"0-110":5,
 		"0-111":5,
-		"0-112":3,
+		"0-112":5,
 		"0-114":5,
 		"0-115":5,
+		"0-116":5,
 		"0-148":5,
 		"0-304":5,
 		"0-311":5,
 		"0-313":5,
+		"0-406":5,
 		"0-411":5,
 		"0-419":5,
 		"0-420":5,
@@ -1050,7 +1052,7 @@
 		"1-sport1-extra-2":5,
 		"1-nickelodeon":3,
 		"1-veronica":5,
-		"1-zappelin":3,
+		"1-zappelin":4,
 		"virtual-veronica":3},
 	"channel_groups":{
 		"0":"Actieve Zenders",
