@@ -479,7 +479,7 @@ def load_texts():
                 36: u'Removing "%s" from "%s"\n',
                 37: u'Splitting title "%s"\n',
                 38: u'Renaming "%s" to "%s"\n',
-                39: u'%s returned two empty pages for channel: %s.\n    We assume the rest to be empty!\n',
+                39: u'%s returned an empty page for channel: %s.\n    We assume the rest to be empty!\n',
                 51: u'No Data from %s for channel: %s\n',
                 52: u'Detail sources: %s died.\n',
                 53: u'So we stop waiting for the pending details for channel %s\n',

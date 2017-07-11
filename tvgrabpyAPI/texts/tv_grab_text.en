@@ -1324,7 +1324,7 @@ sI38
 VRenaming "%s" to "%s"\u000a
 p432
 sI39
-V%s returned two empty pages for channel: %s.\u000a    We assume the rest to be empty!\u000a
+V%s returned an empty page for channel: %s.\u000a    We assume the rest to be empty!\u000a
 p433
 sI51
 VNo Data from %s for channel: %s\u000a

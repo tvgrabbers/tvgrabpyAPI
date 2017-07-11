@@ -3182,10 +3182,13 @@ class FetchData(Thread):
                                     if self.page_status == dte.dtDataOK:
                                         strdata = self.data
 
-                                    else:
-                                        if self.page_status in (dte.dtNoData, dte.dtEmpty):
-                                            empty_count += 1
+                                    elif self.page_status == dte.dtNoData:
+                                        # We asume this is the last day with data
+                                        maxoffset[channelid] = fset
+                                        self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                        break
 
+                                    else:
                                         if retry == 1:
                                             log_fail()
 
@@ -3194,11 +3197,6 @@ class FetchData(Thread):
                                         page_count += 1
                                         fetch_count += 1
                                         if failure_count > max_failure_count:
-                                            break
-
-                                        if empty_count > 1:
-                                            maxoffset[channelid] = fset
-                                            self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
                                             break
 
                                         continue
@@ -3243,19 +3241,17 @@ class FetchData(Thread):
                                 if self.page_status == dte.dtDataOK:
                                     strdata = self.data
 
-                                else:
-                                    if self.page_status in (dte.dtNoData, dte.dtEmpty):
-                                        empty_count += 1
+                                elif self.page_status == dte.dtNoData:
+                                    # We asume this is the last page with data
+                                    maxoffset[channelid] = offset
+                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                    break
 
+                                else:
                                     if retry == 1:
                                         log_fail()
 
                                     failure_count += 1
-                                    if empty_count > 1:
-                                        maxoffset[channelid] = offset
-                                        self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
-                                        break
-
                                     continue
 
                                 self.parse_basepage(strdata, {'url_type':url_type, 'offset': offset, 'channelid': channelid})

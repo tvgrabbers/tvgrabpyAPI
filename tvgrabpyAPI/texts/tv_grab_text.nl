@@ -1326,7 +1326,7 @@ sI38
 VHernoem "%s" naar "%s"\u000a
 p434
 sI39
-V%s gaf twee lege pagina's voor zender: %s.\u000a    We gaan er van uit dat de rest ook leeg is!\u000a
+V%s gaf een lege pagina voor zender: %s.\u000a    We gaan er van uit dat de rest ook leeg is!\u000a
 p435
 sI51
 VGeen data van %s voor zender: %s\u000a
