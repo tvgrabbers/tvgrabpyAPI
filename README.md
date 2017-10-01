@@ -2,7 +2,7 @@
 
 [Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
 
-## October 1st 2017 TheTVDB API V1 will stop working.
+## Sometime after October 1st 2017 TheTVDB API V1 will stop working.
 At present we are working on support for the API V2. A beta release is expected soon.
 
 ## New [version 1.0.7](https://github.com/tvgrabbers/tvgrabpyAPI/releases/tag/stable-1.0.7) release based on [DataTreeGrab module v1.4.0](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.4.0)
