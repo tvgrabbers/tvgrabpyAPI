@@ -1595,6 +1595,12 @@ class ChannelNode():
             if isinstance(ngap, GapNode):
                 self.remove_gap(ngap)
 
+            if pn == self.first_node:
+                self.first_node = nnode
+
+            if pn == self.last_node:
+                self.last_node = pnode
+
             gap = self.link_nodes(pnode, nnode)
             if isinstance(pnode, ProgramNode):
                 pnode.next_gap = gap
