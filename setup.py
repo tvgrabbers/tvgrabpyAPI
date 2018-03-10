@@ -51,10 +51,9 @@ setup(
     data_files=[(source_dir, ['sources/tv_grab_API.json',
                             'sources/tv_grab_nl.json'])],
     requires = ['pytz', 'requests', 'DataTreeGrab (>=1.04)'],
-    provides = ['%s (%s.%s)' % (version()[0], version()[1], version()[2])],
+    provides = [version()[0]],
     long_description = __doc__,
     maintainer = 'Hika van den Hoven',
-    maintainer_email = 'hikavdh at gmail dot com',
     license='GPL',
     url='https://github.com/tvgrabbers/tvgrabpyAPI',
     classifiers=classifiers

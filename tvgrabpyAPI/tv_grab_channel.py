@@ -160,9 +160,13 @@ class Channel_Config(Thread):
                         return
 
                     # Check if the source is still alive
-                    if self.config.channelsource[index].has_started and not self.config.channelsource[index].is_alive() and not self.source_ready(index).is_set():
+                    if (self.config.channelsource[index].ready \
+                        or (self.config.channelsource[index].has_started \
+                            and not self.config.channelsource[index].is_alive())) \
+                        and not self.source_ready(index).is_set():
                         if not self.config.channelsource[index].is_virtual:
-                            self.config.log(self.config.text('fetch', 55, (self.config.channelsource[index].source, self.chan_descr)))
+                            self.config.log(self.config.text('fetch', 55, \
+                                (self.config.channelsource[index].source, self.chan_descr)))
 
                         self.source_ready(index).set()
                         break
@@ -230,13 +234,15 @@ class Channel_Config(Thread):
                                 return
 
                             # Check if the child is still alive
-                            if child_chan.has_started and not child_chan.is_alive() and not child_chan.child_data.is_set():
+                            if (child_chan.ready or (child_chan.has_started and not child_chan.is_alive())) \
+                                and not child_chan.child_data.is_set():
                                 self.config.log(self.config.text('fetch', 55, (child_chan.chan_descr, self.chan_descr)))
                                 break
 
                         self.state = 0
                         self.source = None
-                        if not isinstance(child_chan.channel_node, ChannelNode) or child_chan.channel_node.program_count() == 0:
+                        if not isinstance(child_chan.channel_node, ChannelNode) or \
+                            child_chan.channel_node.program_count() == 0:
                             self.config.log(self.config.text('fetch', 51, (child_chan.chan_descr, self.chan_descr)))
 
                         elif self.child_data.is_set():

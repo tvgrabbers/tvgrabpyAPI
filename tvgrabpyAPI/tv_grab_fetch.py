@@ -2140,7 +2140,8 @@ class FetchData(Thread):
         self.sourcedbdata = self.get_cache_return()
         if self.source_data['alt-url-code'] != None and self.sourcedbdata['use_alt_url']:
             for ptype in self.config.data_def_names["source"]:
-                self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
+                if ptype in self.source_data.keys():
+                    self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
 
         for chanid, channel in self.config.channels.iteritems():
             # Is the channel active and this source for the channel not disabled
