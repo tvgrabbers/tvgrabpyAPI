@@ -2,10 +2,13 @@
 
 [Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
 
+## Sometime after October 1st 2017 TheTVDB API V1 will stop working.
+At present we are working on support for the API V2. A beta release is expected soon.
+
 ## New [version 1.0.7](https://github.com/tvgrabbers/tvgrabpyAPI/releases/tag/stable-1.0.7) release based on [DataTreeGrab module v1.4.0](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.4.0)
 
-**17-05-2017** (dtg 1.3.3) With a significant speed increase of in my use case 30% (from 68 minutes to 48 minutes)
-**10-07-2017** (dtg 1.4.0) With now an even larger speed increase of in my use case 65% to 23.5 minutes (1.72 sec/page)
+**17-05-2017** (dtg 1.3.3) With a significant speed increase of in my use case 30% (from 68 minutes to 48 minutes)  
+**10-07-2017** (dtg 1.4.0) With now an even larger speed increase of in my use case 65% to 23.5 minutes (1.72 sec/page)  
 
 ### Summary
 
