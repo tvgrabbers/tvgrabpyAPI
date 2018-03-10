@@ -139,7 +139,7 @@ def grabber_main(config):
             return( -2)
 
         # Get the options, channels and other configuration
-        start_time = datetime.datetime.now()
+        start_time = config.in_output_tz('now')
         x = config.validate_commandline()
         if x != None:
             return(x)
@@ -193,7 +193,7 @@ def grabber_main(config):
         config.write_defaults_list()
 
         # Create a report
-        end_time = datetime.datetime.now()
+        end_time = config.in_output_tz('now')
         config.write_statistics(start_time, end_time)
 
     except:
@@ -516,7 +516,10 @@ class Configure:
 
     def in_tz(self, cdate, tz = None):
         if tz == None:
-            tz = pyz.utc
+            tz = pytz.utc
+
+        if cdate == 'now':
+            cdate = datetime.datetime.now()
 
         if isinstance(cdate, datetime.datetime):
             if cdate.tzinfo == None:

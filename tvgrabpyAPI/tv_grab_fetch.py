@@ -7,7 +7,7 @@ from __future__ import unicode_literals
 
 import re, sys, traceback, difflib, os
 import time, datetime, pytz, random
-import requests, httplib, socket, json
+import requests, httplib, socket
 from DataTreeGrab import *
 from tv_grab_channel import ProgramNode
 from tv_grab_IO import DD_Convert
@@ -15,6 +15,11 @@ from threading import Thread, RLock, Semaphore, Event
 from xml.sax import saxutils
 from Queue import Queue, Empty
 from copy import deepcopy, copy
+try:
+    import json
+except ImportError:
+    import simplejson as json
+
 try:
     from html.entities import name2codepoint
 except ImportError:
@@ -205,7 +210,8 @@ class Functions():
                     fn = '%s/%s.bin' % (fpath, local_name)
                     if os.path.isfile(fn) and datetime.date.fromtimestamp(os.stat(fn).st_mtime) >= self.config.dtdate:
                         fle = self.config.IO_func.read_pickle(fn)
-                        if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion():
+                        if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion() \
+                            and data_value(["tvgversion"], fle, tuple, (1, 0, 7)) == tuple(self.config.version(False, True)[1:4]):
                             return fle
 
             except:
@@ -924,7 +930,7 @@ class theTVDB_v1(Thread):
 
                 try:
                     crequest = self.detail_request.get(True, 5)
-                    self.lastrequest = datetime.datetime.now()
+                    self.lastrequest = self.config.in_output_tz('now')
                     if self.quit:
                         if 'parent' in crequest:
                             crequest['parent'].detail_return.put('quit')
@@ -1080,10 +1086,10 @@ class theTVDB_v1(Thread):
         '''
         Make a request on theTVDB.com and return the queryID or any return data from DataTree
         '''
-        if self.lastquery != None and datetime.datetime.now() - self.lastquery < datetime.timedelta(seconds = 1):
+        if self.lastquery != None and self.config.in_output_tz('now') - self.lastquery < datetime.timedelta(seconds = 1):
             time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
 
-        self.lastquery = datetime.datetime.now()
+        self.lastquery = self.config.in_output_tz('now')
         if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
             return
 
@@ -1963,7 +1969,7 @@ class FetchData(Thread):
                 self.ready = True
                 return -1
 
-            self.lastrequest = datetime.datetime.now()
+            self.lastrequest = self.config.in_output_tz('now')
             try:
                 if self.quit:
                     return -1
@@ -2019,7 +2025,7 @@ class FetchData(Thread):
             if self.detail_processor and  not self.proc_id in self.config.opt_dict['disable_detail_source']:
                 # We process detail requests, so we loop till we are finished
                 self.state = 4
-                self.lastrequest = datetime.datetime.now()
+                self.lastrequest = self.config.in_output_tz('now')
                 while True:
                     if self.quit:
                         self.ready = True
@@ -2139,11 +2145,10 @@ class FetchData(Thread):
 
         self.sourcedbdata = self.get_cache_return()
         if self.source_data['alt-url-code'] != None and self.sourcedbdata['use_alt_url']:
-            for ptype in self.config.data_def_names["source"]:
-                if ptype in self.source_data.keys():
-                    self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
+            for ptype in self.source_data["data_defs"]:
+                self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
 
-        for chanid, channel in self.config.channels.iteritems():
+        for chanid, channel in self.config.channels.items():
             # Is the channel active and this source for the channel not disabled
             if channel.active:
                 # Is there a channelid for this channel
@@ -2180,17 +2185,16 @@ class FetchData(Thread):
         The then by the DataTree extracted data is return
         """
         def switch_url():
-            for ptype in self.config.data_def_names["source"]:
-                if ptype in self.source_data.keys():
-                    if self.sourcedbdata['use_alt_url']:
-                        self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
-                        if ptype in self.datatrees.keys():
-                            self.datatrees[ptype].data_def['url'] = self.source_data[ptype]['url']
+            for ptype in self.source_data["data_defs"]:
+                if self.sourcedbdata['use_alt_url']:
+                    self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
+                    if ptype in self.datatrees.keys():
+                        self.datatrees[ptype].data_def['url'] = self.source_data[ptype]['url']
 
-                    else:
-                        self.source_data[ptype]['url'] = self.source_data[ptype]['normal-url']
-                        if ptype in self.datatrees.keys():
-                            self.datatrees[ptype].data_def['url'] = self.source_data[ptype]['url']
+                else:
+                    self.source_data[ptype]['url'] = self.source_data[ptype]['normal-url']
+                    if ptype in self.datatrees.keys():
+                        self.datatrees[ptype].data_def['url'] = self.source_data[ptype]['url']
 
         def update_counter(ptype, pstatus = "fail", tekst = None):
             if ptype in self.config.data_def_names["detail"]:
@@ -2409,7 +2413,7 @@ class FetchData(Thread):
 
             # we extract a channel list if available
             if not self.config.test_modus and ptype == 'base' and \
-              "base-channels"in self.source_data["base_defs"] and len(self.all_channels) == 0:
+              "base-channels"in self.source_data["channel_defs"] and len(self.all_channels) == 0:
                 self.datatrees[ptype].init_data_def(self.source_data["base-channels"])
                 if not self.datatrees[ptype].extract_datalist():
                     self.get_channels(self.datatrees[ptype].result)
@@ -3581,7 +3585,7 @@ class FetchData(Thread):
                 if isinstance(v, (str, unicode)):
                     self.data_output.write('        %s: "%s"\n' % (k, v))
 
-                elif isinstance(v, list):
+                elif isinstance(v, list) and len(v) > 0:
                     vv = '        %s: ' % (k, )
                     for item in v:
                         if isinstance(item, (str, unicode)):

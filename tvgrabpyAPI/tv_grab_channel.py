@@ -720,6 +720,15 @@ class ChannelNode():
                 self.prime_source = source
                 self.merge_source(programs, source)
 
+    def __iter__(self):
+        p = self.first_node
+        if isinstance(p, ProgramNode):
+            yield p
+
+        while isinstance(p.next, ProgramNode):
+            p = p.next
+            yield p
+
     def clear_all_programs(self):
         with self.node_lock:
             self.programs = []
@@ -1402,13 +1411,10 @@ class ChannelNode():
     def check_lineup(self, overlap_strategy = None):
         with self.node_lock:
             # Remove any program of zero length
-            pn = self.first_node
-            while isinstance(pn, ProgramNode):
+            for pn in self:
                 if abs(pn.stop - pn.start) < datetime.timedelta(minutes = 1):
                     self.config.log(self.config.text('merge', 2, ('%s: %s' % (pn.get_title(), pn.get_start_stop()), self.name)), 64, 3)
                     self.remove_node(pn)
-
-                pn = pn.next
 
             # We check overlap
             if overlap_strategy in ['average', 'stop', 'start']:
@@ -1443,10 +1449,8 @@ class ChannelNode():
                 gen_genre = None
 
             # Check Which Title/Subtitle combination wins and others
-            pnode = self.first_node
-            while isinstance(pnode, ProgramNode):
+            for pnode in self:
                 pnode.set_prime_values(gen_genre)
-                pnode = pnode.next
 
     def link_nodes(self, node1, node2, adjust_overlap = None):
         with self.node_lock:
@@ -3046,12 +3050,11 @@ class XMLoutput():
         self.xml_programs[xmltvid] = []
         if not isinstance(channel_node, ChannelNode):
             return
-        program = channel_node.first_node
         lang = {'lang': self.config.xml_language}
-        while isinstance(program, ProgramNode):
+        for program in channel_node:
             if abs(program.stop - program.start) < datetime.timedelta(minutes = 1):
-                self.config.log(self.config.text('merge', 2, ('%s: %s' % (program.get_title(), program.get_start_stop()), channel_node.name)), 4, 3)
-                program = program.next
+                self.config.log(self.config.text('merge', 2, ('%s: %s' % \
+                    (program.get_title(), program.get_start_stop()), channel_node.name)), 4, 3)
                 continue
 
             xml = []
@@ -3247,7 +3250,6 @@ class XMLoutput():
 
             xml.append(self.add_endtag('programme', 2))
             self.xml_programs[xmltvid].append(xml)
-            program = program.next
 
     def get_xmlstring(self):
         '''

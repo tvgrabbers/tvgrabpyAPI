@@ -311,8 +311,8 @@ class Logging(Thread):
                     continue
 
         self.log_output = self.config.log_output
-        last_queuelog = datetime.datetime.now()
-        lastcheck = datetime.datetime.now()
+        last_queuelog = self.config.in_output_tz('now')
+        lastcheck = self.config.in_output_tz('now')
         checkinterfall = 60
         queueloginterfall = 300
         self.fatal_error = [self.config.text('IO', 10), \
@@ -349,12 +349,12 @@ class Logging(Thread):
                     return(0)
 
                 if not self.config.test_modus:
-                    if (datetime.datetime.now() - last_queuelog).total_seconds() > queueloginterfall:
-                        last_queuelog = datetime.datetime.now()
+                    if (self.config.in_output_tz('now') - last_queuelog).total_seconds() > queueloginterfall:
+                        last_queuelog = self.config.in_output_tz('now')
                         self.send_queue_log()
 
-                    if self.check_threads and (datetime.datetime.now() - lastcheck).total_seconds() > checkinterfall:
-                        lastcheck = datetime.datetime.now()
+                    if self.check_threads and (self.config.in_output_tz('now') - lastcheck).total_seconds() > checkinterfall:
+                        lastcheck = self.config.in_output_tz('now')
                         self.check_thread_sanity()
 
                 try:
@@ -453,7 +453,7 @@ class Logging(Thread):
     # end run()
 
     def now(self):
-         return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z') + ': '
+         return self.config.in_output_tz('now').strftime('%Y-%m-%d %H:%M:%S %Z: ')
 
     # end now()
 
@@ -527,7 +527,7 @@ class Logging(Thread):
                     if t.thread_type == 'source':
                         waittime = None
                         if isinstance(t.lastrequest, datetime.datetime):
-                            waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
+                            waittime = (self.config.in_output_tz('now') - t.lastrequest).total_seconds()
 
                         if waittime == None or waittime < idle_timeout:
                             break
@@ -558,7 +558,7 @@ class Logging(Thread):
             t = self.config.ttvdb
             waittime = -1
             if t != None and t.is_alive() and isinstance(t.lastrequest, datetime.datetime):
-                 waittime = (datetime.datetime.now() - t.lastrequest).total_seconds()
+                 waittime = (self.config.in_output_tz('now') - t.lastrequest).total_seconds()
                  # And the same with ttvdb, but we let it wait longer
                  if waittime > idle_timeout2:
                     ttvdb_cnt = 0
@@ -660,7 +660,7 @@ class Logging(Thread):
                 return
 
             if subject == None:
-                subject = 'Tv_grab_nl3_py %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                subject = 'Tv_grab_nl3_py %s' % self.config.in_output_tz('now').strftime('%Y-%m-%d %H:%M')
 
             msg = MIMEText(msg, _charset='utf-8')
             msg['Subject'] = subject
@@ -2724,8 +2724,7 @@ class InfoFiles():
                     (programs.program_count(), len(programs.group_slots), \
                     len(programs.program_gaps),sname)
 
-                pnode = programs.first_node
-                while isinstance(pnode, tv_grab_channel.ProgramNode):
+                for pnode in programs:
                     fstr += u'  %s: [%s][%s] [%s:%s/%s] %s; %s %s\n' % (\
                                     pnode.get_start_stop(), \
                                     pnode.get_value('ID').rjust(15), \
@@ -2739,8 +2738,6 @@ class InfoFiles():
 
                     if pnode.next_gap != None:
                         fstr += u'  %s: GAP\n' % pnode.next_gap.get_start_stop()
-
-                    pnode = pnode.next
 
             else:
                 plist = deepcopy(programs)
@@ -2872,6 +2869,7 @@ class DD_Convert(DataDef_Convert):
             self.empty_values = data_value("empty-values", source_data, list, [None, "", "-"])
             self.csource_data = {}
             self.csource_data["dtversion"] = self.dtversion()
+            self.csource_data["tvgversion"] = tuple(self.config.version(False, True)[1:4])
             efa = data_value("enable for api", source_data, list)
             self.csource_data["enable for api"] = []
             for av in efa:
@@ -2932,6 +2930,7 @@ class DD_Convert(DataDef_Convert):
                         self.csource_data["cattrans"][k] = v
 
                 self.csource_data["channel_list"] = {}
+                self.csource_data["data_defs"] = []
                 self.csource_data["channel_defs"] = []
                 self.csource_data["base_defs"] = []
                 self.csource_data["detail_defs"] = []
@@ -2949,6 +2948,7 @@ class DD_Convert(DataDef_Convert):
                         self.convert_data_def(data_value(ptype, source_data, dict), include_url = True, include_links = True)
                         self.csource_data[ptype] = deepcopy(self.cdata_def)
                         self.csource_data[ddl].append(ptype)
+                        self.csource_data["data_defs"].append(ptype)
                         self.csource_data[ptype]["empty-values"] = self.empty_values
                         del self.csource_data[ptype]["default-item-count"]
                         self.csource_data[ptype]['normal-url'] = self.csource_data[ptype]['url']
