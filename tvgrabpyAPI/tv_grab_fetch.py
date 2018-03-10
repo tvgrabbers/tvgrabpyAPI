@@ -134,13 +134,6 @@ class Functions():
         timeout exception
         """
         try:
-            if isinstance(url, (list, tuple)) and len(url) > 0:
-                encoding = url[1] if len(url) > 1 else None
-                accept_header = url[2] if len(url) > 2 else None
-                txtdata = url[3] if len(url) > 3 else None
-                is_json = url[4] if len(url) >4 else False
-                url = url[0]
-
             if isinstance(accept_header, dict):
                 txtheaders = accept_header
 
@@ -1131,7 +1124,7 @@ class theTVDB_v1(Thread):
             print url
 
         self.functions.update_counter('detail', self.proc_id, chanid)
-        pstate, page, pcode = self.functions.get_page(url)
+        pstate, page, pcode = self.functions.get_page(*url)
         if pstate != dte.dtDataOK or page == None:
             self.functions.update_counter('fail', self.proc_id, chanid)
             return None
@@ -2283,7 +2276,7 @@ class FetchData(Thread):
 
                 update_counter(ptype, "fetched")
                 # Get the Page
-                self.page_status, page, pcode = self.functions.get_page(url)
+                self.page_status, page, pcode = self.functions.get_page(*url)
                 # Do an URL swap if needed and try again
                 if pcode != None and int(pcode) ==  self.source_data['alt-url-code']:
                     self.config.queues['cache'].put({'task':'update', 'parent': self,
