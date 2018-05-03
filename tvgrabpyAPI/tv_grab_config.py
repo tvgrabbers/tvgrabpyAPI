@@ -127,7 +127,7 @@ api_minor = 0
 api_patch = 8
 api_patchdate = u'20180310'
 api_alfa = False
-api_beta = True
+api_beta = False
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
