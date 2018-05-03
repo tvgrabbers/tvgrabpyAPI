@@ -2439,7 +2439,6 @@ class FetchData(Thread):
         """The code for the retreiving a list of supported channels"""
         self.all_channels ={}
         self.lineup_changes = []
-        channel_list = None
         if data_list == None:
             if "channels" in self.source_data["channel_defs"]:
                 ptype = "channels"
