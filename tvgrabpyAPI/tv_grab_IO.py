@@ -2413,7 +2413,7 @@ class ProgramCache(Thread):
 
             for c in item:
                 if not c['chanid'] in g.keys():
-                    rec.append(make_val_list('fetcheddata', **c))
+                    rec.append(make_val_list('channels', **c))
 
                 elif g[c['chanid']]['name'].lower() != c['name'].lower() or \
                         g[c['chanid']]['cgroup'] != c['cgroup'] or \
