@@ -676,7 +676,7 @@ class Channel_Config(Thread):
                     return True
 
                 if source_id == self.opt_dict['prime_source'] and \
-                    len(self.config.channelsource[sourceid].update_base) > 0:
+                    len(self.config.channelsource[source_id].update_base) > 0:
                     return True
 
             return False

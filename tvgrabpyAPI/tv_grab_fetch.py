@@ -2764,9 +2764,7 @@ class FetchData(URLtypes, Thread):
                 plen = len(self.program_data[channelid])
                 last_stop = None
                 min_gap = datetime.timedelta(minutes = 30)
-                #~ if len(self.update_base) > 0 and \
-                    #~ self.config.channels[chanid].opt_dict['prime_source'] == self.proc_id:
-                if len(self.update_base) > 0:
+                if self.config.channels[chanid].get_opt('pre_merge', self.proc_id):
                     url_list = [None]
                     self.fetch_counter = 0
                     fetch_order = list(range(plen))
@@ -2886,11 +2884,10 @@ class FetchData(URLtypes, Thread):
                     #~ (self.config.channels[chanid].name, self.name))
 
             # Retrieve what is in the cache with a day earlier and later added
-            cache_range = range( first_day - 1 , min(max_days, last_day) +1)
             cache_programs = self.get_cache_return('sourceprograms',
                             sourceid = self.proc_id,
                             channelid = channelid,
-                            scandate = cache_range)
+                            scandate = range( first_day - 1 , min(max_days, last_day) +1))
             if cache_programs == -1:
                 return -1
 
