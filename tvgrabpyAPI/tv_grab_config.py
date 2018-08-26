@@ -124,10 +124,10 @@ except NameError:
 api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
-api_patch = 8
-api_patchdate = u'20180310'
+api_patch = 9
+api_patchdate = u'20180826'
 api_alfa = False
-api_beta = False
+api_beta = True
 
 def version():
     return (api_name, api_major, api_minor, api_patch, api_patchdate, api_beta, api_alfa)
@@ -139,11 +139,11 @@ def grabber_main(config):
             return( -2)
 
         # Get the options, channels and other configuration
-        start_time = config.in_output_tz('now')
         x = config.validate_commandline()
         if x != None:
             return(x)
 
+        start_time = config.in_output_tz('now')
         config.log(config.text('config', 5, (start_time.strftime('%Y-%m-%d %H:%M'), ), 'other'),4, 1)
 
         # Start the seperate fetching threads
@@ -311,6 +311,7 @@ class Configure:
         self.program_cache = None
         self.clean_cache = True
         self.clear_cache = False
+        self.clear_ttvdb = False
         self.output = None
 
         self.opt_dict['language'] = 'en'
@@ -337,6 +338,7 @@ class Configure:
         self.opt_dict['disable_source'] = []
         self.opt_dict['disable_detail_source'] = []
         self.opt_dict['disable_ttvdb'] = False
+        self.opt_dict['pre_merge'] = True
         self.opt_dict['ttvdb_lookup_level'] = 1
         self.max_ttv_level = 3
         self.opt_dict['compat'] = False
@@ -667,7 +669,8 @@ class Configure:
         if self.validate_option('cache_file') != None:
             return(2)
 
-        if self.args.clear_cache or self.args.clear_ttvdb:
+        if self.args.clear_cache or self.args.clear_ttvdb or \
+            self.args.clear_source != None or self.args.clear_channel != None:
             return(0)
 
         # The Source Query options
@@ -947,7 +950,7 @@ class Configure:
                                 self.channels[childid] = tv_grab_channel.Channel_Config(self, childid, unicode(childid), -1)
 
                             for s, channelid in self.virtual_sub_channels[childid]['channelids'].items():
-                                self.channels[childid].source_id[s] = channelid
+                                self.channels[childid].channelid[s] = channelid
 
                             self.process_channel_config(childid)
                             self.channels[childid].is_child = True
@@ -969,53 +972,60 @@ class Configure:
                 return
 
             # First get the default
+            def validate_sourceid(sid, no_genric_matching = False):
+                if not sid in self.channelsource.keys():
+                    return False
+
+                channelid = channel.get_channelid(sid)
+                if channelid == '':
+                    return False
+
+                if sid in self.opt_dict['disable_source'] or sid in channel.opt_dict['disable_source']:
+                    return False
+
+                if no_genric_matching and channelid in self.channelsource[sid].source_data['no_genric_matching']:
+                    return False
+
+                return True
+
             def_value = -1
-            if channel.group in self.prime_source_groups and channel.get_source_id(self.prime_source_groups[channel.group]) != '' \
-                and not (self.prime_source_groups[channel.group] in self.opt_dict['disable_source'] \
-                or self.prime_source_groups[channel.group] in channel.opt_dict['disable_source'] \
-                or channel.get_source_id(self.prime_source_groups[channel.group]) \
-                in self.channelsource[self.prime_source_groups[channel.group]].source_data['no_genric_matching']):
-                    # A group default in sourcematching.json
-                    def_value = self.prime_source_groups[channel.group]
+            if channel.group in self.prime_source_groups and \
+                validate_sourceid(self.prime_source_groups[channel.group], True):
+                # A group default in sourcematching.json
+                def_value = self.prime_source_groups[channel.group]
 
             else:
                 for s in self.prime_source_order:
-                    if channel.get_source_id(s) != '' \
-                        and not (s in self.opt_dict['disable_source'] or s in channel.opt_dict['disable_source'] \
-                        or channel.get_source_id(s) in self.channelsource[s].source_data['no_genric_matching']):
-                            # The first available not set in no_genric_matching
-                            def_value = s
-                            break
+                    if validate_sourceid(s, True):
+                        # The first available not set in no_genric_matching
+                        def_value = s
+                        break
 
                 else:
                     for s in self.prime_source_order:
-                        if channel.get_source_id(s) != '' \
-                            and not (s in self.opt_dict['disable_source'] or s in channel.opt_dict['disable_source']):
-                                # The first available
-                                def_value = s
-                                break
+                        if validate_sourceid(s):
+                            # The first available
+                            def_value = s
+                            break
 
             # Now we check for a custom value
             if value == None:
-                value = channel.opt_dict['prime_source']
+                value = channel.prevalidate_opt['prime_source']
 
             custom_value = None
-            if value in self.channelsource.keys() and channel.get_source_id(value) != '' \
-                and not (value in self.opt_dict['disable_source'] or value in channel.opt_dict['disable_source']) \
-                and value != def_value:
-                    # It's a valid custom value not equal to the default
-                    custom_value = value
+            if validate_sourceid(value):
+                # It's a valid custom value not equal to the default
+                custom_value = value
 
             json_value = None
-            if channel.chanid in self.prime_source.keys() and channel.get_source_id(self.prime_source[channel.chanid]) != '' \
-                and not (self.prime_source[channel.chanid] in self.opt_dict['disable_source'] \
-                or self.prime_source[channel.chanid] in channel.opt_dict['disable_source']):
-                    # Use an override in sourcematching.json
-                    json_value = self.prime_source[channel.chanid]
+            if channel.chanid in self.prime_source.keys() and \
+                validate_sourceid(self.prime_source[channel.chanid]):
+                # Use an override in sourcematching.json
+                json_value = self.prime_source[channel.chanid]
 
             if self.opt_dict['always_use_json']:
                 for v in (json_value, custom_value):
-                    if v != None and not channel.get_source_id(v) in self.channelsource[v].source_data['no_genric_matching']:
+                    if v != None:
                         value = v
                         break
 
@@ -1024,7 +1034,7 @@ class Configure:
 
             else:
                 for v in (custom_value, json_value):
-                    if v != None and not channel.get_source_id(v) in self.channelsource[v].source_data['no_genric_matching']:
+                    if v != None:
                         value = v
                         break
 
@@ -1032,7 +1042,7 @@ class Configure:
                     value = def_value
 
             if check_default:
-                return bool((value == def_value) or (value == -1))
+                return bool(json_value == None and custom_value == None)
 
             else:
                 channel.opt_dict['prime_source'] = value
@@ -1172,6 +1182,14 @@ class Configure:
 
             elif self.args.clean_cache:
                 self.program_cache.cache_request.put({'task':'clean'})
+
+            if self.args.clear_source != None:
+                self.program_cache.cache_request.put({'task':'delete',
+                        'sourceprograms':{'sourceid': self.args.clear_source}})
+
+            if self.args.clear_channel != None:
+                self.program_cache.cache_request.put({'task':'delete',
+                        'sourceprograms':{'chanid': self.args.clear_channel}})
 
             if self.args.clear_ttvdb:
                 self.program_cache.cache_request.put({'task':'clear', 'table':'cttvdb'})
@@ -1368,8 +1386,14 @@ class Configure:
         parser.add_argument('--clear_cache', '--clear-cache', action = 'store_true', default = self.clear_cache, dest = 'clear_cache',
                         help =self.text('config', 27, type='help'))
 
-        parser.add_argument('--clear_ttvdb', '--clear-ttvdb', action = 'store_true', default = self.clear_cache, dest = 'clear_ttvdb',
+        parser.add_argument('--clear_ttvdb', '--clear-ttvdb', action = 'store_true', default = self.clear_ttvdb, dest = 'clear_ttvdb',
                         help =self.text('config', 28, type='help'))
+
+        parser.add_argument('--clear_source','--clear-source', type = int, default = None, dest = 'clear_source',
+                        metavar = '<source>', help =self.text('config', 49, type='help'))
+
+        parser.add_argument('--clear_channel','--clear-channel', type = str, default = None, dest = 'clear_channel',
+                        metavar = '<chanid>', help =self.text('config', 50, type='help'))
 
         parser.add_argument('-W', '--output', type = str, default = None, dest = 'output_file',
                         metavar = '<file>', help =self.text('config', 29, type='help'))
@@ -1529,9 +1553,9 @@ class Configure:
                     self.load_text(a[1].lower().strip())
 
                 # Boolean Values
-                if cfg_option in ('write_info_files', 'quiet', 'fast', 'compat', 'logos', 'cattrans', 'mail_log', \
-                  'mark_hd', 'use_utc', 'disable_ttvdb', 'use_split_episodes', 'group_active_channels', \
-                  'always_use_json', 'legacy_xmltvids'):
+                if cfg_option in ('write_info_files', 'quiet', 'fast', 'compat', 'logos', 'cattrans', \
+                  'mail_log', 'mark_hd', 'use_utc', 'disable_ttvdb', 'use_split_episodes', \
+                  'group_active_channels', 'always_use_json', 'legacy_xmltvids', 'pre_merge'):
                     if len(a) == 1:
                         self.opt_dict[cfg_option] = True
 
@@ -1660,10 +1684,10 @@ class Configure:
                         self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, unicode(channel[0]).strip(), int(channel[1]))
                         for index in range(4):
                             if index == 0:
-                                self.channels[chanid].source_id[3] = unicode(channel[index + 2]).strip()
+                                self.channels[chanid].channelid[3] = unicode(channel[index + 2]).strip()
 
                             else:
-                                self.channels[chanid].source_id[index] = unicode(channel[index + 2]).strip()
+                                self.channels[chanid].channelid[index] = unicode(channel[index + 2]).strip()
 
                     else:
                         # And the new version 2.2 one
@@ -1688,10 +1712,10 @@ class Configure:
                         for index in range(len(channel) - 5):
                             if self.configversion < 3.0 and index in (0, 3):
                                 if index == 0:
-                                    self.channels[chanid].source_id[3] = unicode(channel[index + 3]).strip()
+                                    self.channels[chanid].channelid[3] = unicode(channel[index + 3]).strip()
 
                             else:
-                                self.channels[chanid].source_id[index] = unicode(channel[index + 3]).strip()
+                                self.channels[chanid].channelid[index] = unicode(channel[index + 3]).strip()
 
                     # The icon defenition
                     self.channels[chanid].icon_source = int(channel[-2])
@@ -1755,7 +1779,7 @@ class Configure:
                 cfg_option = a[0].lower().strip()
                 # Boolean Values
                 if cfg_option in ('fast', 'compat', 'logos', 'cattrans', 'mark_hd', 'add_hd_id', \
-                  'disable_ttvdb', 'use_split_episodes', 'legacy_xmltvids'):
+                  'disable_ttvdb', 'use_split_episodes', 'legacy_xmltvids', 'pre_merge'):
                     if len(a) == 1:
                         self.channels[chanid].opt_dict[cfg_option] = True
 
@@ -2400,7 +2424,7 @@ class Configure:
 
                     # And link the ids to the new chanid
                     for source, id in oldch['sources'].items():
-                        self.channels[newch].source_id[int(source)] = id
+                        self.channels[newch].channelid[int(source)] = id
 
             self.log(logarray, 0)
 
@@ -2471,7 +2495,7 @@ class Configure:
         for channel in self.channels.values():
             # First we clear out all existing source_id's, because they can have become invalid!
             for index in range(self.source_count):
-                channel.source_id[index] = ''
+                channel.channelid[index] = ''
 
             # These groupids have changed, so to be sure
             if self.opt_dict['always_use_json'] and channel.group != -1:
@@ -2515,23 +2539,23 @@ class Configure:
                 reverse_channels[index][v]['chanid'] = unicode(i)
                 i =i.split('-',1)
                 reverse_channels[index][v]['source'] = int(i[0])
-                reverse_channels[index][v]['chan_scid'] = unicode(i[1])
+                reverse_channels[index][v]['channelid'] = unicode(i[1])
 
-            for chan_scid in self.channelsource[index].all_channels.keys():
-                if not (chan_scid in self.channelsource[index].source_data['empty_channels']):
-                    source_keys[index].append(chan_scid)
+            for channelid in self.channelsource[index].all_channels.keys():
+                if not (channelid in self.channelsource[index].source_data['empty_channels']):
+                    source_keys[index].append(channelid)
 
         for index in self.sourceid_order:
             self.channelsource[index].init_channel_source_ids()
-            for chan_scid, channel in self.channelsource[index].all_channels.items():
+            for channelid, channel in self.channelsource[index].all_channels.items():
                 if not is_data_value('name', channel, str, True):
                     continue
 
-                chanid = data_value([index, chan_scid, 'chanid'], reverse_channels, str, '%s-%s' % (index, chan_scid))
+                chanid = data_value([index, channelid, 'chanid'], reverse_channels, str, '%s-%s' % (index, channelid))
                 chan ={}
                 chan['chanid'] = chanid
                 chan['sourceid'] = index
-                chan['scid'] = chan_scid
+                chan['channelid'] = channelid
                 chan['cgroup'] = data_value('group', channel, int, 99)
                 chan['name'] = channel['name']
                 chan['fgroup'] = data_value('fetch_grp', channel, None, None)
@@ -2540,17 +2564,17 @@ class Configure:
                     chan['hd'] = True
 
                 # These channels are for show, but we like the icons from source 2, 6 and 5!
-                if (chan_scid in self.channelsource[index].source_data['empty_channels']):
-                    chan['scid'] = ''
-                    chan_scid = ''
+                if (channelid in self.channelsource[index].source_data['empty_channels']):
+                    chan['channelid'] = ''
+                    channelid = ''
 
                 if not chanid in self.channels:
-                    if (chan_scid in self.channelsource[index].source_data['empty_channels']):
+                    if (channelid in self.channelsource[index].source_data['empty_channels']):
                         continue
 
                     self.channels[chanid] = tv_grab_channel.Channel_Config(self, chanid, chan['name'] )
 
-                self.channels[chanid].source_id[index] = chan_scid
+                self.channels[chanid].channelid[index] = channelid
                 if self.opt_dict['mark_hd'] and chan['hd']:
                     self.channels[chanid].opt_dict['mark_hd'] = True
 
@@ -2609,7 +2633,7 @@ class Configure:
                 channel.chan_name = self.channel_rename[channel.chanid]
 
             # set the default prime_source
-            self.validate_option('prime_source', channel, -1)
+            self.validate_option('prime_source', channel)
             db_channel.append({'name': channel.chan_name,
                                                'chanid': channel.chanid,
                                                'cgroup': channel.group})
@@ -2644,6 +2668,7 @@ class Configure:
         log_array.append(u'clean_cache = %s' % (self.args.clean_cache))
         log_array.append(u'disable_ttvdb = %s' % (self.opt_dict['disable_ttvdb']))
         log_array.append(u'ttvdb_lookup_level = %s' % (self.opt_dict['ttvdb_lookup_level']))
+        log_array.append(u'pre_merge = %s' % (self.opt_dict['pre_merge']))
         log_array.append(u'quiet = %s' % (self.opt_dict['quiet']))
         log_array.append(u'output_file = %s' % (self.opt_dict['output_file']))
         log_array.append(u'output_tz = %s' % (self.opt_dict['output_tz']))
@@ -2680,8 +2705,10 @@ class Configure:
 
             src_id = chan_def.opt_dict['prime_source']
             log_array.append(u'  prime_source = %s (%s)\n' % (src_id, self.channelsource[src_id].source))
-            if not self.opt_dict['always_use_json'] and chan_def.chanid in self.prime_source and self.prime_source[chan_def.chanid] != src_id:
-                log_array.append(self.text('config', 67 ,(self.prime_source[chan_def.chanid], self.channelsource[self.prime_source[chan_def.chanid]].source)))
+            if not self.opt_dict['always_use_json'] and \
+                chan_def.chanid in self.prime_source and self.prime_source[chan_def.chanid] != src_id:
+                log_array.append(self.text('config', 67 ,
+                (self.prime_source[chan_def.chanid], self.channelsource[self.prime_source[chan_def.chanid]].source)))
 
             for index in chan_def.opt_dict['disable_source']:
                 if index in self.opt_dict['disable_source']:
@@ -2690,15 +2717,17 @@ class Configure:
                 log_array.append(self.text('config', 68, (index, self.channelsource[index].source)))
 
             for index in chan_def.opt_dict['disable_detail_source']:
-                if index in chan_def.opt_dict['disable_source'] or index in self.opt_dict['disable_source'] or index in self.opt_dict['disable_detail_source']:
+                if index in chan_def.opt_dict['disable_source'] or index in self.opt_dict['disable_source'] or \
+                    index in self.opt_dict['disable_detail_source']:
                     continue
 
                 log_array.append(self.text('config', 69, (index, self.channelsource[index].source)))
 
             src_id = chan_def.opt_dict['prefered_description']
             if src_id != -1:
-                if chan_def.get_source_id(src_id) != '':
-                    log_array.append(u'  prefered_description = %s (%s)\n' % (src_id, self.channelsource[src_id].source))
+                if chan_def.get_channelid(src_id) != '':
+                    log_array.append(u'  prefered_description = %s (%s)\n' %
+                        (src_id, self.channelsource[src_id].source))
 
             if chan_def.get_opt('add_hd_id'):
                 log_array.append(u'  add_hd_id = True\n')
@@ -2706,11 +2735,13 @@ class Configure:
             elif chan_def.get_opt('mark_hd'):
                 log_array.append(u'  mark_hd = True\n')
 
-            if 'slowdays' in chan_def.opt_dict.keys() and chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
+            if 'slowdays' in chan_def.opt_dict.keys() and \
+                chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
                 log_array.append(u'  slowdays = %s' % (chan_def.get_opt('slowdays')))
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
-              'logos', 'desc_length', 'cattrans', 'disable_ttvdb', 'use_split_episodes', 'ttvdb_lookup_level'):
+              'logos', 'desc_length', 'cattrans', 'disable_ttvdb', 'use_split_episodes', \
+              'ttvdb_lookup_level', 'pre_merge'):
                 if chan_def.get_opt(val) != self.opt_dict[val]:
                     log_array.append(u'  %s = %s\n' % (val, chan_def.get_opt(val)))
 
@@ -2736,7 +2767,7 @@ class Configure:
         f.write(u'\n')
 
         # Save the options
-        for i in range(1, 10):
+        for i in range(1, 11):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2746,7 +2777,7 @@ class Configure:
         f.write(u'language = %s\n' % self.lang)
         f.write(self.text('config', 0, type = 'confighelp'))
         f.write(u'data_version = %s\n' % self.opt_dict['data_version'])
-        for i in range(11, 16):
+        for i in range(11, 21):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2760,7 +2791,7 @@ class Configure:
 
             f.write(u'\n')
 
-        for i in range(21, 39):
+        for i in range(21, 41):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2768,13 +2799,13 @@ class Configure:
         f.write(u'global_timeout = %s\n' % self.opt_dict['global_timeout'])
         f.write(u'max_simultaneous_fetches = %s\n' % self.opt_dict['max_simultaneous_fetches'])
         f.write(u'\n')
-        for i in range(41, 53):
+        for i in range(41, 61):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
 
         f.write(u'log_level = %s\n' % self.opt_dict['log_level'])
-        for i in range(61, 67):
+        for i in range(61, 71):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2782,7 +2813,7 @@ class Configure:
         f.write(u'match_log_level = %s\n' % self.opt_dict['match_log_level'])
         f.write(u'\n')
         f.write(u'mail_log = %s\n' % self.opt_dict['mail_log'])
-        for i in range(71, 77):
+        for i in range(71, 81):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2801,13 +2832,14 @@ class Configure:
             elif index in self.opt_dict['disable_detail_source']:
                 f.write(u'disable_detail_source = %s\n' % index)
 
-        for i in range(191, 197):
+        for i in range(191, 205):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
 
         f.write(u'disable_ttvdb = %s\n' % self.opt_dict['disable_ttvdb'])
         f.write(u'ttvdb_lookup_level = %s\n' % self.opt_dict['ttvdb_lookup_level'])
+        f.write(u'pre_merge = %s\n' % self.opt_dict['pre_merge'])
         f.write(u'compat = %s\n' % self.opt_dict['compat'])
         f.write(u'legacy_xmltvids = %s\n' % self.opt_dict['legacy_xmltvids'])
         f.write(u'logos = %s\n' % self.opt_dict['logos'])
@@ -2821,7 +2853,7 @@ class Configure:
         f.write(u'overlap_strategy = %s\n' % self.opt_dict['overlap_strategy'] )
         f.write(u'max_overlap = %s\n' % self.opt_dict['max_overlap'])
         f.write(u'desc_length = %s\n' % self.opt_dict['desc_length'])
-        for i in range(81, 87):
+        for i in range(81, 91):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2829,7 +2861,7 @@ class Configure:
         f.write(u'ratingstyle = %s\n' % self.opt_dict['ratingstyle'])
         f.write(u'use_split_episodes = %s\n' % self.opt_dict['use_split_episodes'])
         f.write(u'\n')
-        for i in range(91, 139):
+        for i in range(91, 141):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -2837,7 +2869,7 @@ class Configure:
         def get_channel_string(chanid, active = None, chan_string = None, icon_string = None):
             chan = self.channels[chanid]
             for index in range(self.source_count):
-                if chan.get_source_id(index) != '':
+                if chan.get_channelid(index) != '':
                     break
 
             else:
@@ -2851,7 +2883,7 @@ class Configure:
                 chan_string = '%s;%s;%s' % (chan.chan_name, chan.group, chanid)
 
             for index in range(self.source_count):
-                chan_string = '%s;%s' % (chan_string, chan.get_source_id(index))
+                chan_string = '%s;%s' % (chan_string, chan.get_channelid(index))
 
             if icon_string == None:
                 chan_string = '%s;%s;%s\n' % (chan_string, chan.icon_source, chan.icon)
@@ -3040,7 +3072,7 @@ class Configure:
                         chan_found = False
                         for chanid, channel in self.channels.items():
                             for index in range(min(self.source_count,len(chan) - 4)):
-                                if (chan[index + 2].strip() !='') and (chan[index + 2].strip() == channel.get_source_id(index)):
+                                if (chan[index + 2].strip() !='') and (chan[index + 2].strip() == channel.get_channelid(index)):
                                     chan_found = True
                                     grp = u'0' if self.args.group_active_channels else chan[1]
                                     chan_list[grp].append(get_channel_string(chanid, True, '%s;%s;%s' % \
@@ -3068,7 +3100,7 @@ class Configure:
                         chan_found = False
                         for chanid, channel in self.channels.items():
                             for index in range(min(self.source_count,len(chan) - 4)):
-                                if (chan[index + 2].strip() !='') and (chan[index + 2].strip() == channel.get_source_id(index)):
+                                if (chan[index + 2].strip() !='') and (chan[index + 2].strip() == channel.get_channelid(index)):
                                     chan_list[chan[1]].append(get_channel_string(chanid, False, '%s;%s;%s' % \
                                         (chan[0], chan[1], chanid), '%s;%s' % (chan[-2], chan[-1])))
                                     chan_added.append(chanid)
@@ -3127,13 +3159,21 @@ class Configure:
         chan_names = []
         for chan_def in self.channels.values():
             for index in range(self.source_count):
-                if chan_def.get_source_id(index) != '':
+                if chan_def.get_channelid(index) != '':
                     # Only add specific settings if at least one sourceid present
                     chan_names.append({'active': chan_def.active, 'name': chan_def.chan_name, 'id': chan_def.chanid})
                     break
 
         chan_names.sort(key=lambda channel: (channel['name']))
         chan_names.sort(key=lambda channel: (channel['active']), reverse=True)
+
+        def write_channelheader(chan_def, chan_name_written):
+            if not chan_name_written:
+                f.write(u'\n')
+                f.write(u'# %s\n' % (chan_def.chan_name))
+                f.write(u'[Channel %s]\n' % (chan_def.chanid))
+
+            return True
 
         for chan in chan_names:
             chan_def = self.channels[chan['id']]
@@ -3142,92 +3182,52 @@ class Configure:
                 if index in self.opt_dict['disable_source']:
                     continue
 
-                if index in chan_def.source_id.keys() and chan_def.get_source_id(index) != '':
-                    if not chan_name_written:
-                        f.write(u'\n')
-                        f.write(u'# %s\n' % (chan_def.chan_name))
-                        f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                        chan_name_written = True
-
+                if index in chan_def.channelid.keys() and chan_def.get_channelid(index) != '':
+                    chan_name_written = write_channelheader(chan_def, chan_name_written)
                     f.write(u'disable_source = %s\n' % index)
 
             for index in chan_def.opt_dict['disable_detail_source']:
-                if index in chan_def.opt_dict['disable_source'] or index in self.opt_dict['disable_source'] or index in self.opt_dict['disable_detail_source']:
+                if index in chan_def.opt_dict['disable_source'] or \
+                    index in self.opt_dict['disable_source'] or \
+                    index in self.opt_dict['disable_detail_source']:
                     continue
 
-                if index in chan_def.source_id.keys() and chan_def.get_source_id(index) != '':
-                    if not chan_name_written:
-                        f.write(u'\n')
-                        f.write(u'# %s\n' % (chan_def.chan_name))
-                        f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                        chan_name_written = True
-
+                if index in chan_def.channelid.keys() and chan_def.get_channelid(index) != '':
+                    chan_name_written = write_channelheader(chan_def, chan_name_written)
                     f.write(u'disable_detail_source = %s\n' % index)
 
-            if chan_def.opt_dict['xmltvid_alias'] != None and chan_def.opt_dict['xmltvid_alias'] != chan_def.chanid:
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+            if chan_def.opt_dict['xmltvid_alias'] != None and \
+                chan_def.opt_dict['xmltvid_alias'] != chan_def.chanid:
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'xmltvid_alias = %s\n' % (chan_def.opt_dict['xmltvid_alias']))
 
             if not self.validate_option('prime_source', chan_def, check_default = True):
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'prime_source = %s\n' % chan_def.opt_dict['prime_source'])
 
             opt_val = chan_def.opt_dict['prefered_description']
-            if opt_val in chan_def.source_id.keys() and chan_def.get_source_id(opt_val) != '':
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+            if opt_val in chan_def.channelid.keys() and chan_def.get_channelid(opt_val) != '':
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'prefered_description = %s\n' % ( opt_val))
 
             if chan_def.get_opt('add_hd_id'):
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'add_hd_id = True\n')
 
-            if 'slowdays' in chan_def.opt_dict.keys() and chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+            if 'slowdays' in chan_def.opt_dict.keys() and \
+                chan_def.opt_dict['slowdays'] not in (self.opt_dict['slowdays'], None):
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'slowdays = %s\n' % (chan_def.get_opt('slowdays')))
 
             if self.opt_dict['disable_ttvdb'] == False and chan_def.opt_dict['disable_ttvdb'] == True:
-                if not chan_name_written:
-                    f.write(u'\n')
-                    f.write(u'# %s\n' % (chan_def.chan_name))
-                    f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                    chan_name_written = True
-
+                chan_name_written = write_channelheader(chan_def, chan_name_written)
                 f.write(u'disable_ttvdb = True\n')
 
             for val in ( 'fast', 'compat', 'legacy_xmltvids', 'max_overlap', 'overlap_strategy', \
-              'logos', 'desc_length', 'cattrans', 'mark_hd', 'use_split_episodes', 'ttvdb_lookup_level'):
+              'logos', 'desc_length', 'cattrans', 'mark_hd', 'use_split_episodes', \
+              'ttvdb_lookup_level', 'pre_merge'):
                 if chan_def.get_opt(val) != self.opt_dict[val]:
-                    if not chan_name_written:
-                        f.write(u'\n')
-                        f.write(u'# %s\n' % (chan_def.chan_name))
-                        f.write(u'[Channel %s]\n' % (chan_def.chanid))
-                        chan_name_written = True
-
+                    chan_name_written = write_channelheader(chan_def, chan_name_written)
                     f.write(u'%s = %s\n' % (val, chan_def.get_opt(val)))
 
         f.close()
@@ -3245,7 +3245,7 @@ class Configure:
 
         f.write(u'# encoding: utf-8\n')
         f.write(u'\n')
-        for i in range(141, 145):
+        for i in range(141, 146):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3258,7 +3258,7 @@ class Configure:
              f.write(u'%s\n' % t)
 
         f.write(u'\n')
-        for i in range(146, 149):
+        for i in range(146, 150):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3272,7 +3272,7 @@ class Configure:
              f.write(u'%s\n' % t)
 
         f.write(u'\n')
-        for i in range(150, 153):
+        for i in range(150, 154):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3288,7 +3288,7 @@ class Configure:
             f.write(string)
 
         f.write(u'\n')
-        for i in range(154, 161):
+        for i in range(154, 162):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3302,7 +3302,7 @@ class Configure:
              f.write(u'%s\n' % dg)
 
         f.write(u'\n')
-        for i in range(201, 205):
+        for i in range(211, 216):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
@@ -3337,7 +3337,7 @@ class Configure:
             f.write(u'\n')
             f.write(self.text('config', 162, type = 'confighelp'))
             f.write(slist)
-            for i in range(163, 165):
+            for i in range(163, 166):
                 line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
                 if line != '':
                     f.write(line)
@@ -3388,7 +3388,7 @@ class Configure:
             f.write(u'\n')
             f.write(self.text('config', 166, type = 'confighelp'))
             f.write(self.text('config', 167, (slist[0:-2], ), type = 'confighelp'))
-            for i in range(168, 170):
+            for i in range(168, 171):
                 line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
                 if line != '':
                     f.write(line)
@@ -3417,13 +3417,13 @@ class Configure:
         f.write(u'\n')
         f.write(self.text('config', 171, type = 'confighelp'))
         f.write(u'# \n')
-        for i in range(172, 177):
+        for i in range(172, 178):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)
 
         f.write(u'# \n')
-        for i in range(178, 186):
+        for i in range(178, 187):
             line = self.text('config', i, type = 'confighelp', return_empty_on_missing = True)
             if line != '':
                 f.write(line)

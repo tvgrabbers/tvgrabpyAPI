@@ -40,8 +40,9 @@ class Channel_Config(Thread):
         # The queue to receive answers on database queries
         self.cache_return = Queue()
         # The queue to receive answers on detail requests
+        self.pre_merge = Queue()
         self.detail_return = Queue()
-        self.config.queues['channel'][chanid] = self.detail_return
+        self.config.queues['channel'][chanid] = self.pre_merge
         self.thread_type = 'channel'
         self.config.threads.append(self)
 
@@ -58,7 +59,7 @@ class Channel_Config(Thread):
         self.chan_name = name
         self.chan_descr ='%s (%s)' % (self.chan_name, self.chanid)
         self.group = group
-        self.source_id = {}
+        self.channelid = {}
         self.icon_source = -1
         self.icon = ''
 
@@ -77,18 +78,14 @@ class Channel_Config(Thread):
         self.opt_dict['disable_source'] = []
         self.opt_dict['disable_detail_source'] = []
         self.opt_dict['disable_ttvdb'] = False
+        self.opt_dict['pre_merge'] = True
         self.requested_details = {}
 
     def validate_settings(self):
         if not self.active and not self.is_child:
             return
 
-        if self.prevalidate_opt['prime_source'] == -1:
-            self.config.validate_option('prime_source', self)
-
-        else:
-            self.config.validate_option('prime_source', self, self.prevalidate_opt['prime_source'])
-
+        self.config.validate_option('prime_source', self)
         self.config.validate_option('prefered_description', self)
         self.config.validate_option('overlap_strategy', self)
         self.config.validate_option('max_overlap', self)
@@ -109,6 +106,45 @@ class Channel_Config(Thread):
                 self.xmltvid = self.chanid
 
     def run(self):
+        def save_detail_to_cache(src_id, data):
+            if not isinstance(data, dict):
+                return
+
+            self.store_data('add_details', **data)
+            update_base = self.config.channelsource[src_id].update_base
+            if len(update_base) > 0:
+                bwhere = {'sourceid': src_id,
+                                'channelid': self.get_channelid(src_id),
+                                'prog_ID':data['prog_ID']}
+
+                if 'length' in update_base and isinstance(data.get('length', None), datetime.timedelta):
+                    records = self.get_cache_return('sourceprograms', **bwhere)
+                    if records == -1:
+                        return -1
+
+                    for r in records:
+                        bset = {'stop-time': r['start-time'] + data['length']}
+                        for key in update_base:
+                            val = data.get(key, None)
+                            if val != None:
+                                bset[key] = val
+
+                        # We update the basedata
+                        self.store_data('update_program', set = bset,
+                                    where = {'sourceid': src_id,
+                                        'channelid': self.get_channelid(src_id),
+                                        'start-time': r['start-time']})
+
+                else:
+                    bset = {}
+                    for key in update_base:
+                        val = data.get(key, None)
+                        if val != None:
+                            bset[key] = val
+
+                    if len(bset) > 0:
+                        # We update the basedata
+                        self.store_data('update_program', set = bset, where = bwhere)
 
         if not self.active and not self.is_child:
             self.ready = True
@@ -125,20 +161,20 @@ class Channel_Config(Thread):
             self.merge_order = []
             last_merge = []
             ps = self.opt_dict['prime_source']
-            if (self.get_source_id(ps) != '') and not self.get_opt('disable_source', ps):
-                if self.get_source_id(ps) in self.config.channelsource[ps].source_data['no_genric_matching']:
+            if (self.get_channelid(ps) != '') and not self.get_opt('disable_source', ps):
+                if self.get_channelid(ps) in self.config.channelsource[ps].source_data['no_genric_matching']:
                     last_merge.append(ps)
 
                 else:
                     self.merge_order.append(ps)
 
             for index in self.config.source_order:
-                if self.get_source_id(index) == '' or self.get_opt('disable_source', index):
+                if self.get_channelid(index) == '' or self.get_opt('disable_source', index):
                     # There is no channelid for this source or this source is disabled
                     self.source_ready(index).set()
 
                 elif index != ps:
-                    if self.get_source_id(index) in self.config.channelsource[index].source_data['no_genric_matching']:
+                    if self.get_channelid(index) in self.config.channelsource[index].source_data['no_genric_matching']:
                         last_merge.append(index)
 
                     else:
@@ -147,9 +183,11 @@ class Channel_Config(Thread):
 
             self.merge_order.extend(last_merge)
             self.has_started = True
+            fdetails = {}
             # Retrieve and merge the data from the available sources.
             for index in self.merge_order:
-                channelid = self.get_source_id(index)
+                fdetails[index] = {}
+                channelid = self.get_channelid(index)
                 self.source = index
                 self.state = 1
                 while not self.source_ready(index).is_set():
@@ -208,8 +246,61 @@ class Channel_Config(Thread):
                         else:
                             programs = deepcopy(self.config.channelsource[index].program_data[channelid])
 
+                    if self.get_opt('pre_merge', index):
+                        #The channel needs essential data from the detailpages
+                        while True:
+                            #~ self.config.log('Checking pre_merge return\n')
+                            if fdetails[index].get('terminated', False):
+                                break
+
+                            if self.quit:
+                                self.ready = True
+                                return
+
+                            if self.pre_merge.empty():
+                                time.sleep(1)
+
+                            else:
+                                fetched_detail = self.pre_merge.get(True)
+                                if fetched_detail =='quit':
+                                    self.ready = True
+                                    return
+
+                                ld = fetched_detail.get('last_detail', None)
+                                if ld != None:
+                                    if not ld in fdetails.keys():
+                                        fdetails[ld] = {}
+
+                                    fdetails[ld]['terminated'] = True
+                                    if ld == index:
+                                        break
+
+                                    continue
+
+                                src_id = fetched_detail['source']
+                                if is_data_value('data', fetched_detail, dict):
+                                    prog_ID = fetched_detail['data']['prog_ID']
+                                    if not src_id in fdetails.keys():
+                                        fdetails[src_id] = {}
+
+                                    fdetails[src_id][prog_ID] = fetched_detail['data']
+
                     for p in programs[:]:
+                        if p['prog_ID'] in fdetails[index].keys():
+                            fdetails[index][p['prog_ID']]['scandate'] = p['scandate']
+                            for key in self.config.channelsource[index].update_base:
+                                val = fdetails[index][p['prog_ID']].get(key, None)
+                                if val != None:
+                                    p[key] = val
+                                    if key == 'length':
+                                        p['stop from length'] = True
+                                        p['stop-time'] = p['start-time'] + val
+
                         self.add_tuple_values(p)
+
+                    for p in fdetails[index].values():
+                        if save_detail_to_cache(index, p) == -1:
+                            break
 
                     if self.channel_node == None:
                         # This is the first source with data, so we just take in the data creating the channel Node
@@ -258,7 +349,7 @@ class Channel_Config(Thread):
 
             # And get the detailpages, IF there is any data
             elif not isinstance(self.channel_node, ChannelNode) or self.channel_node.program_count() == 0:
-                self.detail_return.put({'source': None,'last_one': True})
+                self.detail_return.put({'source': None,'last_detail': True})
 
             else:
                 for src_id in self.config.detail_sources:
@@ -266,6 +357,7 @@ class Channel_Config(Thread):
 
                 self.channel_node.merge_type = 8
                 self.state = 3
+                self.config.queues['channel'][self.chanid] = self.detail_return
                 self.get_details()
                 self.state = 4
                 while True:
@@ -282,6 +374,7 @@ class Channel_Config(Thread):
                     else:
                         # We are getting back a detail/ttvdb fetch
                         fetched_detail = self.detail_return.get(True)
+                        #~ self.config.log('"%s" is Processing: %s\n' % (self.name, fetched_detail))
                         if fetched_detail =='quit':
                             self.ready = True
                             return
@@ -313,7 +406,8 @@ class Channel_Config(Thread):
 
                             # Add it to the cache
                             fetched_detail['data']['scandate'] = scandate
-                            self.config.queues['cache'].put({'task':'add', 'parent': self, 'programdetails': fetched_detail['data']})
+                            if save_detail_to_cache(src_id, fetched_detail['data']):
+                                break
 
                     # Check if the sources are still alive
                     s_cnt = 0
@@ -414,34 +508,33 @@ class Channel_Config(Thread):
                 self.functions.update_counter('exclude', self.config.cache_id, self.chanid)
                 continue
 
-            logstring = u'%s: %s' % \
-                                (self.channel_node.get_start_stop(pn), pn.get_value('name'))
+            logstring = u'%s: %s' % (self.channel_node.get_start_stop(pn), pn.get_value('name'))
 
             # We only fetch when we are in slow mode and slowdays is not set to tight
-            no_fetch = (self.get_opt('fast') or pn.get_value('offset') >= (self.config.opt_dict['offset'] + self.get_opt('slowdays')))
+            no_fetch = (self.get_opt('fast') or pn.get_value('offset') >= \
+                (self.config.opt_dict['offset'] + self.get_opt('slowdays')))
             sources = {}
             # Check the database and gather potiential detail fetches
             for src_id in self.config.detail_sources:
-                channelid = self.get_source_id(src_id)
+                channelid = self.get_channelid(src_id)
                 detailids = pn.get_detailsources(src_id)
                 if detailids == None:
                     continue
 
                 if is_data_value(['prog_ID'], detailids, str, True):
-                    self.config.queues['cache'].put({'task':'query', 'parent': self, \
-                                'programdetails': {'sourceid': src_id, 'channelid': channelid, 'prog_ID': detailids['prog_ID']}})
-                    self.state += 8
-                    cache_detail = self.cache_return.get(True)
-                    self.state -= 8
-                    if cache_detail =='quit':
-                        self.ready = True
+                    cache_detail = self.get_cache_return('programdetails',
+                                    sourceid = src_id,
+                                    channelid = channelid,
+                                    prog_ID = detailids['prog_ID'])
+                    if cache_detail == -1:
                         return
 
                     elif len(cache_detail) > 0:
                         # Add it to the program(s)
                         without_details = False
                         self.functions.update_counter('detail', self.config.cache_id, self.chanid)
-                        self.config.log(self.config.text('fetch', 33, (self.chan_name, counter, logstring), type = 'report'), 8, 1)
+                        self.config.log(self.config.text('fetch', 33,
+                            (self.chan_name, counter, logstring), type = 'report'), 8, 1)
                         dn = self.channel_node.programs_by_prog_ID[src_id][detailids['prog_ID']]
                         p = cache_detail[0]
                         for pn in dn:
@@ -494,7 +587,9 @@ class Channel_Config(Thread):
                         break
 
                     self.functions.update_counter('queue',src_id, self.chanid)
-                    self.config.channelsource[src_id].detail_request.put({'task':'get_details','detail_ids': sources, 'logstring': logstring, 'counter': counter, 'parent': self})
+                    self.config.channelsource[src_id].detail_request.put(
+                        {'task':'get_details','detail_ids': sources,
+                            'logstring': logstring, 'counter': counter, 'parent': self})
                     if is_data_value([src_id, 'detail_url'], sources, str, True):
                         self.requested_details[src_id].append(data_value([src_id, 'detail_url'], sources, str))
 
@@ -575,6 +670,17 @@ class Channel_Config(Thread):
             else:
                 False
 
+        if opt == 'pre_merge':
+            if self.config.opt_dict[opt] and self.opt_dict[opt]:
+                if source_id == None:
+                    return True
+
+                if source_id == self.opt_dict['prime_source'] and \
+                    len(self.config.channelsource[sourceid].update_base) > 0:
+                    return True
+
+            return False
+
         if opt in self.opt_dict.keys():
             retval = self.opt_dict[opt]
 
@@ -591,9 +697,9 @@ class Channel_Config(Thread):
 
         return retval
 
-    def get_source_id(self, source):
-        if source in self.source_id.keys():
-            return self.source_id[source]
+    def get_channelid(self, source):
+        if source in self.channelid.keys():
+            return self.channelid[source]
 
         return ''
 
@@ -602,6 +708,41 @@ class Channel_Config(Thread):
             self.source_data[source] = Event()
 
         return self.source_data[source]
+
+    def store_data(self, task, **data):
+        '''
+        Store any fetched data in the Database
+        Optionally ask the database to confirm storing the data
+        '''
+        if task == 'add_details':
+            dbdata = {'task':'add', 'programdetails': data}
+
+        elif task == 'update_program':
+            dbdata ={'task':'update', 'sourceprograms': data}
+
+        else:
+            return
+
+        self.config.queues['cache'].put(dbdata)
+
+    def get_cache_return(self, task, **data):
+        '''
+        Wait for any returned data from the database
+        If task is set perform the query
+        '''
+        if self.quit:
+            return -1
+
+        dbdata = {'parent': self, 'task':'query', task: data}
+        self.config.queues['cache'].put(dbdata)
+        self.state += 8
+        value = self.cache_return.get(True)
+        self.state -= 8
+        if value == 'quit':
+            self.ready = True
+            return -1
+
+        return value
 
     def add_tuple_values(self, data, pnode = None, source = None):
         for tk, tv in self.config.tuple_values.items():
@@ -1778,10 +1919,10 @@ class ChannelNode():
 
             if printable:
                 if only_start:
-                    return '%s' % (pstart.strftime('%d %b %H:%M'), )
+                    return '%s' % (pstart.strftime('%d %b %H:%M %Z'), )
 
                 else:
-                    return ' %s - %s' % (pstart.strftime('%d %b %H:%M'), pstop.strftime('%d %b %H:%M'))
+                    return ' %s - %s' % (pstart.strftime('%d %b %H:%M'), pstop.strftime('%d %b %H:%M %Z'))
 
             return (pstart, pstop)
 
@@ -2786,14 +2927,14 @@ class ProgramNode():
             if self.is_set("detail_url"):
                 if source != None:
                     if source in self.channel_config.merge_order:
-                        rval['chanid'] = self.channel_config.chanid
-                        rval['org-genre'] = self.get_value('org-genre', source)
-                        rval['org-subgenre'] = self.get_value('org-subgenre', source)
-                        rval['channelid'] = self.channel_config.get_source_id(source)
-                        rval['name'] = self.get_value('name', source)
-                        rval['detail_url'] = self.get_value('detail_url', source)
-                        rval['prog_ID'] = self.get_value('prog_ID', source)
-                        rval['gen_ID'] = self.get_value('gen_ID', source)
+                        rval = {'chanid': self.channel_config.chanid,
+                            'org-genre': self.get_value('org-genre', source),
+                            'org-subgenre': self.get_value('org-subgenre', source),
+                            'channelid': self.channel_config.get_channelid(source),
+                            'name': self.get_value('name', source),
+                            'detail_url': self.get_value('detail_url', source),
+                            'prog_ID': self.get_value('prog_ID', source),
+                            'gen_ID': self.get_value('gen_ID', source)}
                         return rval
 
                     else:
@@ -2801,12 +2942,11 @@ class ProgramNode():
 
                 for source in self.config.detail_sources:
                     if source in self.channel_config.merge_order:
-                        rval[source] = {}
-                        rval[source]['channelid'] = self.channel_config.get_source_id(source)
-                        rval[source]['name'] = self.get_value('name', source)
-                        rval[source]['detail_url'] = self.get_value('detail_url', source)
-                        rval[source]['prog_ID'] = self.get_value('prog_ID', source)
-                        rval[source]['gen_ID'] = self.get_value('gen_ID', source)
+                        rval[source] = {'channelid': self.channel_config.get_channelid(source),
+                            'name': self.get_value('name', source),
+                            'detail_url': self.get_value('detail_url', source),
+                            'prog_ID': self.get_value('prog_ID', source),
+                            'gen_ID': self.get_value('gen_ID', source)}
 
                 return rval
 

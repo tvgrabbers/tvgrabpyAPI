@@ -32,10 +32,44 @@ except NameError:
 
 class dtError(dtErrorConstants):
     def __init__(self):
-        self.dtWrongDate = 11
-        self.dtErrorTexts[self.dtWrongDate] = 'Wrong Page Date!'
+        self.dtInvalidDate = 11
+        self.dtShiftedDate = 12
+        self.dtErrorTexts[self.dtInvalidDate] = 'Invalid Page Date!'
+        self.dtErrorTexts[self.dtShiftedDate] = 'Shifted Page Date!'
 
 dte = dtError()
+
+class URLtypes():
+    ONECHANNEL = 1
+    ALLCHANNELS = 2
+    CHANNELGROUP = 3
+    ONEDAY = 0
+    ALLDAYS = 4
+    DAYGROUP = 8
+    RECORDGROUP = 12
+
+    def getsonechannel(self, url_type):
+        return bool((url_type & 3) == self.ONECHANNEL)
+
+    def getsallchannels(self, url_type):
+        return bool((url_type & 3) == self.ALLCHANNELS)
+
+    def getschannelgroup(self, url_type):
+        return bool((url_type & 3) == self.CHANNELGROUP)
+
+    def getsoneday(self, url_type):
+        return bool((url_type & 12) == self.ONEDAY)
+
+    def getsalldays(self, url_type):
+        return bool((url_type & 12) == self.ALLDAYS)
+
+    def getsdaygroup(self, url_type):
+        return bool((url_type & 12) == self.DAYGROUP)
+
+    def getsrecordgroup(self, url_type):
+        return bool((url_type & 12) == self.RECORDGROUP)
+
+# end URLtypes()
 
 class Functions():
     """Some general Fetch functions"""
@@ -204,7 +238,7 @@ class Functions():
                     if os.path.isfile(fn) and datetime.date.fromtimestamp(os.stat(fn).st_mtime) >= self.config.dtdate:
                         fle = self.config.IO_func.read_pickle(fn)
                         if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion() \
-                            and data_value(["tvgversion"], fle, tuple, (1, 0, 7)) == tuple(self.config.version(False, True)[1:4]):
+                            and data_value(["tvgversion"], fle, tuple, None) == tuple(self.config.version(False, True)[1:4]):
                             return fle
 
             except:
@@ -307,6 +341,15 @@ class Functions():
         return rd.date()
     # end get_fetchdate()
 
+    def print_time(self, time):
+        if isinstance(time, datetime.datetime):
+            return time.strftime('%d %b %H:%M %Z')
+    # end print_time()
+
+    def sleep(self):
+        time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+    # end sleep()
+
     def merge_date_time(self, date_ordinal, date_time, tzinfo = None, as_utc = True):
         if tzinfo == None:
             tzinfo = self.config.utc_tz
@@ -351,7 +394,8 @@ class FetchURL(Thread):
     def find_html_encoding(self):
         # look for the text '<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />'
         # in the first 600 bytes of the HTTP page
-        m = re.search(r'<meta[^>]+\bcharset=["\']?([A-Za-z0-9\-]+)\b', self.raw[:512].decode('ascii', 'ignore'))
+        m = re.search(r'<meta[^>]+\bcharset=["\']?([A-Za-z0-9\-]+)\b',
+            self.raw[:512].decode('ascii', 'ignore'))
         if m:
             return m.group(1)
 
@@ -362,10 +406,15 @@ class FetchURL(Thread):
         the specified number of timeout seconds.
         """
         try:
-            self.url_request = requests.get(self.url, headers = self.txtheaders, params = self.txtdata, timeout=self.config.opt_dict['global_timeout']/2, stream=True)
+            self.url_request = requests.get(self.url,
+                            headers = self.txtheaders,
+                            params = self.txtdata,
+                            timeout=self.config.opt_dict['global_timeout']/2,
+                            stream=True)
             self.status_code = self.url_request.status_code
             if self.url_request.status_code != requests.codes.ok:
-                if self.status_code == 500 and len(self.url_request.text) > 0 and not self.url_request.text.strip()[0] in ("{", "["):
+                if self.status_code == 500 and len(self.url_request.text) > 0 and \
+                    not self.url_request.text.strip()[0] in ("{", "["):
                     # This probably is an inclomplete read we possibly can fix
                     self.page_status = dte.dtIncompleteRead
 
@@ -382,7 +431,8 @@ class FetchURL(Thread):
             self.raw = self.url_request.content
             self.url_text = self.url_request.text
 
-            if 'content-type' in self.url_request.headers and 'json' in self.url_request.headers['content-type'] or self.is_json:
+            if ('content-type' in self.url_request.headers and \
+                'json' in self.url_request.headers['content-type']) or self.is_json:
                 try:
                     return self.url_request.json()
 
@@ -436,7 +486,10 @@ class DataTree(DataTreeShell, Thread):
         self.state = 0
         self.config = self.source.config
         self.fetch_string_parts = re.compile("(.*?[.?!:]+ |.*?\Z)")
-        DataTreeShell.__init__(self, data_def, warnaction = warnaction, warngoal = self.config.logging.log_queue, caller_id = caller_id)
+        DataTreeShell.__init__(self, data_def,
+                        warnaction = warnaction,
+                        warngoal = self.config.logging.log_queue,
+                        caller_id = caller_id)
         self.print_tags = source.print_tags
         self.show_result = source.show_parsing
         self.fle = source.test_output
@@ -453,7 +506,7 @@ class DataTree(DataTreeShell, Thread):
                 queryid = data_value('queryid',self.rundata, int, -1)
                 self.searchtree.show_progress = True
                 if self.extract_datalist():
-                    if self.check_errorcode() == 7:
+                    if self.check_errorcode() in (dte.dtStartNodeInvalid, dte.dtNoData):
                         self.config.log(self.config.text('ttvdb', 16, ('%s: %s' % (tid, self.rundata['name']), )))
 
                     else:
@@ -471,14 +524,15 @@ class DataTree(DataTreeShell, Thread):
                         eps = self.source.process_data(self.result, tid, 'en')
                         self.init_data_def(self.source.data_value("seriesname", dict))
                         if not self.extract_datalist():
-                            self.source.store_data('ttvdbid', self.result)
+                            self.source.store_data('ttvdbid', data=self.result)
 
                         epc = []
                         for k, v in eps[1].items():
                             epc.append({'tid': tid,'sid': k, 'count': v})
 
-                        self.source.store_data('episodes', eps[0])
-                        self.source.store_data('epcount', epc, {'task': 'process_ep_info', 'tid': tid, 'queryid': queryid})
+                        self.source.store_data('episodes', data=eps[0])
+                        self.source.store_data('epcount', data=epc,
+                            confirm={'task': 'process_ep_info', 'queryid': queryid})
 
         except dtWarning as e:
             self.config.log(self.config.text('fetch', 13, (e.message, )))
@@ -531,7 +585,8 @@ class DataTree(DataTreeShell, Thread):
 
     def add_on_link_functions(self, fid, data = None, default = None):
         def link_warning(text, severity=4):
-            self.warn('%s on function: "%s"\n   Using link_data: %s' % (text, fid, data), dtLinkWarning, severity, 3)
+            self.warn('%s on function: "%s"\n   Using link_data: %s' %
+                (text, fid, data), dtLinkWarning, severity, 3)
 
         def split_kommastring(dstring):
 
@@ -814,14 +869,16 @@ class DataTree(DataTreeShell, Thread):
                             continue
 
                         if self.config.write_info_files:
-                            self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' % (self.source.source, k, v))
+                            self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' %
+                                (self.source.source, k, v))
 
             # Return unlisted values to infofiles in a fid 10 list set
             if fid in (108, 202):
                 if not self.config.write_info_files:
                     return
 
-                if len(data) < 3 or not isinstance(data[0], (list,tuple)) or not isinstance(data[1], (list,tuple)) or not isinstance(data[2], (list,tuple)):
+                if len(data) < 3 or not isinstance(data[0], (list,tuple)) or \
+                    not isinstance(data[1], (list,tuple)) or not isinstance(data[2], (list,tuple)):
                     return
 
                 for index in range(len(data[2])):
@@ -838,17 +895,20 @@ class DataTree(DataTreeShell, Thread):
                         continue
 
                     if index >= len(data[1]):
-                        self.config.infofiles.addto_detail_list(u'new %s dataitem %s' % (self.source.source, data[0][index]))
+                        self.config.infofiles.addto_detail_list(u'new %s dataitem %s' %
+                            (self.source.source, data[0][index]))
 
                     else:
-                        self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' % (self.source.source, data[0][index], data[1][index]))
+                        self.config.infofiles.addto_detail_list(u'new %s dataitem %s => %s' %
+                            (self.source.source, data[0][index], data[1][index]))
 
             # strip data[1] from the start of data[0] if present and make sure it's unicode
             elif fid == 109:
                 return {"fid": 1}
 
         except:
-            self.config.log([self.config.text('fetch', 11, ('link', fid, self.source.source)), traceback.format_exc()], 1)
+            self.config.log([self.config.text('fetch', 11, ('link', fid, self.source.source)),
+                traceback.format_exc()], 1)
             return default
 
 # end DataTree()
@@ -912,7 +972,10 @@ class theTVDB_v1(Thread):
 
         pending_requests = {}
         def make_se(data):
-            return '(s%se%s) %r:%r' % (unicode(data['season']).rjust(2, '0'), unicode(data['episode']).rjust(2, '0'), data['stitle'], data['episode title'])
+            return '(s%se%s) %r:%r' % (unicode(data['season']).rjust(2, '0'), \
+                            unicode(data['episode']).rjust(2, '0'), \
+                            data['stitle'], \
+                            data['episode title'])
 
         try:
             self.state = 4
@@ -962,7 +1025,8 @@ class theTVDB_v1(Thread):
                             if qanswer['state'] == 1:
                                 self.functions.update_counter('lookup', self.proc_id, parent.chanid)
                                 self.lookup_log.append('lookup %s(%s) <= %s: %s %s\n' % \
-                                    (d['ttvdbid'], make_se(d), parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
+                                    (d['ttvdbid'], make_se(d), parent.chan_name,
+                                        pn.get_start_stop(True, True), pn.get_title()))
 
                             else:
                                 self.functions.update_counter('lookup_fail', self.proc_id, parent.chanid)
@@ -971,7 +1035,6 @@ class theTVDB_v1(Thread):
 
                         elif qanswer['state'] == 2:
                             # Answer is pending
-                            #{'state': 2, 'tid': tid, 'queryid':queryid,'name': series_name, 'tdate': datetime.date.today()}
                             queryid = qanswer['queryid']
                             tid = qanswer['tid']
                             chanid = parent.chanid
@@ -1012,12 +1075,14 @@ class theTVDB_v1(Thread):
                             if qanswer['state'] == 1:
                                 self.functions.update_counter('lookup', self.proc_id, parent.chanid)
                                 self.lookup_log.append('lookup %s(%s) <= %s: %s %s\n' % \
-                                    (d['ttvdbid'], make_se(d), parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
+                                    (d['ttvdbid'], make_se(d), parent.chan_name,
+                                        pn.get_start_stop(True, True), pn.get_title()))
 
                             else:
                                 self.functions.update_counter('lookup_fail', self.proc_id, parent.chanid)
                                 self.lookup_log.append('failed %s <= %s: %s %s\n' % \
-                                    (qanswer['tid'], parent.chan_name, pn.get_start_stop(True, True), pn.get_title()))
+                                    (qanswer['tid'], parent.chan_name,
+                                        pn.get_start_stop(True, True), pn.get_title()))
 
                         del self.pending_tids[tid]
                         del pending_requests[queryid]
@@ -1079,8 +1144,9 @@ class theTVDB_v1(Thread):
         '''
         Make a request on theTVDB.com and return the queryID or any return data from DataTree
         '''
-        if self.lastquery != None and self.config.in_output_tz('now') - self.lastquery < datetime.timedelta(seconds = 1):
-            time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+        if self.lastquery != None and \
+            self.config.in_output_tz('now') - self.lastquery < datetime.timedelta(seconds = 1):
+            self.functions.sleep()
 
         self.lastquery = self.config.in_output_tz('now')
         if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
@@ -1151,7 +1217,7 @@ class theTVDB_v1(Thread):
             if ptype == 'episodes':
                 dtree.init_data_def(self.data_value("seriesname", dict))
                 if not dtree.extract_datalist():
-                    self.store_data('ttvdbid', dtree.result)
+                    self.store_data('ttvdbid', data=dtree.result)
 
                 dtree.init_data_def(self.data_value("episodes", dict))
 
@@ -1212,7 +1278,7 @@ class theTVDB_v1(Thread):
 
         return [eps, sep_cnt]
 
-    def store_data(self, task, data, confirm = None):
+    def store_data(self, task, **data):
         '''
         Store any fetched data in the Database
         Optionally ask the database to confirm storing the data
@@ -1221,16 +1287,16 @@ class theTVDB_v1(Thread):
             return
 
         if task == 'ttvdbid':
-            dbdata = {'task':'add', 'ttvdb': data}
+            dbdata = {'task':'add', 'ttvdb': data['data']}
 
         elif task == 'alias':
             dbdata = {'task':'add', 'ttvdb_alias': data}
 
         elif task == 'episodes':
-            dbdata = {'task':'add', 'episodes': data}
+            dbdata = {'task':'add', 'episodes': data['data']}
 
         elif task == 'epcount':
-            dbdata = {'task':'add', 'epcount': data}
+            dbdata = {'task':'add', 'epcount': data['data']}
 
         elif task == 'delete ttvdbid':
             dbdata ={'task':'delete', 'ttvdb': data}
@@ -1238,13 +1304,15 @@ class theTVDB_v1(Thread):
         else:
             return
 
+
+        confirm = data.get('confirm', None)
         if confirm != None:
             dbdata['queue'] = self.detail_request
             dbdata['confirm'] = confirm
 
         self.config.queues['cache'].put(dbdata)
 
-    def get_cache_return(self, task = None, name = None, data = None):
+    def get_cache_return(self, task, **data):
         '''
         Wait for any returned data from the database
         If task is set perform the query
@@ -1252,22 +1320,8 @@ class theTVDB_v1(Thread):
         if self.quit:
             return -1
 
-        if task == 'ttvdbid':
-            self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb': {'name': name}})
-
-        elif task == 'ttvdbname':
-            self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb': {'tid': name}})
-
-        elif task == 'ttvdb_alias':
-            self.config.queues['cache'].put({'task':'query_id', 'parent': self, 'ttvdb_alias': {'alias': name}})
-
-        elif task == 'query':
-            self.config.queues['cache'].put({'task':task, 'parent': self, name: data})
-
-        elif task != None:
-            # Unknown query
-            return
-
+        dbdata = {'parent': self, 'task':'query', task: data}
+        self.config.queues['cache'].put(dbdata)
         self.state += 8
         value = self.cache_return.get(True)
         self.state -= 8
@@ -1286,7 +1340,7 @@ class theTVDB_v1(Thread):
         '''
         def get_tid(idsource = 'from db'):
             if idsource == 'from db':
-                data = self.get_cache_return('ttvdb_alias', name)
+                data = self.get_cache_return('ttvdb_alias', alias=name)
 
             elif idsource == 'from ttvdb':
                 data = self.query_ttvdb('seriesid', {'name': series_name, 'lang': lang}, chanid)
@@ -1303,7 +1357,8 @@ class theTVDB_v1(Thread):
                 return (0, None)
 
             if len(data) == 1:
-                return (data_value([0, 'tid'], data, int, 0), data_value([0, 'tdate'], data, datetime.date))
+                return (data_value([0, 'tid'], data, int, 0), \
+                            data_value([0, 'tdate'], data, datetime.date))
 
             tids = {}
             tidcnt = 0
@@ -1334,7 +1389,7 @@ class theTVDB_v1(Thread):
             return (0, None)
 
         def check_alias():
-            alias = self.get_cache_return('ttvdb_alias', name)
+            alias = self.get_cache_return('ttvdb_alias', alias=name)
             if alias == -1:
                 return -1
 
@@ -1409,7 +1464,10 @@ class theTVDB_v1(Thread):
 
             if tid == 0:
                 # No data
-                self.store_data('alias', {'tid': 0, 'name': series_name, 'alias': aliasses})
+                self.store_data('alias',
+                                tid = 0,
+                                name = series_name,
+                                alias = aliasses)
                 self.queried_titles[name.lower()] = 0
                 self.queried_titles[series_name.lower()] = 0
                 return {'state': 0, 'tid': None}
@@ -1435,7 +1493,10 @@ class theTVDB_v1(Thread):
                             if aname not in self.queried_titles.keys():
                                 self.queried_titles[aname] = data_value([index, 'tid'], data, int, 0)
 
-                self.store_data('alias', {'tid': tid, 'name': series_name, 'alias': aliasses})
+                self.store_data('alias',
+                                tid = tid,
+                                name = series_name,
+                                alias = aliasses)
 
         except:
             self.config.log([self.config.text('ttvdb', 11), traceback.format_exc()])
@@ -1527,14 +1588,15 @@ class theTVDB_v1(Thread):
                     for k, v in ep[1].items():
                         epc.append({'tid': tid,'sid': k, 'count': v})
 
-                    self.store_data('epcount', epc)
+                    self.store_data('epcount', data=epc)
 
         except:
             self.config.log([self.config.text('ttvdb', 12), traceback.format_exc()])
             return {'state': 0, 'tid': tid}
 
         # We store the data and let the database tell when it's available
-        self.store_data('episodes', eps, {'task': 'process_ep_info', 'queryid': queryid})
+        self.store_data('episodes', data=eps,
+                confirm={'task': 'process_ep_info', 'queryid': queryid})
         return {'state': 2, 'tid': tid, 'queryid':queryid}
 
     def get_season_episode(self, parent = None, data = None, tid = None):
@@ -1599,27 +1661,26 @@ class theTVDB_v1(Thread):
         seno = data.get_value('season')
         # First if season and episode are known
         if data.is_set('episode') and data.is_set('season'):
-            eps = self.get_cache_return('query', 'ep_by_id',  {'tid': tid, 'eid': epno, 'sid': seno})
+            eps = self.get_cache_return('ep_by_id',  tid = tid, eid = epno, sid = seno)
             if eps == -1:
                 return {'state': -1, 'tid': -1, 'data': None}
 
             if tid in eps.keys() and len(eps[tid]) == 1:
                 # We only got one match so we return it
-                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                self.config.log(self.config.text('ttvdb', 14,
+                    (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(eps.values()[0], tid, lang)
 
         # Next we just look for a matching subtitle (if set)
         if data.is_set('episode title') and eptitle != '':
-            eid = self.get_cache_return('query', 'ep_by_title', \
-                                                        {'tid': tid,
-                                                        'episode title': eptitle})
-
+            eid = self.get_cache_return('ep_by_title', **{'tid': tid, 'episode title': eptitle})
             if eid == -1:
                 return {'state': -1, 'tid': -1, 'data': None}
 
             if tid in eid.keys() and len(eid[tid]) == 1:
                 # We only got one match so we return it
-                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                self.config.log(self.config.text('ttvdb', 14,
+                    (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(eid.values()[0], tid, lang)
 
         # What can we find on season/episode
@@ -1630,31 +1691,31 @@ class theTVDB_v1(Thread):
         if data.is_set('season'):
             qdict['sid'] = seno
 
-        eps = self.get_cache_return('query', 'ep_by_id', qdict )
+        eps = self.get_cache_return('ep_by_id', **qdict )
         if eps == -1:
             return {'state': -1, 'tid': -1, 'data': None}
 
         if tid in eps.keys() and len(eps[tid]) == 1:
             # We only got one match so we return it
-            self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+            self.config.log(self.config.text('ttvdb', 14,
+                (data.get_value('name'), data.get_value('episode title'))), 24)
             return prepare_return(eps.values()[0], tid, lang)
 
         # And on absolute episode numbers
         if data.is_set('episode'):
-            absep = self.get_cache_return('query', 'ep_by_id', \
-                                                        {'tid': tid,
-                                                        'abseid': epno} )
-
+            absep = self.get_cache_return('ep_by_id', tid = tid, abseid = epno )
             if absep == -1:
                 return {'state': -1, 'tid': -1, 'data': None}
 
             if tid in absep.keys() and len(absep[tid]) == 1:
                 # We only got one match so we return it
-                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                self.config.log(self.config.text('ttvdb', 14,
+                    (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(absep.values()[0], tid, lang)
 
         if data.is_set('episode title') and eptitle != '' and  tid in eps.keys() and len(eps[tid]) > 0:
-            # Now we get a list of episodes matching what we already know and compare with confusing characters removed
+            # Now we get a list of episodes matching what we already know
+            # and compare with confusing characters removed
             subt = re.sub('[-,. ]', '', self.functions.remove_accents(data.get_value('episode title')).lower())
             ep_dict = {}
             ep_list = []
@@ -1667,20 +1728,32 @@ class theTVDB_v1(Thread):
                     ep_list.append(s)
                     ep_dict[s] = ep
                     if s == subt:
-                        self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                        self.config.log(self.config.text('ttvdb', 14,
+                            (data.get_value('name'), data.get_value('episode title'))), 24)
                         return prepare_return(ep, tid, lang)
 
             # And finally we try a difflib match
             match_list = difflib.get_close_matches(subt, ep_list, 1, 0.7)
             if len(match_list) > 0:
                 ep = ep_dict[match_list[0]]
-                self.config.log(self.config.text('ttvdb', 14, (data.get_value('name'), data.get_value('episode title'))), 24)
+                self.config.log(self.config.text('ttvdb', 14,
+                    (data.get_value('name'), data.get_value('episode title'))), 24)
                 return prepare_return(ep, tid, lang)
 
-        self.config.log(self.config.text('ttvdb', 15, (data.get_value('name'), data.get_value('episode title'), parent.chan_name)), 128)
+        self.config.log(self.config.text('ttvdb', 15,
+            (data.get_value('name'), data.get_value('episode title'), parent.chan_name)), 128)
         return {'state': 0, 'tid': tid, 'data': None}
 
     def check_ttvdb_title(self, series_name, lang=None, ttvdbid = 0):
+        def print_text(tcode, *args):
+            if isinstance(tcode, int):
+                text = self.config.text('ttvdb', tcode, args, type = 'frontend')
+
+            else:
+                text = tcode % args
+
+            print text.encode(self.local_encoding, 'replace')
+
         if self.config.opt_dict['disable_ttvdb']:
             return(-1)
 
@@ -1697,14 +1770,14 @@ class theTVDB_v1(Thread):
             langs.append(lang)
 
         # Check if a record exists
-        tid = self.get_cache_return('ttvdb_alias', series_name)
+        tid = self.get_cache_return('ttvdb_alias', alias=series_name)
         if tid == -1:
             return(-1)
 
         if ttvdbid != 0:
             data = self.query_ttvdb('last_updated', {'ttvdbid': ttvdbid, 'lang': 'en'})
             if data == None:
-                print(self.config.text('ttvdb', 14, (ttvdbid, ), type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(14, ttvdbid)
                 return(0)
 
             else:
@@ -1720,29 +1793,29 @@ class theTVDB_v1(Thread):
             langlist = u''
             for l in elangs:
                 langlist = u'%s, %s' % (langlist, l)
-            print(self.config.text('ttvdb', 1, (series_name,  tid[0]['tid'], tid[0]['name']), type = 'frontend').encode(self.local_encoding, 'replace'))
-            print(self.config.text('ttvdb', 2, (langlist[2:], ), type = 'frontend').encode(self.local_encoding, 'replace'))
+            print_text(1, series_name,  tid[0]['tid'], tid[0]['name'])
+            print_text(2, langlist[2:])
             old_tid = int(tid[0]['tid'])
             for l in elangs:
                 langs.append(l)
 
         else:
             # It's not jet in the database
-            print(self.config.text('ttvdb', 3,(series_name, ) , type = 'frontend').encode(self.local_encoding, 'replace'))
+            print_text(3, series_name)
             old_tid = -1
 
         if ttvdbid != 0:
             if old_tid == -1:
-                print(self.config.text('ttvdb', 16, (ttvdbid, new_name), type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(16, ttvdbid, new_name)
 
             elif ttvdbid != old_tid:
-                print(self.config.text('ttvdb', 13, (ttvdbid, new_name), type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(13, ttvdbid, new_name)
 
             else:
                 return(0)
 
             while True:
-                print(self.config.text('ttvdb', 15, type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(15)
                 ans = raw_input()
                 if ans in ('y', 'Y'):
                     tid = data[0]
@@ -1759,19 +1832,20 @@ class theTVDB_v1(Thread):
                     series_list = [series_list]
 
                 if not is_data_value([0, 'tid'], series_list, int):
-                    print(self.config.text('ttvdb', 4, (series_name, ), type = 'frontend').encode(self.local_encoding, 'replace'))
+                    print_text(4, series_name)
                     return(0)
 
-                print(self.config.text('ttvdb', 5, type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(5)
                 for s in range(len(series_list)):
-                    print("%3.0f -> %9.0f: (%s) %s".encode(self.local_encoding, 'replace') % (s+1, data_value([s, 'tid'], series_list, int), \
-                                                                            data_value([s, 'lang'], series_list, str), \
-                                                                            data_value([s, 'name'], series_list, str)))
+                    print_text("%3.0f -> %9.0f: (%s) %s", s+1,
+                                data_value([s, 'tid'], series_list, int), \
+                                data_value([s, 'lang'], series_list, str), \
+                                data_value([s, 'name'], series_list, str))
 
                 # Ask to select the right one
                 while True:
                     try:
-                        print(self.config.text('ttvdb', 6, type = 'frontend').encode(self.local_encoding, 'replace'))
+                        print_text(6)
                         ans = raw_input()
                         selected_id = int(ans)-1
                         if 0 <= selected_id < len(series_list):
@@ -1802,20 +1876,23 @@ class theTVDB_v1(Thread):
                     ename = aname
 
             if old_tid != int(tid['tid']):
-                print(self.config.text('ttvdb', 7, type = 'frontend').encode(self.local_encoding, 'replace'))
-                self.store_data('delete ttvdbid', {'tid': old_tid})
+                print_text(7)
+                self.store_data('delete ttvdbid', tid = old_tid)
 
             if len(aliasses) > 0:
                 # Add an alias record
-                self.store_data('alias', {'tid': int(tid['tid']), 'name': ename, 'alias': aliasses})
+                self.store_data('alias',
+                                tid = int(tid['tid']),
+                                name = ename,
+                                alias = aliasses)
                 if len(aliasses) == 2:
-                    print(self.config.text('ttvdb', 8, (ename, aliasses[0], aliasses[1],  tid['tid']), type = 'frontend').encode(self.local_encoding, 'replace'))
+                    print_text(8, ename, aliasses[0], aliasses[1],  tid['tid'])
 
                 else:
-                    print(self.config.text('ttvdb', 9, (ename, aliasses[0],  tid['tid']), type = 'frontend').encode(self.local_encoding, 'replace'))
+                    print_text(9, ename, aliasses[0],  tid['tid'])
 
             else:
-                print(self.config.text('ttvdb', 10, (ename,  tid['tid']), type = 'frontend').encode(self.local_encoding, 'replace'))
+                print_text(10, ename,  tid['tid'])
 
         except:
             traceback.print_exc()
@@ -1834,7 +1911,7 @@ class theTVDB_v1(Thread):
 
 # end theTVDB
 
-class FetchData(Thread):
+class FetchData(URLtypes, Thread):
     """
     Generic Class to fetch the data
 
@@ -1862,10 +1939,12 @@ class FetchData(Thread):
         self.cache_return = Queue()
         # The queue to receive requests for detail fetches
         self.detail_request = Queue()
+        self.pre_merge_request = Queue()
         self.config.queues['source'][self.proc_id] = self.detail_request
         self.thread_type = 'source'
         self.config.threads.append(self)
         self.page_status = dte.dtDataOK
+        self.fetch_counter = 0
 
         self.all_channels = {}
         self.channels = {}
@@ -1873,6 +1952,7 @@ class FetchData(Thread):
         self.all_chanids = {}
         self.channel_loaded = {}
         self.day_loaded = {}
+        self.day_present = {}
         self.page_loaded = {}
         self.program_data = {}
         self.chan_count = 0
@@ -1897,6 +1977,7 @@ class FetchData(Thread):
         self.detail_keys = []
         self.data = None
         self.rawdata = None
+        self.update_base = []
 
         self.datatrees = {}
         try:
@@ -1913,6 +1994,7 @@ class FetchData(Thread):
                 self.detail_processor = False
                 if 'detail' in self.source_data["detail_defs"]:
                     self.detail_processor = True
+                    self.update_base = self.source_data["detail"].get("update-base", [])
                     self.detail_keys = self.source_data['detail']['provides']
                     self.config.detail_keys[self.proc_id]['detail'] = self.detail_keys
                     for k in self.detail_keys:
@@ -1946,50 +2028,64 @@ class FetchData(Thread):
 
         def check_queue():
             # If the queue is empty
-            if self.detail_request.empty():
-                time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+            pre_merge = False
+            if not self.pre_merge_request.empty():
+                qval = self.pre_merge_request.get()
+                #~ self.config.log('f: Receiving pre_merge\n')
+                pre_merge = True
+
+            elif not self.detail_request.empty():
+                qval = self.detail_request.get()
+
+            else:
+                self.functions.sleep()
                 # if one of the previous detail sources in the order is still alive we wait for potential followup requests
                 for ds in range(detail_idx):
                     if self.config.channelsource[self.config.detail_sources[ds]].is_alive():
-                        return 0
+                        return 0, pre_merge
 
                 # Check if all channels are ready
                 for channel in self.config.channels.values():
                     if channel.is_alive() and not channel.ready:
-                        return 0
+                        return 0, pre_merge
 
                 # All channels are ready, so if there is nothing in the queue
                 self.ready = True
-                return -1
+                return -1, pre_merge
 
             self.lastrequest = self.config.in_output_tz('now')
             try:
                 if self.quit:
-                    return -1
+                    return -1, pre_merge
 
-                qval = self.detail_request.get()
                 if qval['task'] == 'quit':
-                    return -1
+                    return -1, pre_merge
 
                 # Is this the closing item for the channel?
                 elif qval[ 'task'] == 'last_one':
-                    for ds in range(detail_idx + 1, len(self.config.detail_sources)):
-                        ds_id = self.config.detail_sources[ds]
-                        if self.config.channelsource[ds_id].is_alive():
-                            self.config.queues['source'][ds_id].put(qval)
-                            break
+                    if pre_merge:
+                        #~ self.config.log('f: Terminating pre_merge for "%s" on "%s"\n' %
+                            #~ (qval['parent'].name, self.name))
+                        qval['parent'].pre_merge.put({'last_detail': self.proc_id})
 
                     else:
-                        qval['parent'].detail_return.put('last_detail')
-                        qval['parent'].detail_data.set()
+                        for ds in range(detail_idx + 1, len(self.config.detail_sources)):
+                            ds_id = self.config.detail_sources[ds]
+                            if self.config.channelsource[ds_id].is_alive():
+                                self.config.queues['source'][ds_id].put(qval)
+                                break
 
-                    return 0
+                        else:
+                            qval['parent'].detail_return.put('last_detail')
+                            qval['parent'].detail_data.set()
+
+                    return 0, pre_merge
 
                 else:
-                    return qval
+                    return qval, pre_merge
 
             except Empty:
-                return 0
+                return 0, pre_merge
 
         try:
             self.init_channel_source_ids()
@@ -2024,7 +2120,7 @@ class FetchData(Thread):
                         self.ready = True
                         break
 
-                    queue_val = check_queue()
+                    queue_val, pre_merge = check_queue()
                     if queue_val == -1:
                         # We Quit
                         break
@@ -2038,13 +2134,14 @@ class FetchData(Thread):
                     detail_ids = tdict['detail_ids']
                     logstring = tdict['logstring']
                     # be nice to the source site
-                    time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+                    self.functions.sleep()
                     try:
                         detailed_program = self.load_detailpage('detail', detail_ids[self.proc_id], parent)
 
                     except:
                         detailed_program = None
-                        self.config.log([self.config.text('fetch', 23, (detail_ids[self.proc_id]['detail_url'], )), traceback.format_exc()], 1)
+                        self.config.log([self.config.text('fetch', 23,
+                            (detail_ids[self.proc_id]['detail_url'], )), traceback.format_exc()], 1)
 
                     # It failed! Check for a detail2 page
                     #~ if detailed_program == None and 'detail2' in self.source_data["detail_defs"]:
@@ -2065,19 +2162,30 @@ class FetchData(Thread):
                                 break
 
                         else:
-                            self.config.log(self.config.text('fetch', 31, (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
+                            self.config.log(self.config.text('fetch', 31,
+                                (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
 
                         self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
                         continue
 
                     # Success
-                    self.config.log(self.config.text('fetch', 32, (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
                     detailed_program['sourceid'] = self.proc_id
                     detailed_program['name'] = detail_ids[self.proc_id]['name']
                     detailed_program['channelid'] = detail_ids[self.proc_id]['channelid']
                     detailed_program['prog_ID'] = detail_ids[self.proc_id]['prog_ID']
                     detailed_program['gen_ID'] = detail_ids[self.proc_id]['gen_ID']
-                    parent.detail_return.put({'source': self.proc_id, 'data': detailed_program, 'counter': tdict['counter']})
+                    if pre_merge:
+                        self.config.log(self.config.text('fetch', 35,
+                            (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
+                        parent.pre_merge.put({'source': self.proc_id,
+                            'data': detailed_program, 'counter': tdict['counter']})
+
+                    else:
+                        self.config.log(self.config.text('fetch', 32,
+                            (self.source, parent.chan_name, tdict['counter'], logstring), type = 'report'), 8, 1)
+                        parent.detail_return.put({'source': self.proc_id,
+                            'data': detailed_program, 'counter': tdict['counter']})
+
                     self.functions.update_counter('queue', self.proc_id,  parent.chanid, False)
 
             self.state = 0
@@ -2085,11 +2193,13 @@ class FetchData(Thread):
 
         except:
             if self.proc_id in detail_ids.keys() and 'detail_url' in detail_ids[self.proc_id].keys():
-                self.config.queues['log'].put({'fatal': [self.config.text('IO', 15, (detail_ids[self.proc_id]['detail_url'])), \
+                self.config.queues['log'].put(
+                    {'fatal': [self.config.text('IO', 15, (detail_ids[self.proc_id]['detail_url'])), \
                     traceback.format_exc(), '\n'], 'name': self.source})
 
             else:
-                self.config.queues['log'].put({'fatal': [self.config.text('IO', 16), traceback.format_exc(), '\n'], 'name': self.source})
+                self.config.queues['log'].put({'fatal': [self.config.text('IO', 16),
+                    traceback.format_exc(), '\n'], 'name': self.source})
 
             self.state = 0
             self.ready = True
@@ -2106,12 +2216,13 @@ class FetchData(Thread):
                 else:
                     return
 
-            channelid = chan.get_source_id(self.proc_id)
+            channelid = chan.get_channelid(self.proc_id)
             if channelid != '':
                 self.groupitems[channelid] = 0
                 self.program_data[channelid] = []
                 # Unless it is in empty channels we add it else set it ready
-                if channelid in self.source_data['empty_channels'] or self.proc_id in chan.opt_dict['disable_source']:
+                if channelid in self.source_data['empty_channels'] or \
+                    self.proc_id in chan.opt_dict['disable_source']:
                     self.set_loaded('channel', channelid)
 
                 else:
@@ -2129,14 +2240,9 @@ class FetchData(Thread):
         self.current_sitedate = self.config.in_tz(self.current_date, self.site_tz)
         self.current_fetchdate = self.config.in_fetch_tz(self.current_date)
         self.current_ordinal = self.current_fetchdate.toordinal()
-        self.config.queues['cache'].put({
-                    'task':'query_id',
-                    'parent': self,
-                    'sources': {
-                        'sourceid': self.proc_id,
-                        'name': self.source}})
-
-        self.sourcedbdata = self.get_cache_return()
+        self.sourcedbdata = self.get_cache_return('sources',
+                        sourceid = self.proc_id,
+                        name = self.source)
         if self.source_data['alt-url-code'] != None and self.sourcedbdata['use_alt_url']:
             for ptype in self.source_data["data_defs"]:
                 self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
@@ -2171,13 +2277,15 @@ class FetchData(Thread):
             self.source_data["base"]["value-filters"]["channelid"].extend(list(self.chanids.keys()))
             self.source_data["base"]["value-filters"]["channelid"].extend(list(self.source_data['alt-channels'].keys()))
 
-    def get_page_data(self, ptype, pdata = None):
+    def get_page_data(self, ptype, **pdata):
         """
         Here for every fetch, the url is gathered, the page retreived and
         together with the data definition inserted in the DataTree module
         The then by the DataTree extracted data is return
         """
         def switch_url():
+            self.store_data('toggle_alt_url')
+            self.sourcedbdata['use_alt_url'] = not self.sourcedbdata['use_alt_url']
             for ptype in self.source_data["data_defs"]:
                 if self.sourcedbdata['use_alt_url']:
                     self.source_data[ptype]['url'] = self.source_data[ptype]['alt-url']
@@ -2225,13 +2333,11 @@ class FetchData(Thread):
 
                     self.config.infofiles.add_url_failure('%s: %s\n' % (tekst, u))
 
+        self.offset_shift = 0
         self.page_status = dte.dtDataOK
         self.data = None
         incomplete = False
         try:
-            if pdata == None:
-                pdata = {}
-
             if not is_data_value(ptype, self.datatrees, DataTreeShell):
                 self.datatrees[ptype] = DataTree(self, self.source_data[ptype], 'always', self.proc_id)
 
@@ -2252,6 +2358,7 @@ class FetchData(Thread):
                 counter = ['base', self.proc_id, None]
 
             url_type = self.source_data[ptype]["url-type"]
+            pdata[ 'cnt-offset'] = pdata.get('cnt_offset', 0)
             for retry in (0, 1):
                 # Get the URL
                 url = self.datatrees[ptype].get_url(pdata, False)
@@ -2266,7 +2373,8 @@ class FetchData(Thread):
                         self.roottree_output.write(u'pdata = %s' % pdata)
                         prtdata = ('url', 'encoding', 'accept_header', 'url_data', 'is_json')
                         for index in range(len(url)):
-                            self.roottree_output.write(('%s = %s'% (prtdata[index], url[index])).encode('utf-8', 'replace'))
+                            self.roottree_output.write(('%s = %s'%
+                                (prtdata[index], url[index])).encode('utf-8', 'replace'))
 
                     else:
                         self.roottree_output.write(u'pdata = %s\n' % pdata)
@@ -2279,9 +2387,6 @@ class FetchData(Thread):
                 self.page_status, page, pcode = self.functions.get_page(*url)
                 # Do an URL swap if needed and try again
                 if pcode != None and int(pcode) ==  self.source_data['alt-url-code']:
-                    self.config.queues['cache'].put({'task':'update', 'parent': self,
-                                                    'toggle_alt_url': {'sourceid': self.proc_id}})
-                    self.sourcedbdata['use_alt_url'] = not self.sourcedbdata['use_alt_url']
                     switch_url()
 
                 else:
@@ -2312,7 +2417,8 @@ class FetchData(Thread):
                     update_counter(ptype)
                     if self.print_roottree:
                         self.datatrees[ptype].print_datatree(fobj = self.roottree_output, from_start_node = False)
-                        self.roottree_output.write(u'Data Error = %s: %s' % (self.page_status, dte.errortext(self.page_status)))
+                        self.roottree_output.write(u'Data Error = %s: %s' %
+                            (self.page_status, dte.errortext(self.page_status)))
 
                 return
 
@@ -2323,41 +2429,30 @@ class FetchData(Thread):
             self.datatrees[ptype].set_timezone()
             if ptype == 'base':
                 # We set the current date
-                if (url_type & 12) == 0:
+                if self.getsoneday(url_type):
                     cdate = self.current_sitedate.toordinal() + pdata['offset']
-                    self.datatrees[ptype].set_current_date(cdate)
-                    self.datatrees[ptype].searchtree.set_current_date(cdate)
                     # We check on the right offset
                     if len(self.source_data[ptype]["data"]["today"]) > 0:
                         cd = self.datatrees[ptype].searchtree.find_data_value(\
                             self.source_data[ptype]["data"]["today"], searchname = 'for the current date')
                         if not isinstance(cd, datetime.date):
+                            # The search does not return a valid date, so we throw the page out
                             self.config.log([self.config.text('fetch', 27, (url[0], )),])
                             update_counter(ptype)
-                            self.page_status = dte.dtWrongDate
+                            self.page_status = dte.dtInvalidDate
                             return
 
-                        elif self.source_data['night-date-switch'] > 0 and \
-                          self.current_fetchdate.hour < self.source_data['night-date-switch'] and \
-                          (self.current_ordinal - cd.toordinal()) == 1:
-                            # This page switches date at a later time so we allow
-                            pass
+                        self.offset_shift = cd.toordinal() - self.current_ordinal
+                        if self.offset_shift != 0:
+                            # We got the data for a different date then asked. We keep it for now
+                            cdate += self.offset_shift
+                            self.page_status = dte.dtShiftedDate
 
-                        elif cd.toordinal() != self.current_ordinal:
-                            if url_type == 1:
-                                self.config.log(self.config.text('fetch', 28, (pdata['channel'], self.source, pdata['offset'])))
-                            elif (url_type & 3) == 1:
-                                # chanid
-                                pass
-                            elif (url_type & 12) in (0, 8):
-                                # offset
-                                pass
-                            update_counter(ptype)
-                            self.page_status = dte.dtWrongDate
-                            return
+                    self.datatrees[ptype].set_current_date(cdate)
+                    self.datatrees[ptype].searchtree.set_current_date(cdate)
 
                 # We extract the current _item_count and the total_item_count
-                if (url_type & 12) == 12:
+                if self.getsrecordgroup(url_type):
                     self.total_item_count = self.datatrees[ptype].searchtree.find_data_value(\
                         self.source_data[ptype]['data']["total-item-count"], searchname = 'for the total-item-count')
                     self.current_item_count = self.datatrees[ptype].searchtree.find_data_value(\
@@ -2471,7 +2566,7 @@ class FetchData(Thread):
             empty_channels = copy(self.source_data['empty_channels'])
             chanids = {}
             for chanid, channel in self.config.channels.items():
-                channelid = channel.get_source_id(self.proc_id)
+                channelid = channel.get_channelid(self.proc_id)
                 if channelid != '':
                     chanids[channelid] = chanid
 
@@ -2556,43 +2651,43 @@ class FetchData(Thread):
         """The code for the actual Grabbing and dataprocessing of the base pages"""
         def log_fetch():
             log_array = []
-            if (url_type & 3) == 1:
+            if self.getsonechannel(url_type):
                 log_array =['\n', self.config.text('fetch', 1, \
                     (self.config.channels[chanid].chan_name, self.config.channels[chanid].xmltvid , \
                     (self.config.channels[chanid].get_opt('compat') and self.config.compat_text or ''), self.source), type = 'report')]
 
-                if (url_type & 12) == 0:
+                if self.getsoneday(url_type):
                     log_array.append(self.config.text('fetch', 4, (channel_cnt, len(self.channels), offset, self.config.opt_dict['days']), type = 'report'))
 
-                elif (url_type & 12) == 4:
+                elif self.getsalldays(url_type):
                     log_array.append(self.config.text('fetch', 5, (channel_cnt, len(self.channels), '6'), type = 'report'))
 
-                elif (url_type & 12) == 8:
+                elif self.getsdaygroup(url_type):
                     log_array.append(self.config.text('fetch', 6, (channel_cnt, len(self.channels), page_idx, len(fetch_range)), type = 'report'))
 
-                elif (url_type & 12) == 12:
+                elif self.getsrecordgroup(url_type):
                     log_array.append(self.config.text('fetch', 7, (channel_cnt, len(self.channels), self.config.opt_dict['days'], base_count), type = 'report'))
 
             else:
-                if (url_type & 3) == 2:
+                if self.getsallchannels(url_type):
                     log_array =['\n', self.config.text('fetch', 2, (len(self.channels), self.source), type = 'report')]
 
-                elif (url_type & 3) == 3:
+                elif self.getschannelgroup(url_type):
                     log_array =['\n', self.config.text('fetch', 3, (channelgrp, self.source), type = 'report')]
 
                 else:
                     return
 
-                if (url_type & 12) == 0:
+                if self.getsoneday(url_type):
                     log_array.append(self.config.text('fetch', 8, (offset, self.config.opt_dict['days']), type = 'report'))
 
-                elif (url_type & 12) == 4:
+                elif self.getsalldays(url_type):
                     log_array.append(self.config.text('fetch', 9, (self.config.opt_dict['days'],), type = 'report'))
 
-                elif (url_type & 12) == 8:
+                elif self.getsdaygroup(url_type):
                     log_array.append(self.config.text('fetch', 10, (page_idx, len(fetch_range)), type = 'report'))
 
-                elif (url_type & 12) == 12:
+                elif self.getsrecordgroup(url_type):
                     log_array.append(self.config.text('fetch', 11, (self.config.opt_dict['days'], base_count), type = 'report'))
 
             self.config.log(log_array, 2)
@@ -2651,6 +2746,11 @@ class FetchData(Thread):
             return first_day
         # end get_weekstart()
 
+        def get_counter(total):
+            self.fetch_counter += 1
+            return 100*float(self.fetch_counter)/float(total)
+        # end get_counter()
+
         def do_final_processing(channelid):
             chanid = self.chanids[channelid]
             if not chanid in self.config.channelprogram_rename.keys():
@@ -2664,6 +2764,64 @@ class FetchData(Thread):
                 plen = len(self.program_data[channelid])
                 last_stop = None
                 min_gap = datetime.timedelta(minutes = 30)
+                #~ if len(self.update_base) > 0 and \
+                    #~ self.config.channels[chanid].opt_dict['prime_source'] == self.proc_id:
+                if len(self.update_base) > 0:
+                    url_list = [None]
+                    self.fetch_counter = 0
+                    fetch_order = list(range(plen))
+                    random.shuffle(fetch_order)
+                    for index in fetch_order:
+                        counter = get_counter(plen)
+                        p = self.program_data[channelid][index]
+                        prog_id = p.get('prog_ID', None)
+                        if prog_id == None:
+                            continue
+
+                        detail_url = p.get('detail_url', None)
+                        if detail_url in url_list:
+                            continue
+
+                        cache_detail = self.get_cache_return('programdetails',
+                                        sourceid = self.proc_id,
+                                        channelid = channelid,
+                                        prog_ID = prog_id)
+                        if cache_detail == -1:
+                            return -1
+
+                        elif len(cache_detail) > 0:
+                            for k in self.update_base:
+                                cdval = cache_detail[0].get(k, None)
+                                if cdval != None:
+                                    p[k] = cdval
+                                    if k == 'length':
+                                        p['stop from length'] = True
+                                        p['stop-time'] = p['start-time'] + p['length']
+
+                        elif detail_url != None:
+                            url_list.append(detail_url)
+                            logstring = u' %s: %s' % (p['start-time'].strftime('%d %b %H:%M'), p['name'])
+
+                            sources = {self.proc_id: {
+                                    'chanid': chanid,
+                                    'channelid': channelid,
+                                    'name': p['name'],
+                                    'detail_url': detail_url,
+                                    'prog_ID': prog_id,
+                                    'gen_ID': p['gen_ID']},
+                                'channelid': channelid,
+                                'chanid': chanid,
+                                'name': p['name'],
+                                'detail_url': detail_url,
+                                'prog_ID': prog_id,
+                                'gen_ID': p['gen_ID']}
+
+                            self.pre_merge_request.put(
+                                {'task':'get_details','detail_ids': sources, 'logstring': logstring,
+                                    'counter': counter, 'parent': self.config.channels[chanid]})
+
+                            #~ self.config.log('f: fetching: %s\n' % detail_url)
+
                 for index in range(plen):
                     p = self.program_data[channelid][index]
                     if not 'name' in p.keys() or not isinstance(p['name'], (unicode, str)) or p['name'] == u'':
@@ -2676,12 +2834,14 @@ class FetchData(Thread):
 
                     if index < plen - 1:
                         p2 = self.program_data[channelid][index + 1]
-                        if 'stop from length' in p.keys() and p['stop from length'] and not 'last of the page' in p.keys():
+                        if 'stop from length' in p.keys() and p['stop from length'] and \
+                            not 'last of the page' in p.keys():
                             if p['stop-time'] > p2['start-time']:
                                 p['stop-time'] = copy(p2['start-time'])
 
                         if not 'stop-time' in p.keys() or not isinstance(p['stop-time'], datetime.datetime):
-                            if 'last of the page' in p.keys():
+                            if 'last of the page' in p.keys() and not \
+                                ('length' in self.update_base or 'stop-time' in self.update_base):
                                 continue
 
                             p['stop-time'] = copy(p2['start-time'])
@@ -2698,7 +2858,8 @@ class FetchData(Thread):
                                     p2['start-time'] = copy(p['start-time'])
                                     continue
 
-                    elif index == plen - 1 and'stop-time' in p.keys() and isinstance(p['stop-time'], datetime.datetime):
+                    elif index == plen - 1 and'stop-time' in p.keys() and \
+                      isinstance(p['stop-time'], datetime.datetime):
                         if not 'length' in p.keys() or not isinstance(p['length'], datetime.timedelta):
                             p['length'] = p['stop-time'] - p['start-time']
 
@@ -2720,10 +2881,16 @@ class FetchData(Thread):
                     last_name = p['name'].lower()
                     good_programs.append(p)
 
+                self.pre_merge_request.put({'task':'last_one', 'parent': self.config.channels[chanid]})
+                #~ self.config.log('f: Terminating prefetch for "%s" on "%s"\n' %
+                    #~ (self.config.channels[chanid].name, self.name))
+
             # Retrieve what is in the cache with a day earlier and later added
             cache_range = range( first_day - 1 , min(max_days, last_day) +1)
-            self.config.queues['cache'].put({'task':'query', 'parent': self, 'sourceprograms': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': cache_range}})
-            cache_programs = self.get_cache_return()
+            cache_programs = self.get_cache_return('sourceprograms',
+                            sourceid = self.proc_id,
+                            channelid = channelid,
+                            scandate = cache_range)
             if cache_programs == -1:
                 return -1
 
@@ -2737,8 +2904,9 @@ class FetchData(Thread):
                 if len(cache_programs) > 0:
                     # Retrieve those days from the cache
                     for day in site_range:
-                        if cached[channelid][day] and not self.get_loaded('day', channelid, day):
-                            self.config.log(self.config.text('fetch', 12,  (day, self.config.channels[chanid].chan_name, self.source), type = 'report'), 2)
+                        if cached[channelid][day] and not self.get_loaded('realday', channelid, day):
+                            self.config.log(self.config.text('fetch', 12,
+                                (day, self.config.channels[chanid].chan_name, self.source), type = 'report'), 2)
 
                     for p in cache_programs:
                         p['source'] = self.source
@@ -2760,11 +2928,15 @@ class FetchData(Thread):
                             cache_add.append(p)
                             continue
 
-                        elif p['start-time'] <= fetch_start and (fetch_start - p['start-time']) > (p['stop-time'] - fetch_start) and p['name'].lower() != good_programs[0]['name'].lower():
+                        elif p['start-time'] <= fetch_start and \
+                            (fetch_start - p['start-time']) > (p['stop-time'] - fetch_start) and \
+                            p['name'].lower() != good_programs[0]['name'].lower():
                             cache_add.append(p)
                             continue
 
-                        elif p['stop-time'] >= fetch_end and (fetch_end - p['start-time']) < (p['stop-time'] - fetch_end) and p['name'].lower() != good_programs[-1]['name'].lower():
+                        elif p['stop-time'] >= fetch_end and \
+                            (fetch_end - p['start-time']) < (p['stop-time'] - fetch_end) and \
+                            p['name'].lower() != good_programs[-1]['name'].lower():
                             cache_add.append(p)
                             continue
 
@@ -2773,11 +2945,13 @@ class FetchData(Thread):
                                 cache_add.append(p)
                                 break
 
-                            elif pg[0] <= p['start-time'] <= pg[1] and (pg[1] - p['start-time']) > (p['stop-time'] - pg[1]) and p['name'].lower() != pg[3]:
+                            elif pg[0] <= p['start-time'] <= pg[1] and \
+                                (pg[1] - p['start-time']) > (p['stop-time'] - pg[1]) and p['name'].lower() != pg[3]:
                                 cache_add.append(p)
                                 break
 
-                            elif pg[0] <= p['stop-time'] <= pg[1] and (p['stop-time'] - pg[0]) > (pg[0] - p['start-time']) and p['name'].lower() != pg[2]:
+                            elif pg[0] <= p['stop-time'] <= pg[1] and \
+                                (p['stop-time'] - pg[0]) > (pg[0] - p['start-time']) and p['name'].lower() != pg[2]:
                                 cache_add.append(p)
                                 break
 
@@ -2786,18 +2960,22 @@ class FetchData(Thread):
 
                     # Delete the new fetched programs from the cache
                     if len(cache_delete) > 0:
-                        self.config.queues['cache'].put({'task':'delete', 'parent': self, 'sourceprograms': {'sourceid': self.proc_id, 'channelid': channelid, 'start-time': cache_delete}})
+                        self.store_data('delete_programs',
+                                        **{'sourceid': self.proc_id,
+                                        'channelid': channelid,
+                                        'start-time': cache_delete})
 
                 # Update the cache
                 new_ranges= []
                 for day in site_range:
-                    if self.get_loaded('day', channelid, day):
+                    if self.get_loaded('realday', channelid, day):
                         new_ranges.append(day)
 
-                self.config.queues['cache'].put({'task':'add', 'parent': self, \
-                        'sourceprograms': deepcopy(good_programs), \
-                        'laststop': {'sourceid': self.proc_id, 'channelid': channelid, 'laststop': fetch_end}, \
-                        'fetcheddays': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': new_ranges}})
+                self.store_data('add_programs',
+                            programs = deepcopy(good_programs),
+                            channelid = channelid,
+                            laststop = fetch_end,
+                            fetcheddays = new_ranges)
                 good_programs.extend(cache_add)
 
             elif len(cache_programs) > 0:
@@ -2896,26 +3074,31 @@ class FetchData(Thread):
         fetch_range = site_range
         for channelid, chanid in self.chanids.items():
             self.program_data[channelid] = []
-            self.config.queues['cache'].put({'task':'query', 'parent': self, 'fetcheddays': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': list(full_range)}})
-            cached[channelid] = self.get_cache_return()
+            cached[channelid] = self.get_cache_return('fetcheddays',
+                            sourceid = self.proc_id,
+                            channelid = channelid,
+                            scandate = list(full_range))
             if cached[channelid] == -1:
                 return -1
 
-            self.config.queues['cache'].put({'task':'query', 'parent': self, 'laststop': {'sourceid': self.proc_id, 'channelid': channelid}})
-            ls = self.get_cache_return()
+            ls = self.get_cache_return('laststop',
+                            sourceid = self.proc_id,
+                            channelid = channelid)
             if ls == -1:
                 return -1
 
-            laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and isinstance(ls['laststop'], datetime.datetime) else None
+            laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and \
+                isinstance(ls['laststop'], datetime.datetime) else None
 
         url_type = self.source_data["base"]["url-type"]
         # Check which groups contain requested channels
-        if (url_type & 3) == 3:
+        if self.getschannelgroup(url_type):
             changroups = self.source_data["base"][ "url-channel-groups"]
             fgroup = {}
             for channelgrp in changroups:
-                self.config.queues['cache'].put({'task':'query', 'parent': self, 'chan_scid': {'sourceid': self.proc_id, 'fgroup': channelgrp}})
-                fgroup[channelgrp] = self.get_cache_return()
+                fgroup[channelgrp] = self.get_cache_return('chan_scid',
+                                sourceid = self.proc_id,
+                                fgroup = channelgrp)
                 if fgroup[channelgrp] == -1:
                     return -1
 
@@ -2926,17 +3109,21 @@ class FetchData(Thread):
         # Check which days and up to what date are available in the cache
         for channelid, chanid in self.chanids.items():
             self.program_data[channelid] = []
-            self.config.queues['cache'].put({'task':'query', 'parent': self, 'fetcheddays': {'sourceid': self.proc_id, 'channelid': channelid, 'scandate': list(full_range)}})
-            cached[channelid] = self.get_cache_return()
+            cached[channelid] = self.get_cache_return('fetcheddays',
+                            sourceid = self.proc_id,
+                            channelid = channelid,
+                            scandate = list(full_range))
             if cached[channelid] == -1:
                 return
 
-            self.config.queues['cache'].put({'task':'query', 'parent': self, 'laststop': {'sourceid': self.proc_id, 'channelid': channelid}})
-            ls = self.get_cache_return()
+            ls = self.get_cache_return('laststop',
+                            sourceid = self.proc_id,
+                            channelid = channelid)
             if ls == -1:
                 return -1
 
-            laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and isinstance(ls['laststop'], datetime.datetime) else None
+            laststop[channelid] = ls['laststop']  if isinstance(ls, dict) and \
+                isinstance(ls['laststop'], datetime.datetime) else None
 
         max_fetch_days = 6
         max_failure_count = 4
@@ -2948,10 +3135,9 @@ class FetchData(Thread):
 
             return
 
-        # We fetch every day separate
-        elif (url_type & 12) == 0:
+        elif self.getsoneday(url_type):
             # vrt.be, tvgids.tv
-            if (url_type & 3) == 1:
+            if self.getsonechannel(url_type):
                 fetch_range = {}
                 for channelid, chanid in self.chanids.items():
                     fetch_range[channelid] = []
@@ -2962,7 +3148,7 @@ class FetchData(Thread):
                                 break
 
             # tvgids.nl, vpro.nl, primo.eu, oorboekje.nl
-            elif (url_type & 3) == 2:
+            elif self.getsallchannels(url_type):
                 fetch_range = []
                 for day in site_range:
                     for channelid, chanid in self.chanids.items():
@@ -2974,7 +3160,7 @@ class FetchData(Thread):
                         break
 
             #humo.be, npo.nl
-            elif (url_type & 3) == 3:
+            elif self.getschannelgroup(url_type):
                 fetch_range = {}
                 for channelgrp in changroups:
                     fetch_range[channelgrp] = []
@@ -2987,28 +3173,26 @@ class FetchData(Thread):
                         if len(fetch_range[channelgrp]) == max_fetch_days:
                             break
 
-        # We fetch all days in one
-        elif (url_type & 12) == 4:
-            if (url_type & 3) == 1:
+        elif self.getsalldays(url_type):
+            if self.getsonechannel(url_type):
                 fetch_range = {}
                 for channelid, chanid in self.chanids.items():
                     fetch_range[channelid] = ['all']
 
             # rtl.nl
-            elif (url_type & 3) == 2:
+            elif self.getsallchannels(url_type):
                 fetch_range = ['all']
 
-            elif (url_type & 3) == 3:
+            elif self.getschannelgroup(url_type):
                 # ToDo
                 return
 
-        # We fetch a set number of  days in one
-        elif (url_type & 12) == 8:
+        elif self.getsdaygroup(url_type):
             if self.source_data["base"]["url-date-range"] == 'week':
                 sow = self.source_data["base"]["url-date-week-start"]
                 offset_step = 7
                 step_start = get_weekstart(self.current_ordinal, first_day, sow)
-                if (url_type & 3) == 1:
+                if self.getsonechannel(url_type):
                     fetch_range = {}
                     for channelid, chanid in self.chanids.items():
                         fetch_range[channelid] = []
@@ -3018,7 +3202,7 @@ class FetchData(Thread):
                                     fetch_range[channelid].append(daygroup)
                                     break
 
-                elif (url_type & 3) == 2:
+                elif self.getsallchannels(url_type):
                     fetch_range = []
                     for daygroup in range(step_start, last_day, offset_step):
                         for day in site_range:
@@ -3032,14 +3216,14 @@ class FetchData(Thread):
 
                             break
 
-                elif (url_type & 3) == 3:
+                elif self.getschannelgroup(url_type):
                     # ToDo
                     return
 
             elif isinstance(self.source_data["base"]["url-date-range"], int):
                 offset_step = self.source_data["base"]["url-date-range"]
                 # nieuwsblad.be
-                if (url_type & 3) == 1:
+                if self.getsonechannel(url_type):
                     fetch_range = {}
                     for channelid, chanid in self.chanids.items():
                         fetch_range[channelid] = []
@@ -3050,7 +3234,7 @@ class FetchData(Thread):
                                     fetch_range[channelid].append(day)
                                     start = day
 
-                elif (url_type & 3) == 2:
+                elif self.getsallchannels(url_type):
                     fetch_range = []
                     start = None
                     for day in site_range:
@@ -3061,18 +3245,17 @@ class FetchData(Thread):
                                     start = day
                                     break
 
-                elif (url_type & 3) == 3:
+                elif self.getschannelgroup(url_type):
                     # ToDo
                     return
 
             else:
                 return
 
-        # We fetch a set number of  records per page
-        elif (url_type & 12) == 12:
+        elif self.getsrecordgroup(url_type):
             # horizon.nl
             self.item_count = self.source_data['base']['default-item-count']
-            if (url_type & 3) == 1:
+            if self.getsonechannel(url_type):
                 fetch_range = {}
                 for channelid, chanid in self.chanids.items():
                     fetch_range[channelid] = []
@@ -3092,7 +3275,7 @@ class FetchData(Thread):
                     if start != None:
                         fetch_range[channelid].append((start, days))
 
-            elif (url_type & 3) == 2:
+            elif self.getsallchannels(url_type):
                 fetch_range = []
                 start = None
                 days = 0
@@ -3117,14 +3300,13 @@ class FetchData(Thread):
                     fetch_range.append((start, days))
 
 
-            elif (url_type & 3) == 3:
+            elif self.getschannelgroup(url_type):
                 # ToDo
                 return
 
         try:
             first_fetch = True
-            # We fetch every channel separate
-            if (url_type & 3) == 1:
+            if self.getsonechannel(url_type):
                 maxoffset = {}
                 for retry in (0, 1):
                     channel_cnt = 0
@@ -3142,14 +3324,15 @@ class FetchData(Thread):
                         if self.get_loaded('channel', channelid):
                             continue
 
-                        if (url_type & 12) == 12:
+                        if self.getsrecordgroup(url_type):
                             if self.item_count == 0:
                                 return
 
                             base_count = 0
                             for fset in fetch_range[channelid]:
                                 if fset == maxoffset[channelid]:
-                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                    self.config.log(self.config.text('fetch', 39,
+                                        (self.source, self.config.channels[chanid].chan_descr)))
                                     break
 
                                 self.current_item_count = self.item_count
@@ -3168,15 +3351,15 @@ class FetchData(Thread):
                                     log_fetch()
                                     if not first_fetch:
                                         # be nice to the source
-                                        time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+                                        self.functions.sleep()
 
                                     first_fetch = False
-                                    self.get_page_data('base',{'channel': channelid,
-                                                                'cnt-offset': page_count,
-                                                                'start': fset[0],
-                                                                'end': fset[0] + fset[1],
-                                                                'back':-fset[0],
-                                                                'ahead': fset[0] +fset[1]-1})
+                                    self.get_page_data('base', channel = channelid,
+                                                                cnt_offset = page_count,
+                                                                start = fset[0],
+                                                                end = fset[0] + fset[1],
+                                                                back = -fset[0],
+                                                                ahead = fset[0] +fset[1]-1)
 
                                     if self.page_status == dte.dtDataOK:
                                         strdata = self.data
@@ -3184,7 +3367,8 @@ class FetchData(Thread):
                                     elif self.page_status == dte.dtNoData:
                                         # We asume this is the last day with data
                                         maxoffset[channelid] = fset
-                                        self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                        self.config.log(self.config.text('fetch', 39,
+                                            (self.source, self.config.channels[chanid].chan_descr)))
                                         break
 
                                     else:
@@ -3200,7 +3384,7 @@ class FetchData(Thread):
 
                                         continue
 
-                                    self.parse_basepage(strdata, {'url_type':url_type, 'channelid': channelid})
+                                    self.parse_basepage(strdata, channelid = channelid)
                                     self.set_loaded('page', channelid, base_count)
                                     page_count += 1
                                     base_count += 1
@@ -3212,12 +3396,13 @@ class FetchData(Thread):
                             page_idx = 0
                             for offset in fetch_range[channelid]:
                                 if offset == maxoffset[channelid]:
-                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                    self.config.log(self.config.text('fetch', 39,
+                                        (self.source, self.config.channels[chanid].chan_descr)))
                                     break
 
                                 page_idx += 1
                                 # Check if it is already loaded
-                                if (url_type & 12) == 8:
+                                if self.getsdaygroup(url_type):
                                     if self.get_loaded('page', channelid, offset):
                                         continue
 
@@ -3227,23 +3412,27 @@ class FetchData(Thread):
 
                                 if not first_fetch:
                                     # be nice to the source
-                                    time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+                                    self.functions.sleep()
 
                                 first_fetch = False
                                 log_fetch()
-                                self.get_page_data('base',{'channel': channelid,
-                                                            'offset': offset,
-                                                            'start': first_day,
-                                                            'end': min(max_days, last_day),
-                                                            'back':-first_day,
-                                                            'ahead':min(max_days, last_day)-1})
+                                self.get_page_data('base', channel = channelid,
+                                                            offset = offset,
+                                                            start = first_day,
+                                                            end = min(max_days, last_day),
+                                                            back = -first_day,
+                                                            ahead = min(max_days, last_day)-1)
                                 if self.page_status == dte.dtDataOK:
+                                    strdata = self.data
+
+                                elif self.page_status == dte.dtShiftedDate:
                                     strdata = self.data
 
                                 elif self.page_status == dte.dtNoData:
                                     # We asume this is the last page with data
                                     maxoffset[channelid] = offset
-                                    self.config.log(self.config.text('fetch', 39, (self.source, self.config.channels[chanid].chan_descr)))
+                                    self.config.log(self.config.text('fetch', 39,
+                                        (self.source, self.config.channels[chanid].chan_descr)))
                                     break
 
                                 else:
@@ -3253,14 +3442,14 @@ class FetchData(Thread):
                                     failure_count += 1
                                     continue
 
-                                self.parse_basepage(strdata, {'url_type':url_type, 'offset': offset, 'channelid': channelid})
-                                if (url_type & 12) == 0:
+                                self.parse_basepage(strdata, offset = offset + self.offset_shift, channelid = channelid)
+                                if self.getsoneday(url_type):
                                     self.set_loaded('day', channelid, offset)
 
-                                elif (url_type & 12) == 4:
+                                elif self.getsalldays(url_type):
                                     self.set_loaded('day', channelid)
 
-                                elif (url_type & 12) == 8:
+                                elif self.getsdaygroup(url_type):
                                     self.set_loaded('day', channelid, range(offset, offset + offset_step))
                                     self.set_loaded('page', channelid, offset)
 
@@ -3269,18 +3458,17 @@ class FetchData(Thread):
                             if do_final_processing(channelid) == -1:
                                 return -1
 
-            # We fetch all channels in one
-            if (url_type & 3) == 2:
+            elif self.getsallchannels(url_type):
                 for retry in (0, 1):
                     failure_count = 0
                     if self.quit:
                         return
 
-                    if (url_type & 12) == 8:
+                    if self.getsdaygroup(url_type):
                         # We fetch a set number of  days in one
                         return
 
-                    elif (url_type & 12) == 12:
+                    elif self.getsrecordgroup(url_type):
                         # We fetch a set number of  records in one
                         return
 
@@ -3295,17 +3483,20 @@ class FetchData(Thread):
 
                             if not first_fetch:
                                 # be nice to the source
-                                time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+                                self.functions.sleep()
 
                             first_fetch = False
                             log_fetch()
-                            self.get_page_data('base',{'channels': self.chanids.keys(),
-                                                        'offset': offset,
-                                                        'start': first_day,
-                                                        'end': min(max_days, last_day),
-                                                        'back':-first_day,
-                                                        'ahead':min(max_days, last_day)-1})
+                            self.get_page_data('base', channels = self.chanids.keys(),
+                                                        offset = offset,
+                                                        start = first_day,
+                                                        end = min(max_days, last_day),
+                                                        back = -first_day,
+                                                        ahead = min(max_days, last_day)-1)
                             if self.page_status == dte.dtDataOK:
+                                strdata = self.data
+
+                            elif self.page_status == dte.dtShiftedDate:
                                 strdata = self.data
 
                             else:
@@ -3316,7 +3507,7 @@ class FetchData(Thread):
                                 continue
 
                             self.set_loaded('day', 0, offset)
-                            self.parse_basepage(strdata, {'url_type':url_type, 'offset':offset})
+                            self.parse_basepage(strdata, offset = offset + self.offset_shift)
 
                     if failure_count == 0 or retry == 1:
                         for channelid, chanid in self.chanids.items():
@@ -3325,8 +3516,7 @@ class FetchData(Thread):
 
                         break
 
-            # We fetch the channels in two or more groups
-            if (url_type & 3) == 3:
+            elif self.getschannelgroup(url_type):
                 for retry in (0, 1):
                     for channelgrp in self.source_data["base"]["url-channel-groups"]:
                         failure_count = 0
@@ -3336,9 +3526,8 @@ class FetchData(Thread):
                         if len(fgroup[channelgrp]) == 0:
                             continue
 
-                        # We fetch every day separate
                         #humo.be
-                        if (url_type & 12) == 0:
+                        if self.getsoneday(url_type):
                             for offset in fetch_range[channelgrp]:
                                 if self.quit:
                                     return
@@ -3352,17 +3541,20 @@ class FetchData(Thread):
 
                                 if not first_fetch:
                                     # be nice to the source
-                                    time.sleep(random.randint(self.config.opt_dict['nice_time'][0], self.config.opt_dict['nice_time'][1]))
+                                    self.functions.sleep()
 
                                 first_fetch = False
                                 log_fetch()
-                                self.get_page_data('base',{'channelgrp': channelgrp,
-                                                            'offset': offset,
-                                                            'start': first_day,
-                                                            'end': min(max_days, last_day),
-                                                            'back':-first_day,
-                                                            'ahead':min(max_days, last_day)-1})
+                                self.get_page_data('base', channelgrp = channelgrp,
+                                                            offset = offset,
+                                                            start = first_day,
+                                                            end = min(max_days, last_day),
+                                                            back = -first_day,
+                                                            ahead = min(max_days, last_day)-1)
                                 if self.page_status == dte.dtDataOK:
+                                    strdata = self.data
+
+                                elif self.page_status == dte.dtShiftedDate:
                                     strdata = self.data
 
                                 else:
@@ -3372,19 +3564,20 @@ class FetchData(Thread):
                                     failure_count += 1
                                     continue
 
-                                channelids = self.parse_basepage(strdata, {'url_type':url_type, 'channelgrp': channelgrp, 'offset':offset})
+                                channelids = self.parse_basepage(strdata,
+                                    channelgrp = channelgrp, offset = offset + self.offset_shift)
                                 if isinstance(channelids, list):
                                     self.set_loaded('day', channelids, offset)
 
-                        elif (url_type & 12) == 4:
+                        elif self.getsalldays(url_type):
                             # We fetch all days in one
                             return
 
-                        elif (url_type & 12) == 8:
+                        elif self.getsdaygroup(url_type):
                             # We fetch a set number of  days in one
                             return
 
-                        elif (url_type & 12) == 12:
+                        elif self.getsrecordgroup(url_type):
                             # We fetch a set number of  records in one
                             return
 
@@ -3397,11 +3590,12 @@ class FetchData(Thread):
                         break
 
         except:
-            self.config.log([self.config.text('fetch', 31, (self.source,)), self.config.text('fetch', 32), traceback.format_exc()], 0)
+            self.config.log([self.config.text('fetch', 31, (self.source,)),
+                                    self.config.text('fetch', 32), traceback.format_exc()], 0)
             self.set_loaded('channel')
             return None
 
-    def parse_basepage(self, fdata, subset = {}):
+    def parse_basepage(self, fdata, **subset):
         """Process the data retreived from DataTree for the base pages"""
         channelids = []
         last_start = {}
@@ -3449,7 +3643,8 @@ class FetchData(Thread):
                     # Give it the Unknown Program Title Name, to mark it as a groupslot.
                     program['name'] = self.config.unknown_program_title
                     tdict['is_gap'] = True
-                    #~ self.config.log(self.config.text('fetch', 33, (program['prog_ID'], self.config.channels[chanid].chan_descr, self.source)))
+                    #~ self.config.log(self.config.text('fetch', 33,
+                        #~ (program['prog_ID'], self.config.channels[chanid].chan_descr, self.source)))
                     #~ continue
 
                 if 'stop-time' in program.keys() and isinstance(program['stop-time'], datetime.datetime):
@@ -3469,7 +3664,8 @@ class FetchData(Thread):
                 elif plength != None and 'stop-time' in tdict.keys():
                     tdict['start-time'] = tdict['stop-time'] - plength
                     tdict['start from length'] = True
-                elif self.source_data["base"]["data-format"] == "text/html" and isinstance(last_stop, datetime.datetime):
+                elif self.source_data["base"]["data-format"] == "text/html" and \
+                    isinstance(last_stop, datetime.datetime):
                     tdict['start-time'] = last_stop
                 else:
                     # Unable to determin a Start Time
@@ -3484,7 +3680,8 @@ class FetchData(Thread):
                     else:
                         alength = tdict['stop-time'] - tdict['start-time']
 
-                if self.source_data['without-full-timings'] and self.source_data["base"]["data-format"] == "text/html":
+                if self.source_data['without-full-timings'] and \
+                    self.source_data["base"]["data-format"] == "text/html":
                     # This is to catch the midnight date change for HTML pages with just start(stop) times without date
                     # don't enable it on json pages where the programs are in a dict as they will not be in chronological order!!!
                     if last_start[channelid] == None:
@@ -3537,8 +3734,7 @@ class FetchData(Thread):
         if pdata['detail_url'] in (None, ''):
             return
 
-        ddata = {'channel': pdata['chanid'], 'detailid': pdata['detail_url']}
-        self.get_page_data(ptype, ddata)
+        self.get_page_data(ptype, channel = pdata['chanid'], detailid = pdata['detail_url'])
         if self.page_status == dte.dtDataOK:
             strdata = self.data
 
@@ -3596,19 +3792,47 @@ class FetchData(Thread):
                 else:
                     self.data_output.write('        %s: %s\n' % (k, v))
 
-    def get_cache_return(self):
+    def store_data(self, task, **data):
+        '''
+        Store any fetched data in the Database
+        Optionally ask the database to confirm storing the data
+        '''
+        if task == 'toggle_alt_url':
+            dbdata = {'task':'update', 'toggle_alt_url': {'sourceid': self.proc_id}}
+
+        elif task == 'add_programs':
+            dbdata = {'task':'add', 'sourceprograms': data['programs'],
+                'laststop': {'laststop': data['laststop'],
+                    'sourceid': self.proc_id, 'channelid': data['channelid']},
+                'fetcheddays': {'scandate': data['fetcheddays'],
+                    'sourceid': self.proc_id, 'channelid': data['channelid']}}
+
+        elif task == 'delete_programs':
+            dbdata ={'task':'delete', 'sourceprograms': data}
+
+        else:
+            return
+
+        self.config.queues['cache'].put(dbdata)
+
+    def get_cache_return(self, task, **data):
+        '''
+        Wait for any returned data from the database
+        If task is set perform the query
+        '''
         if self.quit:
             return -1
 
+        dbdata = {'parent': self, 'task':'query', task: data}
+        self.config.queues['cache'].put(dbdata)
         self.state += 8
-        cr = self.cache_return.get(True)
+        value = self.cache_return.get(True)
         self.state -= 8
-        if cr == 'quit':
-            self.quit = True
+        if value == 'quit':
+            self.ready = True
             return -1
 
-        else:
-            return cr
+        return value
 
     def is_data_value(self, searchpath, dtype = None, empty_is_false = True):
         return is_data_value(searchpath, self.source_data, dtype, empty_is_false)
@@ -3619,13 +3843,22 @@ class FetchData(Thread):
     def get_loaded(self, type='day', channelid = 0, day = None):
         chanlist = list(self.chanids.keys())
         chanlist.append(0)
+        offset = self.config.opt_dict['offset']
         if type == 'day':
             if channelid in self.day_loaded.keys():
                 if day in self.day_loaded[channelid].keys():
                     return self.day_loaded[channelid][day]
 
-                elif day == 'all' and self.config.opt_dict['offset'] in self.day_loaded[channelid].keys():
-                    return self.day_loaded[channelid][self.config.opt_dict['offset']]
+                elif day == 'all' and offset in self.day_loaded[channelid].keys():
+                    return self.day_loaded[channelid][offset]
+
+        if type == 'realday':
+            if channelid in self.day_present.keys():
+                if day in self.day_present[channelid].keys():
+                    return self.day_present[channelid][day]
+
+                elif day == 'all' and offset in self.day_loaded[channelid].keys():
+                    return self.day_present[channelid][offset]
 
             return False
 
@@ -3644,7 +3877,8 @@ class FetchData(Thread):
     def set_loaded(self, type='day', channelid = None, day = None, value=True):
         chanlist = list(self.chanids.keys())
         chanlist.append(0)
-        daylist = range( self.config.opt_dict['offset'], (self.config.opt_dict['offset'] + self.config.opt_dict['days']))
+        offset = self.config.opt_dict['offset']
+        daylist = range( offset, (offset + self.config.opt_dict['days']))
         if isinstance(channelid, (list, tuple)):
             chanlist = channelid
 
@@ -3662,8 +3896,12 @@ class FetchData(Thread):
                 if not channelid in self.day_loaded.keys():
                     self.day_loaded[channelid] = {}
 
+                if not channelid in self.day_present.keys():
+                    self.day_present[channelid] = {}
+
                 for day in daylist:
                     self.day_loaded[channelid][day] = value
+                    self.day_present[channelid][day+self.offset_shift] = value
 
         if type == 'channel':
             for channelid in chanlist:
@@ -3800,13 +4038,15 @@ class FetchData(Thread):
                     elif gg1 not in (None, ''):
                         genre = self.source_data['cattrans'][gg0]['default'][0].strip()
                         subgenre = gs1
-                        self.new_cattrans[(gg0, gg1)] = (self.source_data['cattrans'][gg0]['default'][0].strip().lower(), gg1)
+                        self.new_cattrans[(gg0, gg1)] = (
+                                self.source_data['cattrans'][gg0]['default'][0].strip().lower(), gg1)
 
                     else:
                         genre = self.source_data['cattrans'][gg0]['default'][0].strip()
                         subgenre = self.source_data['cattrans'][gg0]['default'][1].strip()
-                        self.new_cattrans[(gg0,gg1)] = (self.source_data['cattrans'][gg0]['default'][0].strip().lower(),
-                                                                             self.source_data['cattrans'][gg0]['default'][1].strip().lower())
+                        self.new_cattrans[(gg0,gg1)] = (
+                                self.source_data['cattrans'][gg0]['default'][0].strip().lower(),
+                                self.source_data['cattrans'][gg0]['default'][1].strip().lower())
 
                 elif gg0 not in (None, ''):
                     if gg1 not in (None, ''):
@@ -3817,10 +4057,12 @@ class FetchData(Thread):
 
                     if self.config.write_info_files:
                         if 'subgenre' in values and values['subgenre'] not in (None, ''):
-                            self.config.infofiles.addto_detail_list(u'unknown %s genre/subgenre => ["%s", "%s"]' % (self.source, values['genre'], values['subgenre']))
+                            self.config.infofiles.addto_detail_list(u'unknown %s genre/subgenre => ["%s", "%s"]' %
+                                (self.source, values['genre'], values['subgenre']))
 
                         else:
-                            self.config.infofiles.addto_detail_list(u'unknown %s genre => %s' % (self.source, values['genre']))
+                            self.config.infofiles.addto_detail_list(u'unknown %s genre => %s' %
+                                (self.source, values['genre']))
 
                 return (genre, subgenre, gs0, gs1)
 
@@ -3841,10 +4083,12 @@ class FetchData(Thread):
                             break
 
                     else:
-                        self.new_cattrans.append((values['subgenre'].lower().strip(), self.config.cattrans_unknown.lower().strip()))
+                        self.new_cattrans.append((values['subgenre'].lower().strip(),
+                                        self.config.cattrans_unknown.lower().strip()))
 
                     if self.config.write_info_files:
-                        self.config.infofiles.addto_detail_list(u'unknown %s subgenre => "%s"' % (self.source, values['subgenre']))
+                        self.config.infofiles.addto_detail_list(u'unknown %s subgenre => "%s"' %
+                            (self.source, values['subgenre']))
 
         else:
             if is_data_value('genre', values, str, True):
@@ -3877,7 +4121,8 @@ class FetchData(Thread):
                 if len(p) >1:
                     self.config.log(self.config.text('fetch', 36,  (group, ptitle)), 64)
                     if self.config.write_info_files:
-                        self.config.infofiles.addto_detail_list(unicode('Group removing = \"%s\" from \"%s\"' %  (group, ptitle)))
+                        self.config.infofiles.addto_detail_list(unicode('Group removing = \"%s\" from \"%s\"' %
+                            (group, ptitle)))
 
                     ptitle = p[1].strip()
 
@@ -3908,7 +4153,8 @@ class FetchData(Thread):
                 psubtitle = psubtitle[1:].strip()
 
         # exclude certain programs
-        if  not (ptitle.lower() in self.config.notitlesplit) and not ('genre' in values and values['genre'].lower() in ['movies','film']):
+        if  not (ptitle.lower() in self.config.notitlesplit) and not \
+            ('genre' in values and values['genre'].lower() in ['movies','film']):
             # and do the title split test
             p = ptitle.split(':', 1)
             if len(p) >1:
@@ -3923,7 +4169,8 @@ class FetchData(Thread):
         if ptitle.lower() in self.config.titlerename:
             self.config.log(self.config.text('fetch', 38, (ptitle, self.config.titlerename[ptitle.lower()])), 64)
             if self.config.write_info_files:
-                self.config.infofiles.addto_detail_list(unicode('Title renaming %s to %s\n' % (ptitle, self.config.titlerename[ptitle.lower()])))
+                self.config.infofiles.addto_detail_list(unicode('Title renaming %s to %s\n' %
+                    (ptitle, self.config.titlerename[ptitle.lower()])))
 
             ptitle = self.config.titlerename[ptitle.lower()]
 

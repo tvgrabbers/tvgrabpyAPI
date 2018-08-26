@@ -85,7 +85,7 @@ def load_texts():
                 63: u'Probeer opnieuw over 15 minuten of zo; of schakel de falende bron uit.\n',
                 64: u'De Bron %s (%s) is uitgeschakeld',
                 65: u'Er worden geen detail pagina\'s van %s (%s) gehaald.',
-                66: u'Zender specifieke instellinge anders dan de bovenstaande (uitsluitend voor de actieve zenders!):',
+                66: u'Zender specifieke instellingen anders dan de bovenstaande (uitsluitend voor de actieve zenders!):',
                 67: u'  de prime_source instelling: %s (%s) in het .json bestand wordt niet gebruikt\n',
                 68: u'  De Bron %s (%s) is uitgeschakeld\n',
                 69: u'  De detail Bron %s (%s) is uitgeschakeld\n',
@@ -179,6 +179,10 @@ def load_texts():
                 47: u'Geef de taal voor de systeem en log berichten.\n' + \
                     'Op dit moment "en" (standaard) of "nl"',
                 48: u'Gebruik alleen data uit de cache.',
+                49: u'Verwijder alle programmagegevens van de opgegeven bron\n' + \
+                    'uit de cache',
+                50: u'Verwijder alle programmagegevens van de opgegeven zender\n' + \
+                    'uit de cache',
                 100: u'  Een testmodule om bronbestanden te testen.\n' + \
                     '  Je kunt de variabelen ook instellen in:%s/.json_struct/tv_grab_test.conf',
                 101: u'Naam van de grabber en de configuratie on te testen\n' + \
@@ -378,11 +382,15 @@ def load_texts():
                 195: u'# 1 doet alleen een look-up bij gedeeltelijk ontbrekende seizoen/episode info.\n',
                 196: u'# 2 bij alle series die tenminste een episode titel hebben.\n',
                 197: u'# 3 bij alle series.\n',
-                201: u'# Dit zijn lijsten van de genres die als een serie, film en sport genre gezien worden\n',
-                202: u'# Het wordt bijv. gebruikt om programma\'s aan te merken om ze op thetvdb op te zoeken\n',
-                203: u'# en voor naam manipulaties om een episode titel te vinden.\n',
-                204: u'# De door de beheerder toegevoegde standaard kun je niet verwijderen.\n',
-                205: u''
+                198: u'# De pre_merge optie is alleen relevant voor bronnen die data van een detailpagina\n',
+                199: u'# nodig hebben om de juiste start en stop tijden vast te stellen (npo.nl)\n',
+                200: u'# EN die als prime_source ingesteld zijn.\n',
+                201: u'# Omdat dit de duur kan verlengen kun je het hier of voor één kanaal uitschakelen.\n',
+                211: u'# Dit zijn lijsten van de genres die als een serie, film en sport genre gezien worden\n',
+                212: u'# Het wordt bijv. gebruikt om programma\'s aan te merken om ze op thetvdb op te zoeken\n',
+                213: u'# en voor naam manipulaties om een episode titel te vinden.\n',
+                214: u'# De door de beheerder toegevoegde standaard kun je niet verwijderen.\n',
+                215: u''
                 },
             u'mergeinfo':{
                 1: u'%s is samengevoegd met %s\n',
@@ -523,6 +531,7 @@ def load_texts():
                 32: u'[%s verzoek] %s:(%3.0f%%) %s\n',
                 33: u'      [cached] %s:(%3.0f%%) %s\n',
                 34: u'[geen verzoek] %s:(%3.0f%%) %s\n',
+                35: u'[%s premerge] %s:(%3.0f%%) %s\n',
                 41: u'Nu wordt de cache gecontrolleerd op %s programmadetails voor %s(xmltvid=%s%s)\n',
                 42: u'Nu worden de details voor %s programma\'s op %s(xmltvid=%s%s) opgehaald\n',
                 43: u'    (zender %s van %s) voor %s dagen.\n',

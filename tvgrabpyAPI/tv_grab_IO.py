@@ -710,6 +710,8 @@ class ProgramCache(Thread):
         sqlite3.register_converter(str('boolean'), self.convert_bool)
         sqlite3.register_adapter(datetime.datetime, self.adapt_datetime)
         sqlite3.register_converter(str('datetime'), self.convert_datetime)
+        sqlite3.register_adapter(datetime.timedelta, self.adapt_timedelta)
+        sqlite3.register_converter(str('timedelta'), self.convert_timedelta)
         sqlite3.register_adapter(datetime.date, self.adapt_date)
         sqlite3.register_converter(str('date'), self.convert_date)
         self.table_definitions = {
@@ -803,6 +805,7 @@ class ProgramCache(Thread):
                                    "prog_ID": {"type": "TEXT", "default": ""},
                                    "start-time": {"type": "datetime", "default": 0},
                                    "stop-time": {"type": "datetime", "default": 0},
+                                   "length": {"type": "timedelta", "null": True},
                                    "group name": {"type": "TEXT", "null": True},
                                    "name": {"type": "TEXT", "default": ""},
                                    "genre": {"type": "TEXT", "null": True}},
@@ -936,6 +939,13 @@ class ProgramCache(Thread):
             if key in self.config.detail_keys['episodes'] and key not in self.get_fields("episodes"):
                 self.table_definitions["episodes"]["fields"][key] = {"type": "datetime", "null": True}
 
+        for key in self.config.key_values['timedelta']:
+            if key not in self.get_fields("sourceprograms"):
+                self.table_definitions["sourceprograms"]["fields"][key] = {"type": "timedelta", "null": True}
+
+            if key in self.config.detail_keys['all'] and key not in self.get_fields("programdetails"):
+                self.table_definitions["programdetails"]["fields"][key] = {"type": "timedelta", "null": True}
+
         for key in self.config.key_values['bool']:
             if key not in self.get_fields("sourceprograms"):
                 self.table_definitions["sourceprograms"]["fields"][key] = {"type": "boolean", "null": True}
@@ -1001,17 +1011,14 @@ class ProgramCache(Thread):
         self.state = 0
         self.config.threads.append(self)
         self.request_list = {}
-        self.request_list['query_id'] = ('chan_group', 'ttvdb', 'ttvdb_alias', 'tdate', 'sources')
-        self.request_list['query'] = ('icon', 'chan_group', 'chan_scid',
-                                    'laststop', 'fetcheddays', 'sourceprograms', 'programdetails',
-                                    'ttvdb', 'ttvdb_aliasses', 'ttvdb_langs',
-                                    'ep_by_id', 'ep_by_title')
-        self.request_list['add'] = ('channelsource', 'channel', 'icon',
-                                    'laststop', 'fetcheddays', 'sourceprograms', 'programdetails',
-                                    'ttvdb', 'ttvdb_alias', 'episodes', 'epcount')
-        self.request_list['update'] = ('toggle_alt_url', )
-        self.request_list['delete'] = ('sourceprograms', 'programdetails', 'ttvdb')
-        self.request_list['clear'] = ('fetcheddays', 'fetcheddata', 'sourceprograms', 'credits', 'programdetails', 'creditdetails')
+        self.request_list['query'] = ('icon', 'chan_group', 'chan_scid', 'use_alt_url', 'laststop',
+                                    'ttvdbid', 'ttvdbname', 'tdate',
+                                    'ttvdb_aliasses', 'ttvdb_langs', 'ep_by_id', 'ep_by_title')
+        self.request_list['add'] = ('channel', 'icon', 'laststop')
+        self.request_list['update'] = ('toggle_alt_url')
+        self.request_list['delete'] = tuple()
+        self.request_list['clear'] = ('fetcheddays', 'fetcheddata', 'sourceprograms', 'credits',
+                                    'programdetails', 'creditdetails')
         self.request_list['clearttvdb'] = ('ttvdb', 'ttvdbint', 'ttvdb_alias', 'episodes', 'episodesint',
                                     'ttvdbcredits', 'ttvdbmetadata', 'epcount')
 
@@ -1083,6 +1090,23 @@ class ProgramCache(Thread):
                 return datetime.date.fromordinal(int(val))
 
             return datetime.datetime.fromtimestamp(int(val), self.config.utc_tz)
+
+        except:
+            return None
+
+    def adapt_timedelta(self, val):
+        if isinstance(val, (datetime.timedelta)):
+            return int(val.total_seconds())
+
+        elif isinstance(val, (int, long)):
+            return val
+
+        else:
+            return 0
+
+    def convert_timedelta(self, val):
+        try:
+            return datetime.timedelta(0, int(val))
 
         except:
             return None
@@ -1304,7 +1328,7 @@ class ProgramCache(Thread):
 
             # We add if not jet there some defaults
             for a, t in self.config.ttvdb_ids.items():
-                if self.query_id('ttvdb_alias', {'alias': a}) == None:
+                if self.query('ttvdb_alias', alias=a) == None:
                     self.add('ttvdb_alias', {'tid': t['tid'], 'name': t['name'], 'alias': a, 'tdate': None})
 
         except:
@@ -1435,8 +1459,8 @@ class ProgramCache(Thread):
                 if (not isinstance(crequest, dict)) or (not 'task' in crequest):
                     continue
 
-                if crequest['task'] in ('query', 'query_id'):
-                    if not 'parent' in crequest.keys():
+                if crequest['task'] == 'query':
+                    if not ('parent' in crequest.keys() or 'queue' in crequest.keys()):
                         continue
 
                     if self.filename == None:
@@ -1444,15 +1468,11 @@ class ProgramCache(Thread):
                         qanswer = None
 
                     else:
-                        for t in self.request_list[crequest['task']]:
-                            if t in crequest.keys():
+                        for t in crequest.keys():
+                            if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                                 if crequest['task'] == 'query':
                                     self.state = 3
-                                    qanswer = self.query(t, crequest[t])
-
-                                if crequest['task'] == 'query_id':
-                                    self.state = 3
-                                    qanswer = self.query_id(t, crequest[t])
+                                    qanswer = self.query(t, **crequest[t])
 
                                 # Because of queue count integrety you can do only one query per call
                                 break
@@ -1460,7 +1480,12 @@ class ProgramCache(Thread):
                             else:
                                 qanswer = None
 
-                    crequest['parent'].cache_return.put(qanswer)
+                    if 'queue' in crequest.keys():
+                        crequest['queue'].put(qanswer)
+
+                    elif 'parent' in crequest.keys():
+                        crequest['parent'].cache_return.put(qanswer)
+
                     self.state = 4
                     continue
 
@@ -1469,22 +1494,26 @@ class ProgramCache(Thread):
                     continue
 
                 if crequest['task'] == 'add':
-                    for t in self.request_list[crequest['task']]:
-                        if t in crequest.keys():
+                    for t in crequest.keys():
+                        if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            self.add(t, crequest[t])
+                            if isinstance(crequest[t], (list, tuple)):
+                                self.add(t, *crequest[t])
+
+                            else:
+                                self.add(t, crequest[t])
 
                 if crequest['task'] == 'update':
-                    for t in self.request_list[crequest['task']]:
-                        if t in crequest.keys():
+                    for t in crequest.keys():
+                        if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            self.update(t, crequest[t])
+                            self.update(t, **crequest[t])
 
                 if crequest['task'] == 'delete':
-                    for t in self.request_list[crequest['task']]:
-                        if t in crequest.keys():
+                    for t in crequest.keys():
+                        if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            self.delete(t, crequest[t])
+                            self.delete(t, **crequest[t])
 
                 if crequest['task'] == 'clear':
                     if 'table' in crequest:
@@ -1529,18 +1558,423 @@ class ProgramCache(Thread):
             self.state = 0
             return(98)
 
-    def query(self, table='sourceprograms', item=None):
+    def query(self, table, **item):
         """
         Updates/gets/whatever.
         """
         pcursor = self.pconn.cursor()
-        if table == 'fetcheddays':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
+        def get_ttvdbcredits(*data):
+            pp = {}
+            for i in data:
+                pcursor.execute(*make_sql('ttvdbcredits',
+                        tid = data_value('tid', i, int, 0),
+                        sid = data_value(['sid'], i, int, -1),
+                        eid = data_value(['eid'], i, int, -1)))
+
+                for r in pcursor.fetchall():
+                    if not r[str('title')] in pp.keys():
+                        pp[r[str('title')]] = []
+
+                    if r[str('title')] in ('actor', 'guest'):
+                        pp[r[str('title')]].append({'name': r[str('name')], 'role': r[str('role')]})
+
+                    else:
+                        pp[r[str('title')]].append( r[str('name')])
+
+            return pp
+
+        def make_sql(table, *select, **where):
+            no_validation = where.pop('no_validation', False)
+            if not (no_validation or table in self.table_definitions.keys()):
+                return []
+
+            if len(select) == 0:
+                sqlstr = 'SELECT * FROM %s WHERE' % table
+
+            else:
+                sqlstr = 'SELECT'
+                for f in select:
+                    if no_validation or f in self.field_list[table]:
+                        if isinstance(f, tuple):
+                            if len(f) > 1:
+                                sqlstr = '%s %s.`%s`,' % (sqlstr, f[1], f[0])
+
+                            elif len(f) == 1:
+                                sqlstr = '%s `%s`,' % (sqlstr, f[0])
+
+                        else:
+                            sqlstr = '%s `%s`,' % (sqlstr, f)
+
+                if len(sqlstr) == 7:
+                    sqlstr = 'SELECT * FROM %s WHERE' % table
+
+                else:
+                    sqlstr = '%s FROM %s WHERE' % (sqlstr[:-1], table)
+
+            if len(where) == 0:
+                return [sqlstr[:-6]]
+
+            sqllist = []
+            for k, v in where.items():
+                if no_validation or k in self.field_list[table]:
+                    if isinstance(v, tuple) and len(v) > 1:
+                        t = '' if len(v) < 3 else '%s.' % v[2]
+                        if v[0] == 'gt':
+                            sqlstr = '%s %s`%s` > ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                        elif v[0] == 'ge':
+                            sqlstr = '%s %s`%s` >= ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                        elif v[0] == 'lt':
+                            sqlstr = '%s %s`%s` < ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                        elif v[0] == 'le':
+                            sqlstr = '%s %s`%s` <= ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                        elif v[0] == 'lower':
+                            sqlstr = '%s lower(%s`%s`) = ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                        elif v[0] == 'range' and len(v) == 4:
+                            if v[1] != None:
+                                sqlstr = '%s %s`%s` >= ? AND' % (sqlstr, t, k)
+                                sqllist.append(v[1])
+
+                            if v[3] != None:
+                                sqlstr = '%s %s`%s` <= ? AND' % (sqlstr, t, k)
+                                sqllist.append(v[3])
+
+                        else:
+                            sqlstr = '%s %s`%s` = ? AND' % (sqlstr, t, k)
+                            sqllist.append(v[1])
+
+                    else:
+                        sqlstr = '%s `%s` = ? AND' % (sqlstr, k)
+                        sqllist.append(v)
+
+            if len(sqllist) == 0:
+                return [sqlstr[:-6]]
+
+            return [sqlstr[:-4], tuple(sqllist)]
+
+
+        if table == 'icon':
+            if item.get('sourceid', None) != None and item.get('chanid', None) != None:
+                pcursor.execute(*make_sql('iconsource', 'icon',
+                        sourceid=item['sourceid'], chanid=item['chanid']))
+                r = pcursor.fetchone()
+                if r == None:
+                    return
+
+                return {'sourceid':  item['sourceid'], 'icon': r[0]}
+
+            else:
+                pcursor.execute(*make_sql('iconsource', 'chanid', 'sourceid', 'icon'))
+                r = pcursor.fetchall()
+                icons = {}
+                if r != None:
+                    for g in r:
+                        if not g[0] in icons:
+                            icons[g[0]] ={}
+
+                        icons[g[0]][g[1]] = g[2]
+
+                return icons
+
+        elif table == 'chan_group':
+            if item.get('chanid', None) != None:
+                pcursor.execute(*make_sql('channels', 'cgroup', 'name', chanid=item['chanid']))
+                r = pcursor.fetchone()
+                if r == None:
+                    return
+
+                return {'cgroup':r[0], 'name': r[1]}
+
+            else:
+                pcursor.execute(*make_sql('channels', 'chanid', 'cgroup', 'name'))
+                r = pcursor.fetchall()
+                changroups = {}
+                if r != None:
+                    for g in r:
+                        changroups[g[0]] = {'name': g[2],'cgroup': int(g[1])}
+
+                return changroups
+
+        elif table == 'chan_scid':
+            if item.get('sourceid', None) != None:
+                if item.get('chanid', None) != None:
+                    pcursor.execute(*make_sql('channelsource', 'scid', 'fgroup',
+                            sourceid=item['sourceid'], chanid=item['chanid']))
+                    g= pcursor.fetchone()
+                    if g == None:
+                        return
+
+                    return {'channelid': g[0],'group': g[1]}
+
+                elif item.get('fgroup', None) != None:
+                    pcursor.execute(*make_sql('channelsource', 'scid', 'chanid',
+                            sourceid=item['sourceid'], fgroup=item['fgroup']))
+                    r = pcursor.fetchall()
+                    fgroup = []
+                    if r != None:
+                        for g in r:
+                            fgroup.append({'chanid': g[1],'channelid': g[0]})
+
+                    return fgroup
+
+                else:
+                    pcursor.execute(*make_sql('channelsource', 'scid', 'chanid', 'name',
+                            sourceid=item['sourceid']))
+                    r = pcursor.fetchall()
+                    scids = {}
+                    if r != None:
+                        for g in r:
+                            if not g[0] in scids:
+                                scids[g[0]] ={}
+
+                            scids[g[0]] = {'chanid': g[1],'name': g[2]}
+
+                    return scids
+
+            elif item.get('chanid', None) != None:
+                pcursor.execute(*make_sql('channelsource', 'sourceid', 'scid', 'fgroup',
+                        chanid=item['chanid']))
+                g= pcursor.fetchone()
+                if g == None:
+                    return
+
+                return {'sourceid': g[0], 'channelid': g[1],'group': g[2]}
+
+            else:
+                pcursor.execute(*make_sql('channelsource', 'chanid', 'sourceid', 'scid', 'name', 'hd'))
+                r = pcursor.fetchall()
+                scids = {}
+                if r != None:
+                    for g in r:
+                        if not g[0] in scids:
+                            scids[g[0]] ={}
+
+                        scids[g[0]][g[1]] = {'channelid': g[2],'name': g[3], 'hd': g[4]}
+
+                return scids
+
+        elif table == 'use_alt_url':
+            if not 'sourceid'in item.keys():
+                return
+
+            pcursor.execute(*make_sql('sources', 'use_alt_url', sourceid=item['sourceid']))
+            r = pcursor.fetchone()
+            if r == None:
+                return
+
+            return r[0]
+
+        elif table == 'laststop':
+            if item.get('sourceid', None) == None or item.get('channelid', None) == None:
+                return
+
+            pcursor.execute(*make_sql('fetcheddata',
+                    sourceid=item['sourceid'], channelid=item['channelid']))
+            r = pcursor.fetchone()
+            if r != None:
+                laststop = r[str('laststop')]
+                if isinstance(laststop, datetime.datetime):
+                    return {'laststop': laststop}
+
+                else:
+                    return {'laststop': None}
+
+            return None
+
+        elif table == 'ttvdb_aliasses':
+            tid = item.get('tid', None)
+            if tid == None:
+                return []
+
+            pcursor.execute(*make_sql('ttvdb_alias', 'alias', tid=tid))
+            r = pcursor.fetchall()
+            aliasses = []
+            if r != None:
+                for a in r:
+                    aliasses.append( a[0])
+
+            return aliasses
+
+        elif table == 'is_ttvdb_alias':
+            if item.get('alias', None) == None:
+                return False
+
+            pcursor.execute(*make_sql(table, 'tid', 'name', alias=('lower', item[ 'alias'].lower())))
+            r = pcursor.fetchone()
+            if r != None:
+                if 'tid' in item.keys():
+                    if item['tid'] == r[0]:
+                        return True
+
+                elif 'name' in item.keys():
+                    if item['name'] == r[1]:
+                        return True
+
+                else:
+                    return True
+
+            return False
+
+        elif table == 'ttvdb_langs':
+            tid = item.get('tid', None)
+            if tid == None:
+                return []
+
+            pcursor.execute(*make_sql('ttvdbint', 'lang', tid=tid))
+            langs = []
+            for r in pcursor.fetchall():
+                langs.append( r[str('lang')])
+
+            return langs
+
+        elif table == 'ttvdbid':
+            if item.get('name', None) == None:
+                return []
+
+            pcursor.execute(*make_sql('ttvdb_alias', 'tdate', 'tid', 'name',
+                alias=('lower', item[ 'name'].lower())))
+            tid = pcursor.fetchone()
+            if tid == None:
+                return []
+
+            if tid[0] == 0:
+                return [{'tid': 0, 'tdate': tid[1], 'name': tid[2], 'lang': None}]
+
+            return self.query('ttvdbname', tid=tid[0])
+
+        elif table == 'ttvdbname':
+            if item.get('tid', None) == None:
+                return []
+
+            tlist = []
+            pcursor.execute(*make_sql('ttvdb JOIN ttvdbint ON ttvdb.tid = ttvdbint.tid', \
+                    ('tid', 'ttvdb'), 'tdate', ('name', 'ttvdbint'), 'lang',
+                    no_validation=True, tid=('', item['tid'], 'ttvdb')))
+            for r in pcursor.fetchall():
+                tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
+
+            return tlist
+
+        elif table == 'tdate':
+            if item.get('date', None) == None:
+                return
+
+            pcursor.execute(*make_sql('ttvdb', 'tdate', tid=item['date']))
+            r = pcursor.fetchone()
+            if r == None:
+                return
+
+            return r[0]
+
+        elif table == 'ep_by_id':
+            tid = data_value('tid', item, int, 0)
+            qvals = {'no_validation': True, 'tid': tid}
+            if data_value(['sid'], item, int, -1) >= 0:
+                qvals['sid'] = item['sid']
+
+            if data_value(['eid'], item, int, -1) >= 0:
+                qvals['eid'] = item['eid']
+
+            if data_value(['abseid'], item, int, -1) >= 0:
+                qvals['abseid'] = item['abseid']
+
+            if 'lang' in item:
+                qvals['lang'] = item['lang']
+
+            pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+                    'ON episodes.tepid = episodesint.tepid', **qvals))
+            r = pcursor.fetchall()
+            if len(r) == 0  and data_value(['lang'], item, str) not in ('en', ''):
+                # We try again for english
+                qvals = {'no_validation': True, 'tid': tid, 'lang': 'en'}
+                if data_value(['sid'], item, int, -1) >= 0:
+                    qvals['sid'] = item['sid']
+
+                if data_value(['eid'], item, int, -1) >= 0:
+                    qvals['eid'] = item['eid']
+
+                if data_value(['abseid'], item, int, -1) >= 0:
+                    qvals['abseid'] = item['abseid']
+
+                pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+                        'ON episodes.tepid = episodesint.tepid', **qvals))
+                r = pcursor.fetchall()
+
+            series = {tid:{}}
+            for s in r:
+                tepid = int(s[str('tepid')])
+                lang = s[str('lang')]
+                if not tepid in series[tid].keys():
+                    sid = int(s[str('sid')])
+                    eid = int(s[str('eid')])
+                    series[tid][tepid] = {'tid': tid,
+                                        'tepid': tepid,
+                                        'sid': sid,
+                                        'eid': eid,
+                                        'abseid': int(s[str('abseid')]),
+                                        'airdate': s[str('airdate')],
+                                        'star-rating': s[str('star-rating')],
+                                        'episode title': {},
+                                        'description': {}}
+
+                    for k, v in get_ttvdbcredits({'tid': tid},
+                            {'tid': tid, 'sid': sid, 'eid': eid}).items():
+                        series[tid][tepid][k] = v
+
+                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
+                series[tid][tepid]['description'][lang] = s[str('description')]
+
+            return series
+
+        elif table == 'ep_by_title':
+            tid = data_value('tid', item, int, 0)
+            qvals = {'no_validation': True, 'tid': tid,
+                'episode title': ('lower', item['episode title'].lower(), 'episodesint')}
+            pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+                    'ON episodes.tepid = episodesint.tepid', **qvals))
+            r = pcursor.fetchall()
+            series = {tid:{}}
+            for s in r:
+                tepid = int(s[str('tepid')])
+                lang = s[str('lang')]
+                if not tepid in series[tid].keys():
+                    sid = int(s[str('sid')])
+                    eid = int(s[str('eid')])
+                    series[tid][tepid] = {'tid': tid,
+                                        'tepid': tepid,
+                                        'sid': sid,
+                                        'eid': eid,
+                                        'abseid': int(s[str('abseid')]),
+                                        'airdate': s[str('airdate')],
+                                        'star-rating': s[str('star-rating')],
+                                        'episode title': {},
+                                        'description': {}}
+
+                    for k, v in get_ttvdbcredits({'tid': tid},
+                            {'tid': tid, 'sid': sid, 'eid': eid}).items():
+                        series[tid][tepid][k] = v
+
+                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
+                series[tid][tepid]['description'][lang] = s[str('description')]
+
+            return series
+        elif table == 'fetcheddays':
+            if item.get('sourceid', None) == None or item.get('channelid', None) == None:
                 return
 
             rval = {}
-            if not "scandate" in item.keys():
-                pcursor.execute(u"SELECT `scandate`, `stored` FROM fetcheddays WHERE `sourceid` = ? AND `channelid` = ?", (item['sourceid'],item['channelid']))
+            if item.get('scandate', None) == None:
+                pcursor.execute(*make_sql(table, 'scandate', 'stored',
+                        sourceid=item['sourceid'], channelid=item['channelid']))
                 for r in pcursor.fetchall():
                     offset = self.date_to_offset(r[str('scandate')])
                     rval[offset] = r[str('stored')]
@@ -1562,7 +1996,8 @@ class ProgramCache(Thread):
                     else:
                         continue
 
-                    pcursor.execute(u"SELECT `stored` FROM fetcheddays WHERE `sourceid` = ? AND `channelid` = ? AND `scandate` = ?", (item['sourceid'],item['channelid'], sd))
+                    pcursor.execute(*make_sql(table, 'stored', scandate=sd,
+                            sourceid=item['sourceid'], channelid=item['channelid']))
                     r = pcursor.fetchone()
                     if r == None:
                         rval[offset] = None
@@ -1572,24 +2007,26 @@ class ProgramCache(Thread):
 
                 return rval
 
-        elif table == 'laststop':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
+        elif table == 'sources':
+            if item.get('sourceid', None) == None:
                 return
 
-            pcursor.execute(u"SELECT * FROM fetcheddata WHERE `sourceid` = ? AND `channelid` = ?", (item['sourceid'],item['channelid']))
+            pcursor.execute(*make_sql(table, sourceid=item['sourceid']))
             r = pcursor.fetchone()
-            if r != None:
-                laststop = r[str('laststop')]
-                if isinstance(laststop, datetime.datetime):
-                    return {'laststop': laststop}
+            if r == None:
+                self.execute(u"INSERT INTO sources (`sourceid`, `name`) VALUES (?, ? )",
+                    (item['sourceid'], data_value('name', item, str)))
+                pcursor.execute(*make_sql(table, sourceid=item['sourceid']))
+                r = pcursor.fetchone()
 
-                else:
-                    return {'laststop': None}
+            rv = {}
+            for k in r.keys():
+                rv[k] = r[k]
 
-            return None
+            return rv
 
         elif table == 'sourceprograms':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
+            if item.get('sourceid', None) == None or item.get('channelid', None) == None:
                 return
 
             programs = []
@@ -1606,7 +2043,8 @@ class ProgramCache(Thread):
                         elif not isinstance(sd, datetime.date):
                             continue
 
-                        pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ? AND `scandate` = ?", (item['sourceid'], item['channelid'], sd))
+                        pcursor.execute(*make_sql(table, scandate = sd,
+                                sourceid=item['sourceid'], channelid=item['channelid']))
                         programs.extend(pcursor.fetchall())
 
             elif "start-time" in item.keys():
@@ -1618,7 +2056,18 @@ class ProgramCache(Thread):
                         if not isinstance(st, datetime.datetime):
                             continue
 
-                        pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ? AND `start-time` = ?", (item['sourceid'], item['channelid'], st))
+                        pcursor.execute(*make_sql(table,  **{'start-time': st,
+                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
+                        programs.extend(pcursor.fetchall())
+
+            elif "prog_ID" in item.keys():
+                if isinstance(item["prog_ID"], (str, unicode)):
+                    item["prog_ID"] = [item["prog_ID"]]
+
+                if isinstance(item["prog_ID"], list):
+                    for pid in item["prog_ID"]:
+                        pcursor.execute(*make_sql(table, prog_ID=pid,
+                                sourceid=item['sourceid'], channelid=item['channelid']))
                         programs.extend(pcursor.fetchall())
 
             elif "range" in item.keys():
@@ -1632,23 +2081,25 @@ class ProgramCache(Thread):
                     if not isinstance(fr, dict):
                         continue
 
-                    if 'start' in fr.keys() and isinstance(fr['start'], datetime.datetime) and 'stop' in fr.keys() and  isinstance(fr['stop'], datetime.datetime):
-                        pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ? AND `start-time` >= ? AND `stop-time` <= ?", \
-                            (item['sourceid'], item['channelid'], fr['start'], fr['stop']))
+                    if 'start' in fr.keys() and isinstance(fr['start'], datetime.datetime) and \
+                        'stop' in fr.keys() and  isinstance(fr['stop'], datetime.datetime):
+                        pcursor.execute(*make_sql(table,
+                                **{'start-time': ('le',fr['start']), 'stop-time': ('ge', fr['stop']),
+                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
                         programs.extend(pcursor.fetchall())
 
                     elif 'stop' in fr.keys() and isinstance(fr['stop'], datetime.datetime):
-                        pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ? AND `stop-time` <= ?", \
-                            (item['sourceid'], item['channelid'],fr['stop']))
+                        pcursor.execute(*make_sql(table, **{'stop-time': ('ge', fr['stop']),
+                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
                         programs.extend(pcursor.fetchall())
 
                     elif 'start' in fr.keys() and isinstance(fr['start'], datetime.datetime):
-                        pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ? AND `start-time` >= ?", \
-                            (item['sourceid'], item['channelid'], fr['start']))
+                        pcursor.execute(*make_sql(table, **{'start-time': ('le', fr['start']),
+                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
                         programs.extend(pcursor.fetchall())
 
             else:
-                pcursor.execute(u"SELECT * FROM sourceprograms WHERE `sourceid` = ? AND `channelid` = ?", (item['sourceid'], item['channelid']))
+                pcursor.execute(*make_sql(table, sourceid=item['sourceid'], channelid=item['channelid']))
                 programs = pcursor.fetchall()
 
             programs2 = []
@@ -1664,9 +2115,8 @@ class ProgramCache(Thread):
                     else:
                         pp[unicode(key)] = p[key]
 
-                pp['offset'] = self.date_to_offset(pp['scandate'])
-                pcursor.execute(u"SELECT * FROM credits WHERE `sourceid` = ? AND `channelid` = ? AND `start-time` = ?", \
-                    (item['sourceid'], item['channelid'], pp['start-time']))
+                pcursor.execute(*make_sql('credits',  **{'start-time': pp['start-time'],
+                        'sourceid': item['sourceid'], 'channelid': item['channelid']}))
                 for r in pcursor.fetchall():
                     if not r[str('title')] in pp.keys():
                         pp[r[str('title')]] = []
@@ -1682,7 +2132,7 @@ class ProgramCache(Thread):
             return programs2
 
         elif table == 'programdetails':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
+            if item.get('sourceid', None) == None or item.get('channelid', None) == None:
                 return
 
             programs = []
@@ -1695,8 +2145,8 @@ class ProgramCache(Thread):
                         if not isinstance(sd, (str, unicode)):
                             continue
 
-                        pcursor.execute(u"SELECT * FROM programdetails WHERE `sourceid` = ? AND `channelid` = ? AND `prog_ID` = ?", \
-                            (item['sourceid'], item['channelid'], sd))
+                        pcursor.execute(*make_sql(table, prog_ID=sd,
+                                sourceid=item['sourceid'], channelid=item['channelid']))
                         p = pcursor.fetchone()
                         if p != None:
                             programs.append(p)
@@ -1710,14 +2160,14 @@ class ProgramCache(Thread):
                         if not isinstance(st, datetime.datetime):
                             continue
 
-                        pcursor.execute(u"SELECT * FROM programdetails WHERE `sourceid` = ? AND `channelid` = ? AND `start-time` = ?", \
-                            (item['sourceid'], item['channelid'], st))
+                        pcursor.execute(*make_sql(table,  **{'start-time': st,
+                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
                         p = pcursor.fetchone()
                         if p != None:
                             programs.append(p)
 
             else:
-                pcursor.execute(u"SELECT * FROM programdetails WHERE `sourceid` = ? AND `channelid` = ?", (item['sourceid'], item['channelid']))
+                pcursor.execute(*make_sql(table,sourceid=item['sourceid'], channelid=item['channelid']))
                 programs = pcursor.fetchall()
 
             programs2 = []
@@ -1733,7 +2183,8 @@ class ProgramCache(Thread):
                     else:
                         pp[unicode(key)] = p[key]
 
-                pcursor.execute(u"SELECT * FROM creditdetails WHERE `sourceid` = ? AND `channelid` = ? AND `prog_ID` = ?", (item['sourceid'], item['channelid'], pp['prog_ID']))
+                pcursor.execute(*make_sql('creditdetails', prog_ID=pp['prog_ID'],
+                        sourceid=item['sourceid'], channelid=item['channelid']))
                 for r in pcursor.fetchall():
 
                     if not r[str('title')] in pp.keys():
@@ -1749,307 +2200,14 @@ class ProgramCache(Thread):
 
             return programs2
 
-        elif table == 'ttvdb':
-            pcursor.execute(u"SELECT * FROM ttvdb WHERE tid = ?", (item,))
-            r = pcursor.fetchone()
-            serie = {item:{}}
-            if r != None:
-                for key in r.keys():
-                    serie[item][unicode(key)] = r[key]
-
-                serie[item]['name'] = {}
-                serie[item]['description'] = {}
-                pcursor.execute(u"SELECT * FROM ttvdbint WHERE tid = ?", (item,))
-                for r in pcursor.fetchall():
-                    lang = r[str('lang')]
-                    serie[item]['name'][lang]  = r[str('name')]
-                    serie[item]['description'][lang]  = r[str('description')]
-
-                for k, v in self.query('ttvdb_credits', {'tid': item, 'sid': -1, 'eid': -1}).items():
-                    serie[item][k] = v
-
-            return serie
-
-        elif table == 'ttvdb_aliasses':
-            pcursor.execute(u"SELECT `alias` FROM ttvdb_alias WHERE tid = ?", (item, ))
-            r = pcursor.fetchall()
-            aliasses = []
-            if r != None:
-                for a in r:
-                    aliasses.append( a[0])
-
-            return aliasses
-
-        elif table == 'ttvdb_langs':
-            pcursor.execute(u"SELECT `lang` FROM ttvdbint WHERE tid = ?", (item['tid'],))
-            langs = []
-            for r in pcursor.fetchall():
-                langs.append( r[str('lang')])
-
-            return langs
-
-        elif table == 'ttvdb_credits':
-            if isinstance(item, dict):
-                item = [item]
-
-            qstring = u"SELECT * FROM ttvdbcredits WHERE tid = ? and sid = ? and eid = ?"
-            pp = {}
-            for i in item:
-                tid = data_value('tid', i, int, 0)
-                sid = data_value(['sid'], i, int, -1)
-                eid = data_value(['eid'], i, int, -1)
-                pcursor.execute(qstring, (tid, sid, eid))
-
-                for r in pcursor.fetchall():
-                    if not r[str('title')] in pp.keys():
-                        pp[r[str('title')]] = []
-
-                    if r[str('title')] in ('actor', 'guest'):
-                        pp[r[str('title')]].append({'name': r[str('name')], 'role': r[str('role')]})
-
-                    else:
-                        pp[r[str('title')]].append( r[str('name')])
-
-            return pp
-
-        elif table == 'ep_by_id':
-            tid = data_value('tid', item, int, 0)
-            qstring = u"SELECT * FROM episodes JOIN episodesint " + \
-                    "ON episodes.tepid = episodesint.tepid WHERE tid = ?"
-            qlist = [tid]
-            if data_value(['sid'], item, int, -1) >= 0:
-                qstring += u" and sid = ?"
-                qlist.append(item['sid'])
-
-            if data_value(['eid'], item, int, -1) >= 0:
-                qstring += u" and eid = ?"
-                qlist.append(item['eid'])
-
-            if data_value(['abseid'], item, int, -1) >= 0:
-                qstring += u" and abseid = ?"
-                qlist.append(item['abseid'])
-
-            if 'lang' in item:
-                qstring += u" and lang = ?"
-                qlist.append(item['lang'])
-
-            pcursor.execute(qstring, tuple(qlist))
-
-            r = pcursor.fetchall()
-            if len(r) == 0  and data_value(['lang'], item, str) not in ('en', ''):
-                # We try again for english
-                qstring = u"SELECT * FROM episodes JOIN episodesint " + \
-                    "ON episodes.tepid = episodesint.tepid WHERE tid = ?"
-                qlist = [item['tid']]
-                if data_value(['sid'], item, int, -1) >= 0:
-                    qstring += u" and sid = ?"
-                    qlist.append(item['sid'])
-
-                if data_value(['eid'], item, int, -1) >= 0:
-                    qstring += u" and eid = ?"
-                    qlist.append(item['eid'])
-
-                if data_value(['abseid'], item, int, -1) >= 0:
-                    qstring += u" and abseid = ?"
-                    qlist.append(item['abseid'])
-
-                qstring += u" and lang = ?"
-                qlist.append('en')
-
-                pcursor.execute(qstring, tuple(qlist))
-
-                r = pcursor.fetchall()
-
-            series = {tid:{}}
-            for s in r:
-                tepid = int(s[str('tepid')])
-                lang = s[str('lang')]
-                if not tepid in series[tid].keys():
-                    sid = int(s[str('sid')])
-                    eid = int(s[str('eid')])
-                    series[tid][tepid] = {'tid': tid,
-                                        'tepid': tepid,
-                                        'sid': sid,
-                                        'eid': eid,
-                                        'abseid': int(s[str('abseid')]),
-                                        'airdate': s[str('airdate')],
-                                        'star-rating': s[str('star-rating')],
-                                        'episode title': {},
-                                        'description': {}}
-
-                    for k, v in self.query('ttvdb_credits', [{'tid': tid, 'sid': -1, 'eid': -1},{'tid': tid, 'sid': sid, 'eid': eid}]).items():
-                        series[tid][tepid][k] = v
-
-                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
-                series[tid][tepid]['description'][lang] = s[str('description')]
-
-            return series
-
-        elif table == 'ep_by_title':
-            tid = data_value('tid', item, int, 0)
-            pcursor.execute(u"SELECT * FROM episodes JOIN episodesint ON episodes.tepid = episodesint.tepid " + \
-                    "WHERE tid = ? and lower(episodesint.`episode title`) = ?", (item['tid'], item['episode title'].lower(), ))
-            r = pcursor.fetchall()
-            series = {tid:{}}
-            for s in r:
-                tepid = int(s[str('tepid')])
-                lang = s[str('lang')]
-                if not tepid in series[tid].keys():
-                    sid = int(s[str('sid')])
-                    eid = int(s[str('eid')])
-                    series[tid][tepid] = {'tid': tid,
-                                        'tepid': tepid,
-                                        'sid': sid,
-                                        'eid': eid,
-                                        'abseid': int(s[str('abseid')]),
-                                        'airdate': s[str('airdate')],
-                                        'star-rating': s[str('star-rating')],
-                                        'episode title': {},
-                                        'description': {}}
-
-                    for k, v in self.query('ttvdb_credits', [{'tid': tid, 'sid': -1, 'eid': -1},{'tid': tid, 'sid': sid, 'eid': eid}]).items():
-                        series[tid][tepid][k] = v
-
-                series[tid][tepid]['episode title'][lang] = s[str('episode title')]
-                series[tid][tepid]['description'][lang] = s[str('description')]
-
-            return series
-        elif table == 'icon':
-            if item == None:
-                pcursor.execute(u"SELECT chanid, sourceid, icon FROM iconsource")
-                r = pcursor.fetchall()
-                icons = {}
-                if r != None:
-                    for g in r:
-                        if not g[0] in icons:
-                            icons[g[0]] ={}
-
-                        icons[g[0]][g[1]] = g[2]
-
-                return icons
-
-            else:
-                pcursor.execute(u"SELECT icon FROM iconsource WHERE chanid = ? and sourceid = ?", (item['chanid'], item['sourceid']))
-                r = pcursor.fetchone()
-                if r == None:
-                    return
-
-                return {'sourceid':  item['sourceid'], 'icon': r[0]}
-
-        elif table == 'chan_group':
-            if item == None:
-                pcursor.execute(u"SELECT chanid, cgroup, name FROM channels")
-                r = pcursor.fetchall()
-                changroups = {}
-                if r != None:
-                    for g in r:
-                        changroups[g[0]] = {'name': g[2],'cgroup': int(g[1])}
-
-                return changroups
-
-            else:
-                pcursor.execute(u"SELECT cgroup, name FROM channels WHERE chanid = ?", (item['chanid'],))
-                r = pcursor.fetchone()
-                if r == None:
-                    return
-
-                return {'cgroup':r[0], 'name': r[1]}
-
-        elif table == 'chan_scid':
-            if item == None:
-                pcursor.execute(u"SELECT chanid, sourceid, scid, name, hd FROM channelsource")
-                r = pcursor.fetchall()
-                scids = {}
-                if r != None:
-                    for g in r:
-                        if not g[0] in scids:
-                            scids[g[0]] ={}
-
-                        scids[g[0]][g[1]] = {'scid': g[2],'name': g[3], 'hd': g[4]}
-
-                return scids
-
-            elif 'chanid' in item and 'sourceid' in item:
-                pcursor.execute(u"SELECT scid, fgroup FROM channelsource WHERE chanid = ? and sourceid = ?", (item['chanid'], item['sourceid']))
-                g= pcursor.fetchone()
-                if g == None:
-                    return
-
-                return {'channelid': g[0],'group': g[1]}
-
-            elif 'fgroup' in item and 'sourceid' in item:
-                pcursor.execute(u"SELECT scid, chanid FROM channelsource WHERE fgroup = ? and sourceid = ?", (item['fgroup'], item['sourceid']))
-                r = pcursor.fetchall()
-                fgroup = []
-                if r != None:
-                    for g in r:
-                        fgroup.append({'chanid': g[1],'channelid': g[0]})
-
-                return fgroup
-
-            elif 'sourceid' in item:
-                pcursor.execute(u"SELECT scid, chanid, name FROM channelsource WHERE sourceid = ?", (item['sourceid']))
-                r = pcursor.fetchall()
-                scids = {}
-                if r != None:
-                    for g in r:
-                        if not g[0] in scids:
-                            scids[g[0]] ={}
-
-                        scids[g[0]] = {'chanid': g[1],'name': g[2]}
-
-                return scids
-
-    def query_id(self, table='program', item=None):
-        """
-        Check which ID is used
-        """
-        pcursor = self.pconn.cursor()
-        if table == 'ttvdb':
-            tlist = []
-            if 'name' in item.keys():
-                pcursor.execute(u"SELECT tid, tdate, name FROM ttvdb_alias WHERE lower(alias) = ?", (item['name'].lower(), ))
-                tid = pcursor.fetchone()
-                if tid == None:
-                    return tlist
-
-                if tid[0] == 0:
-                    return [{'tid': 0, 'tdate': tid[1], 'name': tid[2], 'lang': None}]
-
-                tid = tid[0]
-
-            elif 'tid' in item.keys():
-                tid = item['tid']
-
-            else:
-                return tlist
-
-            pcursor.execute(u"SELECT ttvdb.tid, tdate, ttvdbint.name, lang FROM ttvdb JOIN ttvdbint " + \
-                    "ON ttvdb.tid = ttvdbint.tid WHERE ttvdb.tid = ?", (tid, ))
-            for r in pcursor.fetchall():
-                tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
-
-            return tlist
-
         elif table == 'ttvdb_alias':
-            pcursor.execute(u"SELECT tid, name FROM ttvdb_alias WHERE lower(alias) = ?", (item['alias'].lower(), ))
+            if item.get('alias', None) == None:
+                return
+
+            pcursor.execute(*make_sql(table, 'tid', 'name', alias=('lower', item[ 'alias'].lower())))
             r = pcursor.fetchone()
-            if 'tid' in item.keys():
-                if r != None and item['tid'] == r[0]:
-                    return True
-
-                else:
-                    return False
-
-            if 'name' in item.keys():
-                if r != None and item['name'] == r[1]:
-                    return True
-
-                else:
-                    return False
-
-            elif r != None:
-                items = self.query_id('ttvdb', {'tid': r[0]})
+            if r != None:
+                items = self.query('ttvdbname', tid=r[0])
                 if len(items) == 0:
                     return [{'tid': r[0], 'tdate': None, 'name': r[1], 'lang': None}]
 
@@ -2059,41 +2217,49 @@ class ProgramCache(Thread):
             else:
                 return None
 
-        elif table == 'tdate':
-            pcursor.execute(u"SELECT tdate FROM ttvdb WHERE tid = ?", (item,))
+        elif table == 'ttvdb':
+            tid = item.get('tid', None)
+            if tid == None:
+                return []
+
+            pcursor.execute(*make_sql(table, tid=tid))
             r = pcursor.fetchone()
-            if r == None:
-                return
+            serie = {tid:{}}
+            if r != None:
+                for key in r.keys():
+                    serie[tid][unicode(key)] = r[key]
 
-            return r[0]
+                serie[tid]['name'] = {}
+                serie[tid]['description'] = {}
+                pcursor.execute(*make_sql('ttvdbint', tid=tid))
+                for r in pcursor.fetchall():
+                    lang = r[str('lang')]
+                    serie[tid]['name'][lang]  = r[str('name')]
+                    serie[tid]['description'][lang]  = r[str('description')]
 
-        elif table == 'chan_group':
-            pcursor.execute(u"SELECT cgroup, name FROM channels WHERE chanid = ?", (item['chanid'],))
-            r = pcursor.fetchone()
-            if r == None:
-                return
+                for k, v in get_ttvdbcredits({'tid': tid}).items():
+                    serie[tid][k] = v
 
-            return r[0]
+            return serie
 
-        elif table == 'sources':
-            if not isinstance(item, dict) or not 'sourceid'in item.keys():
-                return
+        elif table in self.table_definitions.keys():
+            select = data_value(['select'], item, list)
+            where = data_value(['where'], item, dict)
+            pcursor.execute(*make_sql(table, *select, **where))
+            r = pcursor.fetchall()
+            retvals = []
+            if r != None:
+                for rec in r:
+                    rv = {}
+                    for key in rec.keys():
+                        rv[unicode(key)] = rec[key]
 
-            pcursor.execute(u"SELECT * FROM sources WHERE sourceid = ?", (item['sourceid'],))
-            r = pcursor.fetchone()
-            if r == None:
-                self.execute(u"INSERT INTO sources (`sourceid`, `name`) VALUES (?, ? )", (item['sourceid'], data_value('name', item, str)))
-                pcursor.execute(u"SELECT * FROM sources WHERE sourceid = ?", (item['sourceid'],))
-                r = pcursor.fetchone()
+                    retvals.append(rv)
 
-            rv = {}
-            for k in r.keys():
-                rv[k] = r[k]
+            return retvals
 
-            return rv
-
-    def add(self, table='sourceprograms', item=None):
-        def get_value(data, tbl, fld):
+    def add(self, table, *item):
+        def get_value(tbl, fld, **data):
             if fld in data.keys():
                 return data[fld]
 
@@ -2115,17 +2281,10 @@ class ProgramCache(Thread):
 
             return u"%s) %s)" % (sql_flds, sql_cnt)
 
-        def make_val_list(data, tbl, details = None):
+        def make_val_list(tbl, **data):
             sql_vals = []
-            if details == None:
-                details = {}
-
             for f in self.field_list[tbl]:
-                if f in details.keys():
-                    sql_vals.append(details[f])
-
-                else:
-                    sql_vals.append(get_value(data, tbl, f))
+                sql_vals.append(get_value(tbl, f, **data))
 
             return tuple(sql_vals)
 
@@ -2133,34 +2292,37 @@ class ProgramCache(Thread):
         Adds (or updates) a record
         """
         rec = []
-        rec_upd = []
         rec2 = []
         rec3 = []
         rec4 = []
         if table == 'laststop':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys() \
-              or not "laststop" in item.keys() or not isinstance(item['laststop'], datetime.datetime):
+            if len(item) == 0:
                 return
 
-            laststop = self.query(table, item)
+            item = item[0]
+            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys() \
+                or not "laststop" in item.keys() or not isinstance(item['laststop'], datetime.datetime):
+                return
+
+            laststop = self.query(table, sourceid=item['sourceid'], channelid=item['channelid'])
             if laststop == None:
-                add_string = u"INSERT INTO fetcheddata (`sourceid`, `channelid`, `laststop`) VALUES (?, ?, ?)"
-                rec = [(item['sourceid'], item['channelid'], item['laststop'])]
-                self.execute(add_string, rec)
+                self.execute(make_add_string('fetcheddata'), make_val_list('fetcheddata', **item))
 
             elif laststop['laststop'] == None or item['laststop'] > laststop['laststop']:
-                add_string = u"UPDATE fetcheddata SET `laststop` = ? WHERE `sourceid` = ? AND `channelid` = ?"
-                rec = [(item['laststop'], item['sourceid'], item['channelid'])]
-                self.execute(add_string, rec)
+                self.update('fetcheddata', set={'laststop': item['laststop']},
+                    where={'sourceid': item['sourceid'], 'channelid': item['channelid']})
 
         elif table == 'fetcheddays':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys() or not "scandate" in item.keys():
+            if len(item) == 0:
                 return
 
-            add_string = u"INSERT INTO fetcheddays (`sourceid`, `channelid`, `scandate`, `stored`) VALUES (?, ?, ?, ?)"
-            update_string = u"UPDATE fetcheddays SET `stored` = ? WHERE `sourceid` = ? AND `channelid` = ? AND `scandate` = ?"
-            sdate = self.query('fetcheddays', {'sourceid': item['sourceid'], 'channelid': item['channelid']})
-            dval = True if not "stored" in item.keys() or not isinstance(item['stored'], bool) else item['stored']
+            item = item[0]
+            if not isinstance(item, dict) or not "sourceid" in item.keys() or \
+                not "channelid" in item.keys() or not "scandate" in item.keys():
+                return
+
+            sdate = self.query('fetcheddays', sourceid=item['sourceid'], channelid=item['channelid'])
+            dval = True if not item.get('stored', None) in (True, False) else item['stored']
             if isinstance(item["scandate"], (int, datetime.date)):
                 item["scandate"] = [item["scandate"]]
 
@@ -2173,25 +2335,25 @@ class ProgramCache(Thread):
                         continue
 
                     if not sd in sdate.keys() or sdate[sd] == None:
-                        rec.append((item['sourceid'], item['channelid'], sd, dval))
+                        values = item.copy()
+                        values.update(scandate=sd, stored=dval)
+                        rec.append(make_val_list('fetcheddays', **values))
 
                     elif sdate[item["scandate"]] != dval:
-                        rec_upd.append((dval, item['sourceid'], item['channelid'], sd))
+                        self.update('fetcheddays', set={'stored': dval},
+                            where={'scandate': sd,
+                                'sourceid': item['sourceid'],
+                                'channelid': item['channelid']})
 
-                self.execute(add_string, rec)
-                self.execute(update_string, rec_upd)
+                if len(rec) > 0:
+                    self.execute(make_add_string('fetcheddays'), *rec)
 
         elif table == 'sourceprograms':
-            if isinstance(item, dict):
-                item = [item]
-
-            add_string = make_add_string(table)
-            add_string2 = make_add_string('credits')
             for p in item:
                 if not isinstance(p, dict):
                     continue
 
-                rec.append(make_val_list(p, table))
+                rec.append(make_val_list(table, **p))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
@@ -2207,22 +2369,21 @@ class ProgramCache(Thread):
                             else:
                                 continue
 
-                            rec2.append(make_val_list(p, 'credits', crd))
+                            values = p.copy()
+                            values.update(crd)
+                            rec2.append(make_val_list('credits', **values))
 
-            self.execute(add_string, rec)
-            self.execute(add_string2, rec2)
+            if len(rec) > 0:
+                self.execute(make_add_string(table), *rec)
+                if len(rec2) > 0:
+                    self.execute(make_add_string('credits'), *rec2)
 
         elif table == 'programdetails':
-            if isinstance(item, dict):
-                item = [item]
-
-            add_string = make_add_string(table)
-            add_string2 = make_add_string('creditdetails')
             for p in item:
                 if not isinstance(p, dict):
                     continue
 
-                rec.append(make_val_list(p, table))
+                rec.append(make_val_list(table, **p))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
@@ -2238,79 +2399,67 @@ class ProgramCache(Thread):
                             else:
                                 continue
 
-                            rec2.append(make_val_list(p, 'creditdetails', crd))
+                            values = p.copy()
+                            values.update(crd)
+                            rec2.append(make_val_list('creditdetails', **values))
 
-            self.execute(add_string, rec)
-            self.execute(add_string2, rec2)
+            if len(rec) > 0:
+                self.execute(make_add_string(table), *rec)
+                if len(rec2) > 0:
+                    self.execute(make_add_string('creditdetails'), *rec2)
 
         elif table == 'channel':
-            add_string = u"INSERT INTO channels (`chanid`, `cgroup`, `name`) VALUES (?, ?, ?)"
-            update_string = u"UPDATE channels SET `cgroup` = ?, `name` = ? WHERE chanid = ?"
-            if isinstance(item, dict):
-                item = [item]
+            g = self.query('chan_group')
 
-            if isinstance(item, list):
-                g = self.query('chan_group')
+            for c in item:
+                if not c['chanid'] in g.keys():
+                    rec.append(make_val_list('fetcheddata', **c))
 
-                for c in item:
-                    if not c['chanid'] in g.keys():
-                        rec.append((c['chanid'], c['cgroup'], c['name']))
+                elif g[c['chanid']]['name'].lower() != c['name'].lower() or \
+                        g[c['chanid']]['cgroup'] != c['cgroup'] or \
+                        (g[c['chanid']]['cgroup'] == 10 and c['cgroup'] not in (-1, 0, 10)):
+                    self.update('channels', where={'chanid': c['chanid']},
+                        set={'cgroup': c['cgroup'], 'name': c['name']})
 
-                    elif g[c['chanid']]['name'].lower() != c['name'].lower() or g[c['chanid']]['cgroup'] != c['cgroup'] \
-                      or (g[c['chanid']]['cgroup'] == 10 and c['cgroup'] not in (-1, 0, 10)):
-                        rec_upd.append((c['cgroup'], c['name'] , c['chanid']))
-
-                self.execute(update_string, rec_upd)
-                self.execute(add_string, rec)
+            if len(rec) > 0:
+                self.execute(make_add_string('channels'), *rec)
 
         elif table == 'channelsource':
-            add_string = u"INSERT INTO channelsource (`chanid`, `sourceid`, `scid`, `fgroup`, `name`, `hd`) VALUES (?, ?, ?, ?, ?, ?)"
-            update_string = u"UPDATE channelsource SET `scid`= ?, `fgroup`= ?, `name`= ?, `hd`= ? WHERE `chanid` = ? and `sourceid` = ?"
-            if isinstance(item, dict):
-                item = [item]
+            scids = self.query('chan_scid')
+            for c in item:
+                if c['channelid'] == '':
+                    continue
 
-            if isinstance(item, list):
-                scids = self.query('chan_scid')
-                for c in item:
-                    if c['scid'] == '':
-                        continue
+                if c['chanid'] in scids and c['sourceid'] in scids[c['chanid']]:
+                    self.update('channelsource',
+                        set={'scid': c['channelid'],
+                            'fgroup': c['fgroup'],
+                            'name': c['name'],
+                            'hd': c['hd']},
+                        where={'chanid': c['chanid'],
+                            'sourceid': c['sourceid']})
 
-                    if c['chanid'] in scids and c['sourceid'] in scids[c['chanid']]:
-                        rec_upd.append((c['scid'], c['fgroup'], c['name'], c['hd'], c['chanid'], c['sourceid']))
+                else:
+                    rec.append(make_val_list('channelsource', **c))
 
-                    else:
-                        rec.append((c['chanid'], c['sourceid'], c['scid'], c['fgroup'], c['name'], c['hd']))
-
-                self.execute(update_string, rec_upd)
-                self.execute(add_string, rec)
+            if len(rec) > 0:
+                self.execute(make_add_string('channelsource'), *rec)
 
         elif table == 'icon':
-            add_string = u"INSERT INTO iconsource (`chanid`, `sourceid`, `icon`) VALUES (?, ?, ?)"
-            update_string = u"UPDATE iconsource SET `icon`= ? WHERE `chanid` = ? and `sourceid` = ?"
-            if isinstance(item, dict):
-                item = [item]
+            icons = self.query('icon')
+            for ic in item:
+                icon = icons.get(ic['chanid'], {}).get(ic['sourceid'], None)
+                if icon == None:
+                    rec.append(make_val_list('iconsource', **ic))
 
-            if isinstance(item, list):
-                icons = self.query('icon')
-                for ic in item:
-                    if ic['chanid'] in icons and ic['sourceid'] in icons[ic['chanid']] \
-                      and icons[ic['chanid']][ic['sourceid']] != ic['icon']:
-                        rec_upd.append((ic['icon'], ic['chanid'], ic['sourceid']))
+                elif icon != ic['icon']:
+                    self.update('iconsource', set={'icon': ic['icon']},
+                        where={'chanid': ic['chanid'], 'sourceid': ic['sourceid']})
 
-                    else:
-                        rec.append((ic['chanid'], ic['sourceid'], ic['icon']))
-
-                self.execute(update_string, rec_upd)
-                self.execute(add_string, rec)
+            if len(rec) > 0:
+                self.execute(make_add_string('iconsource'), *rec)
 
         elif table == 'ttvdb':
-            if isinstance(item, dict):
-                item = [item]
-
-            add_string = make_add_string('ttvdb')
-            add_string2 = make_add_string('ttvdbcredits')
-            add_string3 = make_add_string('ttvdbint')
-            add_string4 = make_add_string('ttvdbmetadata')
             added_tids = []
             for p in item:
                 if not isinstance(p, dict) or not 'tid' in p.keys() or not 'lang' in p.keys() or not 'name' in p.keys():
@@ -2319,9 +2468,9 @@ class ProgramCache(Thread):
                 p['tdate'] = datetime.date.today()
                 if not p['tid'] in added_tids:
                     added_tids.append(p['tid'])
-                    rec.append(make_val_list(p, 'ttvdb'))
+                    rec.append(make_val_list('ttvdb', **p))
 
-                rec3.append(make_val_list(p, 'ttvdbint'))
+                rec3.append(make_val_list('ttvdbint', **p))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
@@ -2337,57 +2486,65 @@ class ProgramCache(Thread):
                             else:
                                 continue
 
-                            sql_vals = make_val_list(p, 'ttvdbcredits', crd)
+                            values = p.copy()
+                            values.update(crd)
+                            sql_vals = make_val_list('ttvdbcredits', **values)
                             if not sql_vals in rec2:
                                 rec2.append(sql_vals)
 
                 for f in self.config.key_values['metadata']:
                     if f in p.keys():
-                        sql_vals = make_val_list(p, 'ttvdbmetadata', {'type':f, 'url':p[f]})
+                        values = p.copy()
+                        values.update(type=f, url=p[f])
+                        sql_vals = make_val_list('ttvdbmetadata', **values)
                         if not sql_vals in rec4:
                             rec4.append(sql_vals)
 
-            self.execute(add_string, rec)
-            self.execute(add_string2, rec2)
-            self.execute(add_string3, rec3)
-            self.execute(add_string4, rec4)
+            if len(rec) > 0:
+                self.execute(make_add_string('ttvdb'), *rec)
+            if len(rec2) > 0:
+                self.execute(make_add_string('ttvdbcredits'), *rec2)
+            if len(rec3) > 0:
+                self.execute(make_add_string('ttvdbint'), *rec3)
+            if len(rec4) > 0:
+                self.execute(make_add_string('ttvdbmetadata'), *rec4)
 
         elif table == 'ttvdb_alias':
-            if not 'tid' in item.keys():
+            if len(item) == 0:
+                return
+
+            item = item[0]
+            if not isinstance(item, dict) or not 'tid' in item.keys():
                 return
 
             if not 'tdate' in item.keys() or item[ 'tdate'] == None:
                 item[ 'tdate'] = datetime.date.today()
 
-            add_string = make_add_string('ttvdb_alias')
-            aliasses = self.query('ttvdb_aliasses', item['tid'])
+            aliasses = self.query('ttvdb_aliasses', tid=item['tid'])
             if isinstance(item['alias'], list) and len(item['alias']) > 0:
                 for a in set(item['alias']):
-                    rec.append(make_val_list(item, 'ttvdb_alias', {'alias': a}))
+                    values = item.copy()
+                    values.update(alias=a)
+                    rec.append(make_val_list('ttvdb_alias', **values))
 
             else:
-                rec.append(make_val_list(item, 'ttvdb_alias'))
+                rec.append(make_val_list('ttvdb_alias', **item))
 
-            self.execute(add_string, rec)
+            if len(rec) > 0:
+                self.execute(make_add_string('ttvdb_alias'), *rec)
 
         elif table == 'episodes':
-            if isinstance(item, dict):
-                item = [item]
-
-            add_string = make_add_string('episodes')
-            add_string2 = make_add_string('ttvdbcredits')
-            add_string3 = make_add_string('episodesint')
-            add_string4 = make_add_string('ttvdbmetadata')
             added_tepids = []
             for p in item:
-                if not isinstance(p, dict) or not 'tid' in p.keys() or not 'lang' in p.keys() or not 'episode title' in p.keys():
+                if not isinstance(p, dict) or not 'tid' in p.keys() or \
+                    not 'lang' in p.keys() or not 'episode title' in p.keys():
                     continue
 
                 p['tdate'] = datetime.date.today()
                 if not p['tepid'] in added_tepids:
                     added_tepids.append(p['tepid'])
-                    rec.append(make_val_list(p, 'episodes'))
-                rec3.append(make_val_list(p, 'episodesint'))
+                    rec.append(make_val_list('episodes', **p))
+                rec3.append(make_val_list('episodesint', **p))
                 for f in self.config.key_values['credits']:
                     if f in p.keys():
                         for cr in p[f]:
@@ -2403,128 +2560,191 @@ class ProgramCache(Thread):
                             else:
                                 continue
 
-                            sql_vals = make_val_list(p, 'ttvdbcredits', crd)
+                            values = p.copy()
+                            values.update(crd)
+                            sql_vals = make_val_list('ttvdbcredits', **values)
                             if not sql_vals in rec2:
                                 rec2.append(sql_vals)
 
                 for f in self.config.key_values['metadata']:
                     if f in p.keys():
-                        sql_vals = make_val_list(p, 'ttvdbmetadata', {'type':f, 'url':p[f]})
+                        values = p.copy()
+                        values.update(type=f, url=p[f])
+                        sql_vals = make_val_list('ttvdbmetadata', **values)
                         if not sql_vals in rec4:
                             rec4.append(sql_vals)
 
 
-            self.execute(add_string, rec)
-            self.execute(add_string2, rec2)
-            self.execute(add_string3, rec3)
-            self.execute(add_string4, rec4)
+            if len(rec) > 0:
+                self.execute(make_add_string('episodes'), *rec)
+            if len(rec2) > 0:
+                self.execute(make_add_string('ttvdbcredits'), *rec2)
+            if len(rec3) > 0:
+                self.execute(make_add_string('episodesint'), *rec3)
+            if len(rec4) > 0:
+                self.execute(make_add_string('ttvdbmetadata'), *rec4)
 
         elif table == 'epcount':
-            if isinstance(item, dict):
-                item = [item]
-
-            add_string = u"INSERT INTO epcount (`tid`, `sid`, `count`) VALUES (?, ?, ?)"
             for p in item:
                 if not isinstance(p, dict) or not 'tid' in p.keys() or not 'sid' in p.keys() or not 'count' in p.keys():
                     continue
 
-                sql_vals = (p['tid'], p['sid'], p['count'])
-                rec.append(sql_vals)
+                rec.append(make_val_list('epcount', **p))
 
-            self.execute(add_string, rec)
+            if len(rec) > 0:
+                self.execute(make_add_string('epcount'), *rec)
 
-    def update(self, table, item= None):
+    def update(self, table, **item):
         pcursor = self.pconn.cursor()
         if table == 'toggle_alt_url':
-            if not isinstance(item, dict) or not 'sourceid'in item.keys():
+            if not 'sourceid'in item.keys():
                 return
 
-            pcursor.execute(u"SELECT `use_alt_url` FROM sources WHERE sourceid = ?", (item['sourceid'],))
-            r = pcursor.fetchone()
-            if r == None:
+            uau=self.query('use_alt_url', sourceid=item['sourceid'])
+            self.update('sources', set={'use_alt_url': not uau}, where={'sourceid': item['sourceid']})
+
+        else:
+            wfields = item.get('where', None)
+            sfields = item.get('set', None)
+            if not (table in self.table_definitions.keys() and isinstance(wfields, dict) and isinstance(wfields, dict)):
+                self.config.log([self.config.text('IO', 26), '%s:%s\n' % (table, item)])
                 return
 
-            self.execute("UPDATE sources SET `use_alt_url` = ? WHERE sourceid = ?", ( not r[0], item['sourceid']))
+            w_string =  "WHERE "
+            w_list = []
+            for k, v in wfields.items():
+                if k in self.field_list[table]:
+                    w_string = '%s `%s` = ? AND ' % (w_string, k)
+                    w_list.append(v)
 
-    def delete(self, table='ttvdb', item=None):
+            s_string = "UPDATE %s SET" % table
+            s_list = []
+            for k, v in sfields.items():
+                if k in self.field_list[table]:
+                    s_string = '%s `%s` = ?,' % (s_string, k)
+                    s_list.append(v)
+
+            if len(s_list) == 0:
+                return
+
+            s_string = '%s %s' % (s_string[:-1], w_string[:-5])
+            s_list.extend(w_list)
+            self.execute(s_string, tuple(s_list))
+
+    def delete(self, table, **item):
         if table == 'sourceprograms':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
-                return
+            if "sourceid" in item.keys() and "channelid" in item.keys():
+                if "scandate" in item.keys():
+                    if isinstance(item["scandate"], (datetime.date, int)):
+                        item["scandate"] = [item["scandate"]]
 
-            if not "scandate" in item.keys() and not 'start-time' in item.keys():
-                self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ? AND channelid = ?", (item['sourceid'], item['channelid']))
-                self.execute(u"DELETE FROM credits WHERE sourceid = ? AND channelid = ?", (item['sourceid'], item['channelid']))
-                self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ?", (item['sourceid'], item['channelid']))
+                    if isinstance(item["scandate"], list):
+                        rec = []
+                        for sd in item["scandate"]:
+                            if isinstance(sd, int):
+                                sd = self.offset_to_date(sd)
 
-            if "scandate" in item.keys():
-                if isinstance(item["scandate"], (datetime.date, int)):
-                    item["scandate"] = [item["scandate"]]
-
-                if isinstance(item["scandate"], list):
-                    for sd in item["scandate"]:
-                        if isinstance(sd, int):
-                            sd = self.offset_to_date(sd)
-
-                        self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ? AND channelid = ? AND scandate = ?", (item['sourceid'], item['channelid'], sd))
-                        self.execute(u"DELETE FROM credits WHERE sourceid = ? AND channelid = ? AND scandate = ?", (item['sourceid'], item['channelid'], sd))
-                        self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ? AND scandate = ?", (item['sourceid'], item['channelid'], sd))
-
-            elif "start-time" in item.keys():
-                if isinstance(item["start-time"], datetime.datetime):
-                    item["start-time"] = [item["start-time"]]
-
-                if isinstance(item["start-time"], list):
-                    delete_string = u"DELETE FROM credits WHERE sourceid = ? AND channelid = ? AND `start-time` = ?"
-                    delete_string2 = u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ? AND `start-time` = ?"
-                    rec = []
-                    for sd in item["start-time"]:
-                        if isinstance(sd, datetime.datetime):
                             rec.append((item['sourceid'], item['channelid'], sd))
 
-                    self.execute(delete_string, rec)
-                    self.execute(delete_string2, rec)
+                        self.execute(u"DELETE FROM fetcheddays " + \
+                            "WHERE sourceid = ? AND channelid = ? AND scandate = ?", *rec)
+                        self.execute(u"DELETE FROM credits " + \
+                            "WHERE sourceid = ? AND channelid = ? AND scandate = ?", *rec)
+                        self.execute(u"DELETE FROM sourceprograms " + \
+                            "WHERE sourceid = ? AND channelid = ? AND scandate = ?", *rec)
+
+                elif "start-time" in item.keys():
+                    if isinstance(item["start-time"], datetime.datetime):
+                        item["start-time"] = [item["start-time"]]
+
+                    if isinstance(item["start-time"], list):
+                        rec = []
+                        for sd in item["start-time"]:
+                            if isinstance(sd, datetime.datetime):
+                                rec.append((item['sourceid'], item['channelid'], sd))
+
+                        self.execute(u"DELETE FROM credits " + \
+                                "WHERE sourceid = ? AND channelid = ? AND `start-time` = ?", *rec)
+                        self.execute(u"DELETE FROM sourceprograms " + \
+                                "WHERE sourceid = ? AND channelid = ? AND `start-time` = ?", *rec)
+
+                else:
+                    self.execute(u"DELETE FROM fetcheddata WHERE sourceid = ? AND channelid = ?",
+                        (item['sourceid'], item['channelid']))
+                    self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ? AND channelid = ?",
+                        (item['sourceid'], item['channelid']))
+                    self.execute(u"DELETE FROM credits WHERE sourceid = ? AND channelid = ?",
+                        (item['sourceid'], item['channelid']))
+                    self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ?",
+                        (item['sourceid'], item['channelid']))
+
+            if "sourceid" in item.keys():
+                    self.execute(u"DELETE FROM fetcheddata WHERE sourceid = ?",
+                        (item['sourceid'], ))
+                    self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ?",
+                        (item['sourceid'], ))
+                    self.execute(u"DELETE FROM credits WHERE sourceid = ?",
+                        (item['sourceid'], ))
+                    self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ?",
+                        (item['sourceid'], ))
+
+            if "chanid" in item.keys():
+                rec = []
+                for channelid in self.query('chan_scid', chanid = item["chanid"]):
+                    rec.append((channelid['sourceid'], channelid['channelid']))
+
+                if len(rec) > 0:
+                    self.execute(u"DELETE FROM fetcheddata WHERE sourceid = ? AND channelid = ?", *rec)
+                    self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ? AND channelid = ?", *rec)
+                    self.execute(u"DELETE FROM credits WHERE sourceid = ? AND channelid = ?", *rec)
+                    self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ?", *rec)
 
         elif table == 'programdetails':
-            if not isinstance(item, dict) or not "sourceid" in item.keys() or not "channelid" in item.keys():
+            if not ("sourceid" in item.keys() and "channelid" in item.keys()):
                 return
-
-            if not "prog_ID" in item.keys() and not 'start-time' in item.keys():
-                self.execute(u"DELETE FROM creditdetails WHERE sourceid = ? AND channelid = ?", (item['sourceid'], item['channelid']))
-                self.execute(u"DELETE FROM programdetails WHERE sourceid = ? AND channelid = ?", (item['sourceid'], item['channelid']))
 
             if "prog_ID" in item.keys():
                 if isinstance(item["prog_ID"], (str, unicode)):
                     item["prog_ID"] = [item["prog_ID"]]
 
                 if isinstance(item["prog_ID"], list):
+                    rec = []
                     for sd in item["prog_ID"]:
-                        if isinstance(sd, int):
-                            sd = self.offset_to_date(sd)
+                        rec.append((item['sourceid'], item['channelid'], sd))
 
-                        self.execute(u"DELETE FROM creditdetails WHERE sourceid = ? AND channelid = ? AND prog_ID = ?", (item['sourceid'], item['channelid'], sd))
-                        self.execute(u"DELETE FROM programdetails WHERE sourceid = ? AND channelid = ? AND prog_ID = ?", (item['sourceid'], item['channelid'], sd))
+                    self.execute(u"DELETE FROM creditdetails " + \
+                        "WHERE sourceid = ? AND channelid = ? AND prog_ID = ?", *rec)
+                    self.execute(u"DELETE FROM programdetails " + \
+                        "WHERE sourceid = ? AND channelid = ? AND prog_ID = ?", *rec)
 
             elif "start-time" in item.keys():
                 if isinstance(item["start-time"], datetime.datetime):
                     item["start-time"] = [item["start-time"]]
 
                 if isinstance(item["start-time"], list):
-                    delete_string = u"DELETE FROM creditdetails WHERE sourceid = ? AND channelid = ? AND `start-time` = ?"
-                    delete_string2 = u"DELETE FROM programdetails WHERE sourceid = ? AND channelid = ? AND `start-time` = ?"
                     rec = []
                     for sd in item["start-time"]:
                         if isinstance(sd, datetime.datetime):
                             rec.append((item['sourceid'], item['channelid'], sd))
 
-                    self.execute(delete_string, rec)
-                    self.execute(delete_string2, rec)
+                    self.execute(u"DELETE FROM creditdetails " + \
+                        "WHERE sourceid = ? AND channelid = ? AND `start-time` = ?", *rec)
+                    self.execute(u"DELETE FROM programdetails " + \
+                        "WHERE sourceid = ? AND channelid = ? AND `start-time` = ?", *rec)
+
+            else:
+                self.execute(u"DELETE FROM creditdetails WHERE sourceid = ? AND channelid = ?",
+                    (item['sourceid'], item['channelid']))
+                self.execute(u"DELETE FROM programdetails WHERE sourceid = ? AND channelid = ?",
+                    (item['sourceid'], item['channelid']))
 
         elif table == 'ttvdb':
             with self.pconn:
                 self.pconn.execute(u"DELETE FROM ttvdb_alias WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdb WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdbint WHERE tid = ?",  (int(item['tid']), ))
-                self.pconn.execute(u"DELETE FROM episodesint WHERE tepid = (SELECT tepid FROM episodes WHERE tid = ?)",  (int(item['tid']), ))
+                self.pconn.execute(u"DELETE FROM episodesint " + \
+                        "WHERE tepid = (SELECT tepid FROM episodes WHERE tid = ?)",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM episodes WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM epcount WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdbcredits WHERE tid = ?",  (int(item['tid']), ))
@@ -2546,27 +2766,25 @@ class ProgramCache(Thread):
         """
         dnow = datetime.datetime.today() - datetime.timedelta(days = 1)
         dttvdb = dnow.date() - datetime.timedelta(days = 29)
-        self.execute(u"DELETE FROM sourceprograms WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
-        self.execute(u"DELETE FROM credits WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
-        self.execute(u"DELETE FROM programdetails WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
-        self.execute(u"DELETE FROM creditdetails WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
-        self.execute(u"DELETE FROM fetcheddays WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM sourceprograms " + \
+                        "WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM credits " + \
+                        "WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM programdetails " + \
+                        "WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM creditdetails " + \
+                        "WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
+        self.execute(u"DELETE FROM fetcheddays " + \
+                        "WHERE `scandate` < ? OR `scandate` = ?", (dnow.date(), None))
         #~ self.execute(u"DELETE FROM ttvdb WHERE tdate < ?", (dttvdb,))
 
         self.execute(u"VACUUM")
 
-    def execute(self, qstring, parameters = None):
+    def execute(self, qstring, *parameters):
         try:
-            if parameters == None:
+            if len(parameters) == 0 or parameters == None:
                 with self.pconn:
                     self.pconn.execute(qstring)
-
-            elif not isinstance(parameters, (list, tuple)) or len(parameters) == 0:
-                return
-
-            elif isinstance(parameters, tuple):
-                with self.pconn:
-                    self.pconn.execute(qstring, parameters)
 
             elif len(parameters) == 1:
                 with self.pconn:
@@ -2737,13 +2955,15 @@ class InfoFiles():
                                     pnode.get_value('rating'))
 
                     if pnode.next_gap != None:
-                        fstr += u'  %s: GAP\n' % pnode.next_gap.get_start_stop()
+                        fstr += u'  %s: GAP %s minuten\n' % \
+                            (pnode.next_gap.get_start_stop(), pnode.next_gap.length.total_seconds()/60)
 
             else:
                 plist = deepcopy(programs)
                 if group_slots != None:
                     pgs = deepcopy(group_slots)
-                    fstr = u' (%3.0f/%2.0f) from: %s\n' % (len(plist), len(pgs), self.config.channelsource[source].source)
+                    fstr = u' (%3.0f/%2.0f) from: %s\n' % \
+                        (len(plist), len(pgs), self.config.channelsource[source].source)
                     if len(pgs) > 0:
                         for item in pgs:
                             item['is_gs'] = True
@@ -2994,6 +3214,7 @@ class DD_Convert(DataDef_Convert):
 
                         if ptype in self.config.data_def_names["detail"]:
                             self.csource_data[ptype]["provides"] = data_value([ptype, "provides"], source_data, list)
+                            self.csource_data[ptype]["update-base"] = data_value([ptype, "update-base"], source_data, list)
 
                 if not "channels" in self.csource_data["channel_defs"] and is_data_value(["channels", "data"], source_data, dict):
                     self.csource_data["channel_list"] = data_value(["channels", "data"], source_data, dict)
@@ -3209,7 +3430,7 @@ class test_Source():
         for chanid, channel in self.config.channels.items():
             if chanid == self.opt_dict['chanid']:
                 channel.active = True
-                channelid = channel.get_source_id(self.source.proc_id)
+                channelid = channel.get_channelid(self.source.proc_id)
                 if channelid == '':
                     self.config.log('The requested chanid "%s" does not exist on this source!\n' % self.opt_dict['chanid'])
                     return(0)
@@ -3218,19 +3439,19 @@ class test_Source():
                 channel.active = False
 
         self.source.init_channel_source_ids()
-        self.config.queues['cache'].put({'task':'query', 'parent': self, 'chan_scid': {'sourceid': self.source.proc_id, 'chanid': self.opt_dict['chanid']}})
+        self.config.queues['cache'].put({'task':'query', 'parent': self,
+            'chan_scid': {'sourceid': self.source.proc_id, 'chanid': self.opt_dict['chanid']}})
         channelgrp = data_value('group',self.cache_return.get(True), str)
-        pdata = {}
-        pdata['channels'] = self.source.channels
-        pdata['channel'] = channelid
-        pdata['channelgrp'] = channelgrp
-        pdata['offset'] = self.opt_dict['offset']
-        pdata['start'] = self.opt_dict['offset']
-        pdata['end'] = self.opt_dict['offset'] + 1
-        pdata['back'] = -self.opt_dict['offset']
-        pdata['ahead'] = self.opt_dict['offset']
-        self.source.get_page_data('base', pdata)
-        self.source.parse_basepage(self.source.data, pdata)
+        pdata = {'channels': self.source.channels,
+                    'channel': channelid,
+                    'channelgrp': channelgrp,
+                    'offset': self.opt_dict['offset'],
+                    'start': self.opt_dict['offset'],
+                    'end': self.opt_dict['offset'] + 1,
+                    'back': -self.opt_dict['offset'],
+                    'ahead': self.opt_dict['offset']}
+        self.source.get_page_data('base', **pdata)
+        self.source.parse_basepage(self.source.data, **pdata)
         self.config.log('See %s for the results.\n' % self.opt_dict['report_dir'])
         return(0)
 
@@ -3249,7 +3470,7 @@ class test_Source():
                         break
 
                 else:
-                    if p['channelid'] != self.config.channels[self.opt_dict['chanid']].get_source_id(self.source.proc_id):
+                    if p['channelid'] != self.config.channels[self.opt_dict['chanid']].get_channelid(self.source.proc_id):
                         continue
                     counter += 1
                     detailids[counter] = p['detail_url']
@@ -3286,7 +3507,7 @@ class test_Source():
         pdata['chanid'] = self.opt_dict['chanid']
         pdata['channelid'] = pdata['chanid']
         if self.opt_dict['chanid'] in self.config.channels.keys():
-            pdata['channelid'] = self.config.channels[self.opt_dict['chanid']].get_source_id(self.source.proc_id)
+            pdata['channelid'] = self.config.channels[self.opt_dict['chanid']].get_channelid(self.source.proc_id)
 
         pdata['detail_url'] = self.opt_dict['detailid']
         self.source.load_detailpage('detail', pdata)

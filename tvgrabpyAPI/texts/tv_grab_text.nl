@@ -597,909 +597,930 @@ p185
 sI197
 V# 3 bij alle series.\u000a
 p186
-sI201
-V# Dit zijn lijsten van de genres die als een serie, film en sport genre gezien worden\u000a
+sI198
+V# De pre_merge optie is alleen relevant voor bronnen die data van een detailpagina\u000a
 p187
-sI202
-V# Het wordt bijv. gebruikt om programma's aan te merken om ze op thetvdb op te zoeken\u000a
+sI199
+V# nodig hebben om de juiste start en stop tijden vast te stellen (npo.nl)\u000a
 p188
-sI203
-V# en voor naam manipulaties om een episode titel te vinden.\u000a
+sI200
+V# EN die als prime_source ingesteld zijn.\u000a
 p189
-sI204
-V# De door de beheerder toegevoegde standaard kun je niet verwijderen.\u000a
+sI201
+V# Omdat dit de duur kan verlengen kun je het hier of voor één kanaal uitschakelen.\u000a
 p190
-sI205
+sI211
+V# Dit zijn lijsten van de genres die als een serie, film en sport genre gezien worden\u000a
+p191
+sI212
+V# Het wordt bijv. gebruikt om programma's aan te merken om ze op thetvdb op te zoeken\u000a
+p192
+sI213
+V# en voor naam manipulaties om een episode titel te vinden.\u000a
+p193
+sI214
+V# De door de beheerder toegevoegde standaard kun je niet verwijderen.\u000a
+p194
+sI215
 g34
 ssg7
-(dp191
+(dp195
 I72
 VUitvoering gereed.\u000a
-p192
+p196
 sI73
 VVerzamel statistieken van %s programma's voor %s zenders:\u000a
-p193
+p197
 sI74
 V  Start tijd: %s\u000a
-p194
+p198
 sI75
 V   Eind tijd: %s\u000a
-p195
+p199
 sI76
 V        Duur: %s\u000a
-p196
+p200
 sI77
 V%6.0f pagina('s) opgehaald, waarvan er %s faalden en %s geen data opleverden\u000a
-p197
+p201
 sI78
 V%6.0f cache vonst(en)\u000a
-p198
+p202
 sI79
 V%6.0f succesvolle ttvdb.com verwijzingen\u000a
-p199
+p203
 sI80
 V%6.0f   misluktte ttvdb.com verwijzingen\u000a
-p200
+p204
 sI81
 V Tijd/pagina: %s seconds\u000a
-p201
+p205
 sI82
 V%6.0f pagina('s) opgehaald van theTVDB.com\u000a
-p202
+p206
 sI83
 V%6.0f mislukking(en) op theTVDB.com\u000a
-p203
+p207
 sI84
 V%6.0f  basis pagina('s) opgehaald van %s, waarvan %s geen data opleverden\u000a
-p204
+p208
 sI85
 V%6.0f detail pagina('s) opgehaald van %s, waarvan %s geen data opleverden\u000a
-p205
+p209
 sI86
 V%6.0f mislukking(en) op %s\u000a
-p206
+p210
 ssVhelp
-p207
-(dp208
+p211
+(dp212
 I1
 V  Een verzamelaar van TV programmagegevens vanuit meerdere bronnen,\u000a
-p209
+p213
 sI2
 V  die vervolgens die gegevens combineert in één XMLTV compatibele lijst.
-p210
+p214
 sI3
 VToon deze tekst
-p211
+p215
 sI5
 VToon de versie
-p212
+p216
 sI6
 VGeeft een korte beschrijving van het programma
-p213
+p217
 sI7
 VGeeft een uitgebreide beschrijving van het programma\u000ain het engels
-p214
+p218
 sI8
 Vxmltv vereiste optie
-p215
+p219
 sI9
 VGeeft de gewenste methode om aangeroepen te worden
-p216
+p220
 sI10
 VGeeft de beschikbare bronnen
-p217
+p221
 sI11
 VSchakel een genummerde bron uit. Zie "--show-sources"\u000avoor een lijst van de beschikbare bronnen.
-p218
+p222
 sI12
 VGeeft de beschikbare detail bronnen
-p219
+p223
 sI13
 VGeeft de beschikbare logo bronnen
-p220
+p224
 sI15
 VSchakel een genummerde bron uit voor detail pagina's.\u000aZie "--show-detail-sources" voor een lijst van de\u000abeschikbare bronnen.
-p221
+p225
 sI16
 VSchakel het ophalen van extra gegevens van ttvdb.com uit
-p222
+p226
 sI17
 VZoek op ttvdb.com naar een serie titel en sla hem\u000aeventueel met het ID op in de database.\u000aPlaats aanhalingstekens om de titel! Voeg eventueel\u000aachter de titel een tweeletterige taalcode toe.\u000a
-p223
+p227
 sI18
 VVoeg"%s" toe achter het xmltv id\u000a
-p224
+p228
 sI19
 VVerwijder zoals voor versie 2.2.8 voor bron 0 en 1 het\u000abronid van het chanid om het xmltvid te krijgen.
-p225
+p229
 sI20
 VGebruik UTC tijd voor de uitvoer
-p226
+p230
 sI21
 VMaak een nieuw configuratie bestand aan en\u000ahernoem een bestaand bestand naar *.old.
-p227
+p231
 sI22
 VPlaats alle actieve zender in het nieuwe bestand\u000ain een aparte groep boben aan de lijst.\u000aAlleen relevant samen met de configure optie.
-p228
+p232
 sI23
 VNaam van het configuratie bestand\u000a<standaard = "%s">
-p229
+p233
 sI24
 VSla de op dit moment gedefinieerde opties op in het\u000aconfiguratie bestand. Voeg opties toe aan de commando\u000aregel om ze toe te voegen of te wijzigen.
-p230
+p234
 sI25
 VGebruik dit bestand voor de cache functie\u000a<standaard = "%s">
-p231
+p235
 sI26
 VVerwijder achterhaalde programmagegevens uit de cache
-p232
+p236
 sI27
 VVerwijder alle programmagegevens uit de cache
-p233
+p237
 sI28
 VVerwijder alle ttvdb gegevens uit de cache
-p234
+p238
 sI29
 VBetand waarnaartoe de uitvoer te sturen.\u000a<standaard naar het scherm>
-p235
+p239
 sI30
 VGebruik voor de uitvoer de Windows codeset (cp1252)\u000ain plaats van utf-8
-p236
+p240
 sI31
 VOnderdruk alle log uitvoer naar het scherm.
-p237
+p241
 sI32
 VZend de log uitvoer ook naar het scherm.
-p238
+p242
 sI33
 VHaal geen detail pagina's van één van de bronnen op.\u000a
-p239
+p243
 sI34
 V<standaard> Haal de beschikbare detail pagina's van de\u000abronnen op
-p240
+p244
 sI35
 VDe eerste dag waarvan programma gegevens op te halen\u000a<standaard is 0 is vandaag>
-p241
+p245
 sI36
 VHet aantal dagen waarvoor programmagegevens op te halen.\u000a<max 14 = standaard>\u000aElke bron heeft zijn eigen maximum, dat lager kan zijn.\u000a
-p242
+p246
 sI38
 VHet aantal dagen om "traag" (met details) gegevens op\u000ate halen.\u000aStandaard alle dagen
-p243
+p247
 sI39
 V<standaard> Voeg url's van de zender iconen toe\u000a(mythfilldatabase zal deze dan gebruiken)
-p244
+p248
 sI40
 VVoeg geen url's van de zender iconen toe
-p245
+p249
 sI41
 VMarkeer de HD programma's,\u000agebruik dit niet als je alleen maar analoge SD opneemt
-p246
+p250
 sI42
 V<standaard> Vertaal de genre's van de bronnen naar\u000aMythTV-genre's. Zie het %s.set bestand\u000avoor de vertaal tabellen
-p247
+p251
 sI43
 VVertaal de genre's van de bronnen niet naar\u000aMythTV-genres.
-p248
+p252
 sI44
 VHet maximaal toegelaten aantal karakters voor de\u000abeschrijvingen.De rest wordt weggeknipt.
-p249
+p253
 sI45
 VWat te doen wanneer programma's niet goed aansluiten:\u000a"avarage" Neem het gemiddelde van de eindtijd en de\u000a          begintijd van het volgende programma.\u000a          <standaard>\u000a"stop"    Pas de begintijd van het volgende programma\u000a          aan aan de eindtijd.\u000a"start"   Pas de eindtijd aan aan de begintijd van het \u000a          volgende programma.\u000a"none"    Doe niets.\u000a
-p250
+p254
 sI46
 VDe maximale afwijking tussen eindtijd en begintijd van\u000ahet volgende programma dat gecorrigeerd mag worden.\u000a<standaard 10 minuten>
-p251
+p255
 sI47
 VGeef de taal voor de systeem en log berichten.\u000aOp dit moment "en" (standaard) of "nl"
-p252
+p256
 sI48
 VGebruik alleen data uit de cache.
-p253
+p257
+sI49
+VVerwijder alle programmagegevens van de opgegeven bron\u000auit de cache
+p258
+sI50
+VVerwijder alle programmagegevens van de opgegeven zender\u000auit de cache
+p259
 sI100
 V  Een testmodule om bronbestanden te testen.\u000a  Je kunt de variabelen ook instellen in:%s/.json_struct/tv_grab_test.conf
-p254
+p260
 sI101
 VNaam van de grabber en de configuratie on te testen\u000alike <"tv_grab_xx">
-p255
+p261
 sI102
 VDe dag waarop te testen <defaults to 0 is today>
-p256
+p262
 sI103
 VDe directory waar de bron bestanden zich bevinden.\u000a<default = "%s">\u000a(Je kan een aparte directory voor het graber bestand\u000ain %s/.json_struct/tv_grab_test.conf instellen)
-p257
+p263
 sI104
 VDe directory waarin de rapporten te plaatsen\u000a<default = "%s">
-p258
+p264
 sI105
 VDe te testen bron <default = 1>
-p259
+p265
 sI106
 VDe uit te voeren test. Geldig zijn:\u000a   channels: test de channels of base-channels data_def\u000a   base:     test de base data_def\u000a   detail:   test de detail data_def\u000a   lineup:   test de lineup van al de bronnen\u000a<default = channels>
-p260
+p266
 sI107
 VDe van de base-page te extraheren chanid
-p261
+p267
 sI108
 VDe detailid in de URL van de detail-pagina
-p262
+p268
 sI109
 VHet voor tv_grab_test_json.py te gebruiken report-level\u000a<default = 511 or -513>
-p263
+p269
 sI110
 VCreer of update het configuratie bestand:\u000a"%s.json_struct/tv_grab_test.conf"
-p264
+p270
 ssVother
-p265
-(dp266
+p271
+(dp272
 I0
 VVerzamel API die meerdere bronnen samenvoegt.
-p267
+p273
 sI1
 VDe beschikbare bronnen zijn:
-p268
+p274
 sI2
 VDe beschikbare detail bronnen zijn:
-p269
+p275
 sI3
 VDe beschikbare logo bronnen zijn:
-p270
+p276
 sI4
 V 99: Je eigen volledige logo url
-p271
+p277
 sI5
 VDe begintijd van deze verzamelronde is %s\u000a
-p272
+p278
 sI6
 VVersie
-p273
+p279
 sI7
 VTaal
-p274
+p280
 sI8
 VEr is een nieuwere stabiele API release bescikbaar op github!\u000a
-p275
+p281
 sI9
 VGa naar: %s\u000a
-p276
+p282
 sI10
 VEr is een nieuwere stabiele frontend release beschikbaar!\u000a
-p277
+p283
 sI11
 VDe zender/bron json data is nieuwer!\u000a
-p278
+p284
 sI12
 VDraai met "--configure" om dit te implementeren\u000a
-p279
+p285
 ssg35
-(dp280
+(dp286
 I0
 VDe bericht tekst (%s, %s: %s) is niet gevonden!\u000a
-p281
+p287
 sI1
 VGeen valide bron beschrijving voor %s gevonden. De bron wordt uitgeschakeld!\u000a
-p282
+p288
 sI2
 VJe kunt dit script niet als "root" draaien behalve met de --configure optie.\u000aWanneer je --configure als "root" draait, dan wordt de configuratie in\u000a"/etc/tvgrabpyAPI/" geplaatst en als reserve configuratie gebruikt.\u000a
-p283
+p289
 sI3
 VFout bij het bijwerken van de nieuwe configuratie.\u000a
-p284
+p290
 sI4
 VVerwijder ajb het oude configuratie bestand en draai opnieuw met de --configure flag.\u000a
-p285
+p291
 sI5
 VHet configuratie bestand %s is bijgewerkt!\u000a
-p286
+p292
 sI6
 VControleer of je tevreden bent met de instellingen.\u000a
-p287
+p293
 sI7
 VWanneer dit een nieuwe installatie is, activeer dan nu eerst de gewenste zenders!\u000a
-p288
+p294
 sI8
 VHet configuratiebestand: %s wordt aangemaakt\u000a
-p289
+p295
 sI9
 VFout bij het maken van de nieuwe configuratie. Probeer de oude terug te zetten.\u000a
-p290
+p296
 sI10
 VHet configuratie bestand %s is aangemaakt!\u000a
-p291
+p297
 sI11
 VDe opties in het configuratiebestand %s zijn bijgewerkt!\u000a
-p292
+p298
 sI12
 VEen offset %s hoger dan het maximum is belachelijk. We zetten het op %s
-p293
+p299
 sI13
 VWe kunnen maximaal 14 dagen vooruit kijken. Resetting!\u000a
-p294
+p300
 sI14
 VDe folder %s wordt aangemaakt,\u000a
-p295
+p301
 sI15
 VEr kan niet naar het uitvoer bestand: %s geschreven worden.\u000a
-p296
+p302
 sI16
 VEr is geen toegang tot de configuratie/log folder: %s\u000a
-p297
+p303
 sI17
 VHet logbestand: %s kan niet worden geopend\u000a
-p298
+p304
 sI18
 VHet configuratie bestand: %s wordt gebruikt\u000a
-p299
+p305
 sI19
 VHet alternatief configuratie bestand %s wordt geprobeerd.\u000a
-p300
+p306
 sI20
 VEr kan niet naar het cache bestand: %s geschreven worden.\u000a
-p301
+p307
 sI21
 VFout bij de toegang tot de cache (folder): %s\u000a
-p302
+p308
 sI22
 VAlles wordt in snelle modus gezet\u000a
-p303
+p309
 sI23
 VDe zender: %s wordt in snelle modus gezet\u000a
-p304
+p310
 sI24
 VEen maximale beschrijving van %d tekens wordt voor zender %s ingesteld\u000a
-p305
+p311
 sI25
 VEen maximale overlap van 0 betekent een overlap strategy van: "%s"\u000a
-p306
+p312
 sI26
 VEen maximale overlap van 0 betekent voor zender %s een overlap strategy van: "%s"\u000a
-p307
+p313
 sI27
 VEen maximale overlap van: %d wordt voor zender %s gebruikt.\u000a
-p308
+p314
 sI28
 Voverlap strategy voor zender: %s is ingesteld op: "%s"\u000a
-p309
+p315
 sI31
 VDraai het script opnieuw met de --configure flag.\u000a
-p310
+p316
 sI32
 V"legacy_xmltvids = True" wordt toegevoegd\u000a
-p311
+p317
 sI33
 VDraai het script met "--configure" om het permanent te maken.\u000a
-p312
+p318
 sI34
 VDe onbekende afdeling "%s" wordt genegeerd.\u000a
-p313
+p319
 sI35
 VDe configuratie regel "%s" wordt genegeerd. Deze bevindt zich buiten een bekende afdeling.\u000a
-p314
+p320
 sI36
 VFout bij het lezen van de configuratie.\u000a
-p315
+p321
 sI37
 VFout bij het lezen van een regel van de [Configuration] afdeling in %s:
-p316
+p322
 sI38
 VFout bij het lezen van een regel van de [Channels] afdeling in %s:
-p317
+p323
 sI39
 VDe zender afdeling [%s] wordt genegeerd. Onbekende zender.\u000a
-p318
+p324
 sI40
 VFout bij het lezen van een regel van de [%s] afdeling in %s:
-p319
+p325
 sI41
 VFout bij het lezen van het standaarden bestand: %s\u000a
-p320
+p326
 sI43
 VFout bij het lezen van het instellingenbestand op github.\u000a
-p321
+p327
 sI44
 VHet is onmogelijk de configuratie voort te zetten!\u000a
-p322
+p328
 sI45
 VEen ongeldige start tijd voor %s in de gecombineerde zender: %s\u000a  Het wordt op middernacht gezet!
-p323
+p329
 sI46
 VEen ongeldige eind tijd voor %s in de gecombineerde zender: %s\u000a  Het wordt op middernacht gezet!
-p324
+p330
 sI47
 VEen ongeldige start tijd voor %s\u000a  Het wordt op middernacht gezet!
-p325
+p331
 sI48
 VEen ongeldige eind tijd voor %s\u000a  Het wordt op middernacht gezet!
-p326
+p332
 sI62
 VNiet alle zender informatie kon worden binnen gehaald.\u000a
-p327
+p333
 sI63
 VProbeer opnieuw over 15 minuten of zo; of schakel de falende bron uit.\u000a
-p328
+p334
 sI64
 VDe Bron %s (%s) is uitgeschakeld
-p329
+p335
 sI65
 VEr worden geen detail pagina's van %s (%s) gehaald.
-p330
+p336
 sI66
-VZender specifieke instellinge anders dan de bovenstaande (uitsluitend voor de actieve zenders!):
-p331
+VZender specifieke instellingen anders dan de bovenstaande (uitsluitend voor de actieve zenders!):
+p337
 sI67
 V  de prime_source instelling: %s (%s) in het .json bestand wordt niet gebruikt\u000a
-p332
+p338
 sI68
 V  De Bron %s (%s) is uitgeschakeld\u000a
-p333
+p339
 sI69
 V  De detail Bron %s (%s) is uitgeschakeld\u000a
-p334
+p340
 sI70
 VFout bij het openen van het oude configuratie bestand. Er wordt een nieuwe aangemaakt.\u000a
-p335
+p341
 sI71
 VFout bij het lezen van de oude configuratie\u000a
-p336
+p342
 sI72
 VThe bron %s is uitgeschakeld voor deze API versie!\u000a
-p337
+p343
 sI-2
 VHet Nederlandse tekst bestand is geladen\u000a
-p338
+p344
 sI-1
 VFout bij het maken van de bericht tekst! (%s, %s: %s)\u000a
-p339
+p345
 ssVmergeinfo
-p340
-(dp341
+p346
+(dp347
 I1
 V%s is samengevoegd met %s\u000a
-p342
+p348
 sI2
 VOmdat ze allebij actief zijn, hebben we geen Alias ingesteld.\u000a
-p343
+p349
 sI3
 VWanneer je het oude chanid %s als xmltvid\u000a
-p344
+p350
 sI4
 Vwilt gebruiken, moet je:\u000a
-p345
+p351
 sI5
 Vtoevoegen aan de zender configuratie voor %s\u000a
-p346
+p352
 sI6
 VOmdat het oude chanid actief was, hebben we een Alias ingesteld\u000a
-p347
+p353
 sI7
 Vvoor de zender configuratie van %s\u000a
-p348
+p354
 sI8
 VOmdat %s al een xmltvid_alias heeft\u000a
-p349
+p355
 sI9
 Vhebben we dit niet aangepast.\u000a
-p350
+p356
 sI10
 VWanneer je het oude chanid %s als xmltvid\u000a
-p351
+p357
 sI11
 Vwilt gebruiken moet je:\u000a
-p352
+p358
 sI12
 Vveranderen in:
-p353
+p359
 sI13
 Vin de zender configuratie van %s\u000a
-p354
+p360
 sI14
 VWe konden niet controleren op zelf aangepaste opties voor het oude chanid: %s\u000a
-p355
+p361
 sI15
 VDus controleer de nieuwe instellingen van het nieuwe chanid: %s\u000a
-p356
+p362
 sssVfetch
-p357
-(dp358
+p363
+(dp364
 Vreport
-p359
-(dp360
+p365
+(dp366
 I1
 VNu wordt %s(xmltvid=%s%s) van %s opgehaald\u000a
-p361
+p367
 sI2
 VNu word(t/en) %s zender(s) van %s opgehaald\u000a
-p362
+p368
 sI3
 VNu wordt de %s zendergroep van %s opgehaald\u000a
-p363
+p369
 sI4
 V    (zender %s van %s) voor dag %s van %s.\u000a
-p364
+p370
 sI5
 V    (zender %s van %s) voor %s dagen.\u000a
-p365
+p371
 sI6
 V    (zender %s van %s) voor periode %s van %s).\u000a
-p366
+p372
 sI7
 V    (zender %s van %s) voor %s dagen, pagina %s.\u000a
-p367
+p373
 sI8
 V    voor dag %s van %s.\u000a
-p368
+p374
 sI9
 V    voor %s dagen.\u000a
-p369
+p375
 sI10
 V    voor periode %s van %s.
-p370
+p376
 sI11
 V    voor %s dagen, pagina %s.\u000a
-p371
+p377
 sI12
 V\u000aDag %s voor %s van %s wordt uit de cache gehaald.\u000a
-p372
+p378
 sI15
 VSla zender %s op %s, dag=%d over. Geen data\u000a
-p373
+p379
 sI16
 VSla zender %s op %s over!. Geen data
-p374
+p380
 sI17
 VSla zender %s op %s over!, periode=%d. Geen data\u000a
-p375
+p381
 sI18
 VSla zender %s op %s over!, pagina=%d. Geen data\u000a
-p376
+p382
 sI19
 VSla dag %d op %s over. Geen data\u000a
-p377
+p383
 sI20
 VSla %s over. Geen data\u000a
-p378
+p384
 sI21
 VSla periode %d op %s over. Geen data\u000a
-p379
+p385
 sI22
 VSla pagina %d op %s over. Geen data\u000a
-p380
+p386
 sI23
 VSla zendergroep %s op %s over!, dag=%d. Geen data\u000a
-p381
+p387
 sI24
 VSla zendergroep %s op %s over!. Geen data
-p382
+p388
 sI25
 VSla zendergroep %s op %s over!, periode=%d. Geen data\u000a
-p383
+p389
 sI26
 VSla zendergroep %s op %s over!, pagina=%d. Geen data\u000a
-p384
+p390
 sI31
 V[ophalen mislukt] %s:(%3.0f%%) %s\u000a
-p385
+p391
 sI32
 V[%s verzoek] %s:(%3.0f%%) %s\u000a
-p386
+p392
 sI33
 V      [cached] %s:(%3.0f%%) %s\u000a
-p387
+p393
 sI34
 V[geen verzoek] %s:(%3.0f%%) %s\u000a
-p388
+p394
+sI35
+V[%s premerge] %s:(%3.0f%%) %s\u000a
+p395
 sI41
 VNu wordt de cache gecontrolleerd op %s programmadetails voor %s(xmltvid=%s%s)\u000a
-p389
+p396
 sI42
 VNu worden de details voor %s programma's op %s(xmltvid=%s%s) opgehaald\u000a
-p390
+p397
 sI43
 V    (zender %s van %s) voor %s dagen.\u000a
-p391
-ssg265
-(dp392
+p398
+ssg271
+(dp399
 g34
 g34
 sI1
 V  %s.json wordt gedownload ...\u000a
-p393
+p400
 ssg7
-(dp394
+(dp401
 I1
 VDetail statistieken voor %s (zender %s van %s)\u000a
-p395
+p402
 sI2
 V%6.0f cache vonst(en)\u000a
-p396
+p403
 sI3
 V%6.0f zonder details in de cache\u000a
-p397
+p404
 sI4
 V%6.0f succesvolle ttvdb.com verwijzingen\u000a
-p398
+p405
 sI5
 V%6.0f   misluktte ttvdb.com verwijzingen\u000a
-p399
+p406
 sI6
 V%6.0f detail pagina('s) opgehaald van %s.\u000a
-p400
+p407
 sI7
 V%6.0f mislukking(en)\u000a
-p401
+p408
 sI8
 V%6.0f zonder detail info\u000a
-p402
+p409
 sI9
 V%6.0f resterend in de %s queue om te verwerken\u000a
-p403
+p410
 sI10
 V%6.0f uitgesloten door het genre filter\u000a
-p404
+p411
 ssg35
-(dp405
+(dp412
 I1
 Vget_page duurt te lang (>%s s): %s\u000a
-p406
+p413
 sI2
 VEen onverwachte fout "%s:%s" is opgetreden bij het ophalen van: %s\u000a
-p407
+p414
 sI3
 VKan de url %s niet openen.\u000a
-p408
+p415
 sI4
 VKan de pagina niet lezen. %s: code=%s\u000a
-p409
+p416
 sI5
 VDe url: %s gaf een JSON fout: %s\u000a
-p410
+p417
 sI11
 VFout bij het verwerken van de %s-functie %s voor bron %s\u000a
-p411
+p418
 sI12
 VDe geleverde data was: %s\u000a
-p412
+p419
 sI13
 VEr is een fout "%s" opgetreden bij het inlezen van een DataTree\u000a
-p413
+p420
 sI14
 VEr is een fout: "%s"\u000a   opgetreden bij het inlezen van een %s DataTree voor %s\u000a
-p414
+p421
 sI19
 VDe verwerking van de IDs: %s op TheTVDB duurt te lang.\u000a
-p415
+p422
 sI20
 VZender %s lijkt op %s verloren ttvdb verzoeken te wachten.\u000a
-p416
+p423
 sI21
 VZender %s lijkt op %s verloren detail verzoeken te wachten.\u000a
-p417
+p424
 sI22
 VWe annuleren en stellen het als klaar.\u000a
-p418
+p425
 sI23
 VFout bij het verwerken van de detail-pagina: %s\u000a
-p419
+p426
 sI24
 VFout bij het verwerken van de detail2-pagina: %s\u000a
-p420
+p427
 sI25
 VFout bij het ophalen van de %s URL voor bron: %s uit de json data_def\u000a
-p421
+p428
 sI26
 VFout bij het lezen van de %s-pagina: %s\u000a
-p422
+p429
 sI27
 VDe juiste datum van de: %s pagina kan niet worden vastgesteld.\u000a
-p423
+p430
 sI28
 VSla zender %s op %s!, dag=%d over. Verkeerde datum!\u000a
-p424
+p431
 sI29
 VEen onverwachte fout bij het ophalen van de %s-pagina van: %s\u000a
-p425
+p432
 sI30
 VHet is onmogelijk om zender informatie van %s te verkrijgen\u000a
-p426
+p433
 sI31
 VEen fatale fout bij het verwerken van de basis-pagina's van %s\u000a
-p427
+p434
 sI32
 VWe stellen dat ze allemaal binnen zijn en laten de andere bronnen de taak voltooien.\u000a
-p428
+p435
 sI33
 VKan de programma titel van "%s" op zender: %s, van bron: %s niet bepalen.\u000a
-p429
+p436
 sI34
 VKan de programma tijd van "%s" op zender: %s, van bron: %s niet bepalen.\u000a
-p430
+p437
 sI35
 VDe pagina %s leverde geen data op\u000a
-p431
+p438
 sI36
 VVerwijder "%s" van "%s"\u000a
-p432
+p439
 sI37
 VDe titel "%s" wordt gesplitst\u000a
-p433
+p440
 sI38
 VHernoem "%s" naar "%s"\u000a
-p434
+p441
 sI39
 V%s gaf een lege pagina voor zender: %s.\u000a    We gaan er van uit dat de rest ook leeg is!\u000a
-p435
+p442
 sI51
 VGeen data van %s voor zender: %s\u000a
-p436
+p443
 sI52
 VDe detail bron: %s is gestopt.\u000a
-p437
+p444
 sI53
 VDus we stoppen met wachten voor de onderhanden detailverzoeken voor %s\u000a
-p438
+p445
 sI54
 V en %s
-p439
+p446
 sI55
 V%s is gestopt voordat het de %s zender data heeft vrijgegeven. We stoppen met wachten!\u000a
-p440
+p447
 sssVIO
-p441
-(dp442
-g265
-(dp443
+p448
+(dp449
+g271
+(dp450
 I1
 VDe Database wordt gecontroleerd.\u000a
-p444
+p451
 sI2
 VWe wachten op alle overgebleven programma-threads om af te sluiten.\u000a
-p445
+p452
 ssg35
-(dp446
+(dp453
 I1
 VHet bestand: "%s" is niet gevonden of kon niet worden geopend.\u000a
-p447
+p454
 sI2
 V%s is niet met %s gecodeerd.\u000a
-p448
+p455
 sI3
 V%s heeft een ongeldige codering %s.\u000a
-p449
+p456
 sI10
 VWanneer je hulp wilt, voeg dan ajb je configuratie en log bestanden bij!\u000a
-p450
+p457
 sI11
 VEen onverwachte fout is opgetreden in de %s thread:\u000a
-p451
+p458
 sI12
 VEen onverwachte fout is opgetreden:\u000a
-p452
+p459
 sI13
 VEen onbekend log-bericht: %s van type %s\u000a
-p453
+p460
 sI14
 Vbij het verzamelen van de basis-pagina's\u000a
-p454
+p461
 sI15
 VDe huidige detail url is: %s\u000a
-p455
+p462
 sI16
 Vbij het ophalen van de detail pagina's\u000a
-p456
+p463
 sI20
 VEr is geen cache bestand opgegeven. De cache functionaliteit wordt uitgeschakeld!\u000a
-p457
+p464
 sI21
 VDe cache folder is niet toegankelijk. De cache functionaliteit wordt uitgeschakeld!\u000a
-p458
+p465
 sI22
 VEen fout bij het laden van de database: %s.db (mogelijke corruptie)\u000a
-p459
+p466
 sI23
 VWe proberen de backup te laden
-p460
+p467
 sI24
 VHet laden van de database: %s.db is mislukt\u000a
-p461
+p468
 sI25
 VDe cache functionaliteit wordt uitgeschakeld
-p462
+p469
 sI26
 VDatabase Fout\u000a
-p463
+p470
 sssVttvdb
-p464
-(dp465
+p471
+(dp472
 Vfrontend
-p466
-(dp467
+p473
+(dp474
 I0
 g34
 sI1
 VDe serie "%s" is al opgeslagen met ttvdbID: %s -> %s
-p468
+p475
 sI2
 V    voor de talen: (%s)\u000a
-p469
+p476
 sI3
 VDe serie "%s" is nog niet bekend!\u000a
-p470
+p477
 sI4
 VEr is geen verwijzing voor %s gevonden op theTVDB.com
-p471
+p478
 sI5
 VtheTVDB Zoek resultaten:
-p472
+p479
 sI6
 VGeef een keuze (eerste nummer, q om te annuleren):
-p473
+p480
 sI7
 VVerwijder het oude record
-p474
+p481
 sI8
 V"%s" met de aliassen "%s" en "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p475
+p482
 sI9
 V"%s" met alias "%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p476
+p483
 sI10
 V"%s" wordt onder ttvdbID: %s aan de database toegevoegd!
-p477
+p484
 sI11
 V\u000aHet "%s" bestand voor "%s" id = %s met %s episodes wordt opgehaald!\u000a
-p478
+p485
 sI12
 V  Episode %4.0f van %s wordt verwerkt\u000a
-p479
+p486
 sI13
 V    Wil je dit vervangen met %s ("%s")? <y/n>\u000a
-p480
+p487
 sI14
 VHet opgegeven ttvdbid %s is onbekend op theTVDB.com!
-p481
+p488
 sI15
 VDruk ajb op y of op n.
-p482
+p489
 sI16
 V    Wil je het toevoegen als %s ("%s")? <y/n>\u000a
-p483
+p490
 ssg35
-(dp484
+(dp491
 I16
 VEr is geen episode data voor %s gevonden op theTVDB.com\u000a
-p485
+p492
 sI1
 VSorry, thetvdb.com is uitgeschakeld!\u000a
-p486
+p493
 sI2
 VSvp geef een serie titel!\u000a
-p487
+p494
 sI3
 VOngeldige taalcode: "%s" gegeven. "en" wordt gebruikt\u000a
-p488
+p495
 sI11
 VFout bij het ophalen van een ID van theTVdb.com\u000a
-p489
+p496
 sI12
 VFout bij het ophalen van de afleveringen van theTVDB.com\u000a
-p490
+p497
 sI13
 V   Geen ttvdb id voor "%s" op zender %s\u000a
-p491
+p498
 sI14
 Vttvdb verwijzing voor "%s: %s"\u000a
-p492
+p499
 sI15
 Vttvdb mislukking voor "%s: %s" op zender %s\u000a
-p493
+p500
 ssssVversion
-p494
+p501
 (I1
 I0
 I0
-tp495
+tp502
 sVlanguage
-p496
+p503
 VNederlands
-p497
+p504
 s.

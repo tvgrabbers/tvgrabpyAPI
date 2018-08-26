@@ -171,6 +171,8 @@ def load_texts():
                 47: u'Give the language to use for system and log messages.\n' + \
                     'At present "en" (default) or "nl"',
                 48: u'Only use data from the cache.',
+                49: u'empties the program table for the given source',
+                50: u'empties the program table for the given channel',
                 100: u'  A testmodule to test sourcefiles.\n' + \
                     '  You can also set the variables in:%s/.json_struct/tv_grab_test.conf',
                 101: u'name of the grabber and config to test\n' + \
@@ -370,11 +372,14 @@ def load_texts():
                 195: u'# 1 only does look-ups for series with partial missing season/episode info.\n',
                 196: u'# 2 includes all that at least have an episode title.\n',
                 197: u'# 3 includes all series.',
-                201: u'# These are lists list of the genres to treat as series, movie and sports genre\n',
-                202: u'# It is used f.i. to identify a programme for ttvdb lookup and for name manipulations\n',
-                203: u'# like title spliting to get an episode title.\n',
-                204: u'# Some defaults are added by the maintainer, you can not delete.\n',
-                205: u''
+                198: u'# The pre_merge option is only relevant for sources that need data from\n',
+                199: u'# a detail page to establish proper timings AND are set as prime_source.\n',
+                200: u'# As this can lengthen the grab, you can disable it here or for a single channel.\n',
+                211: u'# These are lists list of the genres to treat as series, movie and sports genre\n',
+                212: u'# It is used f.i. to identify a programme for ttvdb lookup and for name manipulations\n',
+                213: u'# like title spliting to get an episode title.\n',
+                214: u'# Some defaults are added by the maintainer, you can not delete.\n',
+                215: u''
                 },
             u'mergeinfo':{
                 1: u'We merged %s into %s\n',
@@ -515,6 +520,7 @@ def load_texts():
                 32: u'[%s fetch] %s:(%3.0f%%) %s\n',
                 33: u'      [cached] %s:(%3.0f%%) %s\n',
                 34: u'    [no fetch] %s:(%3.0f%%) %s\n',
+                35: u'[%s premerge] %s:(%3.0f%%) %s\n',
                 41: u'Now Checking cache for %s programs on %s(xmltvid=%s%s)\n',
                 42: u'Now fetching details for %s programs on %s(xmltvid=%s%s)\n',
                 43: u'    (channel %s of %s) for %s days.\n',
