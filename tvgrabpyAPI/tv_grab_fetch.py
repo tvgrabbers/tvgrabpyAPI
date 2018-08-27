@@ -210,7 +210,6 @@ class Functions():
         conv_dd = DD_Convert(self.config,
                         warngoal = self.config.logging.log_queue,
                         caller_id = source)
-
         if source == self.json_id or self.config.test_modus:
             local_name = name
 
@@ -274,12 +273,12 @@ class Functions():
                     (isinstance(page, (str, unicode)) and \
                         ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
                     self.update_counter('failjson', source)
-                    if isinstance(version, int):
+                    if source != self.json_id:
                         return None
 
                 else:
                     self.raw_json[name] = fu.url_text
-                    if version == None:
+                    if source == self.json_id:
                         return page
 
                     for v in range(1, version+1):
@@ -290,11 +289,11 @@ class Functions():
                     return conv_dd.csource_data
 
             except:
-                if isinstance(version, int):
+                if source != self.json_id:
                     return None
 
         # And for the two mainfiles we try to fall back to the library location
-        if version == None:
+        if source == self.json_id:
             try:
                 fle = self.config.IO_func.open_file('%s/%s.json' % (self.config.source_dir, name), 'r', 'utf-8')
                 if fle != None:
@@ -1929,7 +1928,7 @@ class FetchData(URLtypes, Thread):
     contains a dictionary with program information.
     It runs as a separate thread for every source
     """
-    def __init__(self, config, proc_id, source_data, cattrans_type = None):
+    def __init__(self, config, proc_id, **source_data):
         self.source_data = source_data
         self.source = self.data_value('name', str)
         Thread.__init__(self, name = 'source-%s'% self.source)
@@ -1984,7 +1983,7 @@ class FetchData(URLtypes, Thread):
         self.raw_output = self.test_output
         self.data_output = self.test_output
         self.new_cattrans = None
-        self.cattrans_type = cattrans_type
+        self.cattrans_type = self.source_data.get('cattrans_type', None)
         self.detail_keys = []
         self.data = None
         self.rawdata = None
@@ -1993,10 +1992,10 @@ class FetchData(URLtypes, Thread):
         self.datatrees = {}
         try:
             self.config.sourceid_by_name[self.source] = self.proc_id
-            self.language = self.source_data['language']
-            self.is_virtual = self.source_data['is_virtual']
-            self.detail_processor = self.source_data['detail_processor']
-            self.site_tz = self.source_data['site-tz']
+            self.language = self.source_data.get('language', 'en')
+            self.is_virtual = self.source_data.get('is_virtual', False)
+            self.detail_processor = self.source_data.get('detail_processor', False)
+            self.site_tz = self.source_data.get('site-tz', pytz.utc)
             if self.detail_processor:
                 if self.proc_id not in self.config.detail_sources:
                     self.detail_processor = False

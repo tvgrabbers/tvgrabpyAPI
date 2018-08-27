@@ -546,7 +546,7 @@ class Configure:
 
     def init_sources(self, sid = None):
         """Initialize the sources named in sourcematching"""
-        def disable_source(s, byversion=False, sdata=None, ctype=None):
+        def disable_source(s, byversion=False, ctype=None, **sdata):
             # Disable the source as no data file is supplied
             self.validate_option('disable_source', value = s)
             if byversion:
@@ -555,7 +555,7 @@ class Configure:
             else:
                 self.log(self.text('config', 1,(s, )))
 
-            self.channelsource[s] = tv_grab_fetch.FetchData(self, s, sdata, ctype)
+            self.channelsource[s] = tv_grab_fetch.FetchData(self, s, cattrans_type=ctype, **sdata)
             if s in self.source_order[:]:
                 self.source_order.remove(s)
 
@@ -599,7 +599,7 @@ class Configure:
                 return
 
             if self.version(API=True)[1:4] < sdata['api-version']:
-                disable_source(sid, True, sdata, ctype)
+                disable_source(sid, True, ctype, **sdata)
                 return
 
             elif sid in self.opt_dict['disable_source']:
@@ -608,10 +608,10 @@ class Configure:
 
             else:
                 if self.version(API=True)[1:4]  in sdata['disable for api']:
-                    disable_source(sid, True, sdata, ctype)
+                    disable_source(sid, True, ctype, **sdata)
                     return
 
-            self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, sdata, ctype)
+            self.channelsource[sid] = tv_grab_fetch.FetchData(self, sid, cattrans_type=ctype, **sdata)
             if ctype == None:
                 return self.channelsource[sid]
 
