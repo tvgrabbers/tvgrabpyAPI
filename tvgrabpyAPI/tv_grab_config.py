@@ -582,15 +582,18 @@ class Configure:
             if s not in self.prime_source_order:
                 self.prime_source_order.append(s)
 
-        def init_source(sid, v):
-            if not 'json file' in v:
+        def init_source(sid, **v):
+            if not 'json file' in v.keys():
                 disable_source(sid)
                 return
 
-            dversion = data_value('version', v, int, 0)
-            jurl = data_value("json_url", v, str, self.source_url)
             ctype = data_value('cattrans type', v, int, None)
-            sdata = self.fetch_func.get_json_data(v['json file'], dversion, sid, jurl, self.opt_dict['sources'], ctype)
+            sdata = self.fetch_func.get_json_data(v['json file'],
+                            version = data_value('version', v, int, 0),
+                            source = sid,
+                            url = data_value("json_url", v, str, self.source_url),
+                            fpath = self.opt_dict['sources'],
+                            ctype = ctype)
             if sdata == None:
                 disable_source(sid)
                 return
@@ -627,10 +630,10 @@ class Configure:
 
         if sid == None:
             for s, v in self.sources.items():
-                init_source(s, v)
+                init_source(s, **v)
 
         elif sid in self.available_sources:
-            return init_source(sid, self.sources[sid])
+            return init_source(sid, **self.sources[sid])
 
     # end init_sources()
 
@@ -712,6 +715,7 @@ class Configure:
 
         if self.args.only_cache:
             self.opt_dict['only_cache'] = True
+            self.opt_dict['pre_merge'] = False
             self.args.fast = True
             self.args.slowdays  = 0
 
@@ -1199,10 +1203,11 @@ class Configure:
                 self.opt_dict['disable_ttvdb'] = True
                 return
 
-            jfile = data_value([value, 'json file'], self.ttvdb_json, str)
-            dversion = data_value([value, 'version'], self.ttvdb_json, int, 0)
-            jurl = data_value([value, 'json_url'], self.ttvdb_json, str, self.source_url)
-            sdata = self.fetch_func.get_json_data(jfile, dversion, self.ttvdb1_id, jurl, self.opt_dict['sources'])
+            sdata = self.fetch_func.get_json_data(data_value([value, 'json file'], self.ttvdb_json, str),
+                            version = data_value([value, 'version'], self.ttvdb_json, int, 0),
+                            source = self.ttvdb1_id,
+                            url = data_value([value, 'json_url'], self.ttvdb_json, str, self.source_url),
+                            fpath = self.opt_dict['sources'])
             if sdata == None:
                 self.opt_dict['disable_ttvdb'] = True
                 return
@@ -2056,7 +2061,8 @@ class Configure:
                 pass
 
             try:
-                githubdata = self.fetch_func.get_json_data('tv_grab_API', fpath = self.opt_dict['sources'])
+                githubdata = self.fetch_func.get_json_data('tv_grab_API',
+                                fpath = self.opt_dict['sources'])
                 if not isinstance(githubdata, dict):
                     log_failure()
                     return 2
@@ -2120,7 +2126,9 @@ class Configure:
             return 2
 
         try:
-            githubdata = self.fetch_func.get_json_data(grabber_file, url = self.source_url, fpath = self.opt_dict['sources'])
+            githubdata = self.fetch_func.get_json_data(grabber_file,
+                            url = self.source_url,
+                            fpath = self.opt_dict['sources'])
             if not isinstance(githubdata, dict):
                 log_failure()
                 return 2

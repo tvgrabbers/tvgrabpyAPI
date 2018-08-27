@@ -204,21 +204,30 @@ class Functions():
             return (dte.dtTimeoutError, None, fu.status_code)
     # end get_page()
 
-    def get_json_data(self, name, version = None, source = None, url = None, fpath = None, ctype = None):
-        if source == None:
-            source = self.json_id
+    def get_json_data(self, name, **data):
+        source = data.get('source', self.json_id)
+        fpath = data.get('fpath', None)
+        conv_dd = DD_Convert(self.config,
+                        warngoal = self.config.logging.log_queue,
+                        caller_id = source)
 
-        conv_dd = DD_Convert(self.config, warngoal = self.config.logging.log_queue, caller_id = source)
-        local_name = '%s.%s' % (name, version) if isinstance(version, int) and not self.config.test_modus else name
+        if source == self.json_id or self.config.test_modus:
+            local_name = name
+
+        else:
+            version = data.get('version', 0)
+            ctype = data.get('ctype', None)
+            local_name = '%s.%s' % (name, version)
+
         self.raw_json[name] = ''
         # Try to find the source files locally
-        if self.config.test_modus:
+        if self.config.test_modus or (self.config.only_local_sourcefiles and source == self.json_id):
             try:
                 if fpath != None:
                     fle = self.config.IO_func.open_file('%s/%s.json' % (fpath, name), 'r', 'utf-8')
                     if fle != None:
                         data = json.load(fle)
-                        if isinstance(version, int):
+                        if source != self.json_id:
                             conv_dd.convert_sourcefile(data, ctype)
                             return conv_dd.csource_data
 
@@ -230,15 +239,17 @@ class Functions():
             except:
                 self.config.log(traceback.print_exc())
 
-        elif isinstance(version, int) or self.config.only_local_sourcefiles:
-            # We try to get the converted pickle in the supplied location, but check that it is of the right dt version and date
+        elif source != self.json_id:
+            # We try to get the converted pickle in the supplied location,
+            # but check that it is of the right dt version and date
             try:
                 if fpath != None:
                     fn = '%s/%s.bin' % (fpath, local_name)
                     if os.path.isfile(fn) and datetime.date.fromtimestamp(os.stat(fn).st_mtime) >= self.config.dtdate:
                         fle = self.config.IO_func.read_pickle(fn)
                         if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion() \
-                            and data_value(["tvgversion"], fle, tuple, None) == tuple(self.config.version(False, True)[1:4]):
+                            and data_value(["tvgversion"], fle, tuple, None) == \
+                                tuple(self.config.version(False, True)[1:4]):
                             return fle
 
             except:
@@ -250,10 +261,7 @@ class Functions():
                 txtheaders = {'Keep-Alive' : '300',
                               'User-Agent' : self.config.user_agents[random.randint(0, len(self.config.user_agents)-1)] }
 
-                if url in (None, u''):
-                    url = self.config.api_source_url
-
-                url = '%s/%s.json' % (url, name)
+                url = '%s/%s.json' % (data.get('url', self.config.api_source_url), name)
                 self.config.log(self.config.text('fetch', 1,(name, ), 'other'), 1)
                 fu = FetchURL(self.config, url, None, txtheaders, 'utf-8', True)
                 self.max_fetches.acquire()
@@ -262,7 +270,9 @@ class Functions():
                 fu.join(self.config.opt_dict['global_timeout']+1)
                 page = fu.result
                 self.max_fetches.release()
-                if (page == None) or (page =={}) or (isinstance(page, (str, unicode)) and ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
+                if (page == None) or (page =={}) or \
+                    (isinstance(page, (str, unicode)) and \
+                        ((re.sub('\n','', page) == '') or (re.sub('\n','', page) =='{}'))):
                     self.update_counter('failjson', source)
                     if isinstance(version, int):
                         return None
@@ -1149,7 +1159,7 @@ class theTVDB_v1(Thread):
             self.functions.sleep()
 
         self.lastquery = self.config.in_output_tz('now')
-        if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.args.only_cache:
+        if not ptype in self.datatrees.keys() or not isinstance(pdata, dict) or self.config.opt_dict['only_cache']:
             return
 
         # A request must either contain a name or an ID
@@ -1436,7 +1446,7 @@ class theTVDB_v1(Thread):
             elif new_fetch == False:
                 return {'state': 1, 'tid': tid, 'tdate': last_updated, 'name': name}
 
-            elif new_fetch and not self.config.args.only_cache:
+            elif new_fetch and not self.config.opt_dict['only_cache']:
                 data = self.query_ttvdb('last_updated', { 'ttvdbid': tid, 'lang': lang})
                 if is_data_value([0, 'last updated'], data, datetime.datetime) and \
                     data_value([0, 'last updated'], data, datetime.datetime).date() < last_updated:
@@ -1459,7 +1469,7 @@ class theTVDB_v1(Thread):
 
         try:
             aliasses = [series_name.lower(), name.lower()]
-            if tid == 0 and not self.config.args.only_cache:
+            if tid == 0 and not self.config.opt_dict['only_cache']:
                 (tid, lu) = get_tid('from ttvdb')
 
             if tid == 0:
@@ -1958,6 +1968,7 @@ class FetchData(URLtypes, Thread):
         self.chan_count = 0
         self.fetch_ordinal = None
         self.site_tz = self.config.utc_tz
+        self.offset_shift = 0
         self.item_count = 0
         self.current_item_count = 0
         self.total_item_count = 0
@@ -3125,7 +3136,7 @@ class FetchData(URLtypes, Thread):
         max_fetch_days = 6
         max_failure_count = 4
         # Just process the days retrieved from the cache
-        if self.config.args.only_cache:
+        if self.config.opt_dict['only_cache']:
             for channelid, chanid in self.chanids.items():
                 if do_final_processing(channelid) == -1:
                     return -1
