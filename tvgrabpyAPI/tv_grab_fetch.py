@@ -3439,7 +3439,12 @@ class FetchData(URLtypes, Thread):
                                     failure_count += 1
                                     continue
 
-                                self.parse_basepage(strdata, offset = offset + self.offset_shift, channelid = channelid)
+                                if self.getsoneday(url_type):
+                                    self.parse_basepage(strdata, offset = offset + self.offset_shift, channelid = channelid)
+
+                                else:
+                                    self.parse_basepage(strdata, offset = offset, channelid = channelid)
+
                                 if self.getsoneday(url_type):
                                     self.set_loaded('day', channelid, offset)
 
@@ -3504,7 +3509,11 @@ class FetchData(URLtypes, Thread):
                                 continue
 
                             self.set_loaded('day', 0, offset)
-                            self.parse_basepage(strdata, offset = offset + self.offset_shift)
+                            if self.getsoneday(url_type):
+                                self.parse_basepage(strdata, offset = offset + self.offset_shift)
+
+                            else:
+                                self.parse_basepage(strdata, offset = offset)
 
                     if failure_count == 0 or retry == 1:
                         for channelid, chanid in self.chanids.items():
@@ -3562,7 +3571,8 @@ class FetchData(URLtypes, Thread):
                                     continue
 
                                 channelids = self.parse_basepage(strdata,
-                                    channelgrp = channelgrp, offset = offset + self.offset_shift)
+                                                channelgrp = channelgrp,
+                                                offset = offset + self.offset_shift)
                                 if isinstance(channelids, list):
                                     self.set_loaded('day', channelids, offset)
 
