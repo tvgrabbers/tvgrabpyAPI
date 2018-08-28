@@ -799,6 +799,15 @@ class Configure:
         if option == 'version':
             print("%s: %s" % (self.country, self.version(True)))
             print("The Netherlands: %s" % self.version(True, True))
+            if dtversion()[6]:
+                print("The Netherlands: %s   (Version: %s.%s.%s -p%s-alfa)" % dtversion()[:5])
+
+            elif dtversion()[5]:
+                print("The Netherlands: %s   (Version: %s.%s.%s -p%s-beta)" % dtversion()[:5])
+
+            else:
+                print("The Netherlands: %s   (Version: %s.%s.%s -p%s)" % dtversion()[:5])
+
             return(0)
 
         elif option == 'description':
@@ -2664,6 +2673,15 @@ class Configure:
         log_array = [u'Python version: %s.%s.%s' % (sys.version_info[0], sys.version_info[1], sys.version_info[2])]
         log_array.append(u"%s: %s" % (self.country, self.version(True)))
         log_array.append(u"The Netherlands: %s" % self.version(True, True))
+        if dtversion()[6]:
+            log_array.append(u"The Netherlands: %s   (Version: %s.%s.%s -p%s-alfa)" % dtversion()[:5])
+
+        elif dtversion()[5]:
+            log_array.append(u"The Netherlands: %s   (Version: %s.%s.%s -p%s-beta)" % dtversion()[:5])
+
+        else:
+            log_array.append(u"The Netherlands: %s   (Version: %s.%s.%s -p%s)" % dtversion()[:5])
+
         log_array.append(u"%s: %s" % (self.text('config', 7, type = 'other'), self.language))
         log_array.append(u'Capabilities:"baseline" ,"cache" ,"manualconfig" ,"preferredmethod")')
         log_array.append(u'Preferred Methode: "allatonce"')

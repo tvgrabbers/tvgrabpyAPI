@@ -1243,10 +1243,8 @@ class ProgramCache(Thread):
             try:
                 self.pconn = sqlite3.connect(database=self.filename + '.db', isolation_level=None, detect_types=sqlite3.PARSE_DECLTYPES)
                 self.pconn.row_factory = sqlite3.Row
-                pcursor = self.pconn.cursor()
                 self.functions.log(self.config.text('IO', 1, type = 'other'))
-                pcursor.execute("PRAGMA main.integrity_check")
-                if pcursor.fetchone()[0] == 'ok':
+                if self.fetchone("PRAGMA main.integrity_check")[0] == 'ok':
                     # Making a backup copy
                     self.pconn.close()
                     if os.path.isfile(self.filename +'.db.bak'):
@@ -1255,7 +1253,6 @@ class ProgramCache(Thread):
                     shutil.copy(self.filename + '.db', self.filename + '.db.bak')
                     self.pconn = sqlite3.connect(database=self.filename + '.db', isolation_level=None, detect_types=sqlite3.PARSE_DECLTYPES)
                     self.pconn.row_factory = sqlite3.Row
-                    pcursor = self.pconn.cursor()
                     break
 
                 if try_loading == 0:
@@ -1294,10 +1291,9 @@ class ProgramCache(Thread):
                 return
 
         try:
-            pcursor.execute("PRAGMA main.synchronous = OFF")
-            pcursor.execute("PRAGMA main.temp_store = MEMORY")
-            pcursor.execute("PRAGMA main.table_info('ttvdbint')")
-            if len(pcursor.fetchall()) == 0:
+            self.execute("PRAGMA main.synchronous = OFF")
+            self.execute("PRAGMA main.temp_store = MEMORY")
+            if len(self.fetchall("PRAGMA main.table_info('ttvdbint')")) == 0:
                 # Itś an old ttvdb table structure we clear it
                 for t in self.request_list['clearttvdb']:
                     self.clear(t)
@@ -1308,8 +1304,7 @@ class ProgramCache(Thread):
                     print t
 
                 # (cid, Name, Type, Nullable = 0, Default, Pri_key index)
-                pcursor.execute("PRAGMA main.table_info('%s')" % (t,))
-                trows = pcursor.fetchall()
+                trows = self.fetchall("PRAGMA main.table_info('%s')" % (t,))
                 if len(trows) == 0:
                     # Table does not exist
                     self.create_table(t)
@@ -1328,8 +1323,12 @@ class ProgramCache(Thread):
 
             # We add if not jet there some defaults
             for a, t in self.config.ttvdb_ids.items():
-                if self.query('ttvdb_alias', alias=a) == None:
-                    self.add('ttvdb_alias', {'tid': t['tid'], 'name': t['name'], 'alias': a, 'tdate': None})
+                if self.query('ttvdb_alias', alias = a) == None:
+                    self.add('ttvdb_alias',
+                                    {'tid': t['tid'],
+                                    'name': t['name'],
+                                    'alias': a,
+                                    'tdate': None})
 
         except:
             self.functions.log([self.config.text('IO', 24, (self.filename, )), traceback.format_exc(), self.config.text('IO', 25)])
@@ -1395,11 +1394,9 @@ class ProgramCache(Thread):
                     self.execute(u"ALTER TABLE %s ADD %s" % (table, self.get_column_string(table, fld)))
 
     def check_indexes(self, table):
-        pcursor = self.pconn.cursor()
         # (id, name, UNIQUE, c(reate)/u(nique)/p(rimary)k(ey), Partial)
-        pcursor.execute("PRAGMA main.index_list(%s)" % (table,))
         ilist = {}
-        for r in pcursor.fetchall():
+        for r in self.fetchall("PRAGMA main.index_list(%s)" % (table,)):
             if (len(r) > 3 and r[3].lower() == 'pk') \
               or r[1][:17] == 'sqlite_autoindex_':
                 ilist['%s_primary' % table.lower()] = r
@@ -1416,9 +1413,8 @@ class ProgramCache(Thread):
                 # Adding Index field test
                 if self. print_data_structure:
                     print '    ', ilist[iname]
-                    pcursor.execute("PRAGMA main.index_info(%s)" % (ilist[iname][1],))
                     iflds = {}
-                    for r in pcursor.fetchall():
+                    for r in self.fetchall("PRAGMA main.index_info(%s)" % (ilist[iname][1],)):
                         print '      ', r
 
     def add_index(self, table, index):
@@ -1433,7 +1429,7 @@ class ProgramCache(Thread):
         istring = u"CREATE%s INDEX IF NOT EXISTS '%s' ON %s" % (ustring, iname, table)
         psplit = u" ("
         for fld in self.get_ifields(table, index):
-            istring += u"%s`%s`"% (psplit, fld)
+            istring += u"%s`%s`" % (psplit, fld)
             psplit = u", "
 
         self.execute(u"%s)" % (istring))
@@ -1468,18 +1464,18 @@ class ProgramCache(Thread):
                         qanswer = None
 
                     else:
-                        for t in crequest.keys():
+                        for t, v in crequest.items():
                             if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
-                                if crequest['task'] == 'query':
-                                    self.state = 3
-                                    qanswer = self.query(t, **crequest[t])
-
+                                self.state = 3
+                                qanswer = self.query(t, **v)
                                 # Because of queue count integrety you can do only one query per call
                                 break
 
-                            else:
-                                qanswer = None
+                            elif t not in ('task', 'parent', 'queue', 'confirm') and self.config.write_info_files:
+                                self.config.infofiles.add_sql('Unknown request', crequest['task'], t, v)
 
+                        else:
+                            qanswer = None
                     if 'queue' in crequest.keys():
                         crequest['queue'].put(qanswer)
 
@@ -1494,26 +1490,35 @@ class ProgramCache(Thread):
                     continue
 
                 if crequest['task'] == 'add':
-                    for t in crequest.keys():
+                    for t, v in crequest.items():
                         if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            if isinstance(crequest[t], (list, tuple)):
-                                self.add(t, *crequest[t])
+                            if isinstance(v, (list, tuple)):
+                                self.add(t, *v)
 
                             else:
-                                self.add(t, crequest[t])
+                                self.add(t, v)
+
+                        elif t not in ('task', 'parent', 'queue', 'confirm') and self.config.write_info_files:
+                            self.config.infofiles.add_sql('Unknown request', crequest['task'], t, v)
 
                 if crequest['task'] == 'update':
-                    for t in crequest.keys():
+                    for t, v in crequest.items():
                         if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            self.update(t, **crequest[t])
+                            self.update(t, **v)
+
+                        elif t not in ('task', 'parent', 'queue', 'confirm') and self.config.write_info_files:
+                            self.config.infofiles.add_sql('Unknown request', crequest['task'], t, v)
 
                 if crequest['task'] == 'delete':
-                    for t in crequest.keys():
+                    for t, v in crequest.items():
                         if t in self.request_list[crequest['task']] or t in self.table_definitions.keys():
                             self.state = 3
-                            self.delete(t, **crequest[t])
+                            self.delete(t, **v)
+
+                        elif t not in ('task', 'parent', 'queue', 'confirm') and self.config.write_info_files:
+                            self.config.infofiles.add_sql('Unknown request', crequest['task'], t, v)
 
                 if crequest['task'] == 'clear':
                     if 'table' in crequest:
@@ -1562,16 +1567,13 @@ class ProgramCache(Thread):
         """
         Updates/gets/whatever.
         """
-        pcursor = self.pconn.cursor()
         def get_ttvdbcredits(*data):
             pp = {}
             for i in data:
-                pcursor.execute(*make_sql('ttvdbcredits',
-                        tid = data_value('tid', i, int, 0),
-                        sid = data_value(['sid'], i, int, -1),
-                        eid = data_value(['eid'], i, int, -1)))
-
-                for r in pcursor.fetchall():
+                for r in self.fetchall(*make_sql('ttvdbcredits',
+                                tid = data_value('tid', i, int, 0),
+                                sid = data_value(['sid'], i, int, -1),
+                                eid = data_value(['eid'], i, int, -1))):
                     if not r[str('title')] in pp.keys():
                         pp[r[str('title')]] = []
 
@@ -1604,6 +1606,9 @@ class ProgramCache(Thread):
 
                         else:
                             sqlstr = '%s `%s`,' % (sqlstr, f)
+
+                    elif self.config.write_info_files:
+                        self.config.infofiles.add_sql('Unknown select Field', table, f)
 
                 if len(sqlstr) == 7:
                     sqlstr = 'SELECT * FROM %s WHERE' % table
@@ -1656,25 +1661,28 @@ class ProgramCache(Thread):
                         sqlstr = '%s `%s` = ? AND' % (sqlstr, k)
                         sqllist.append(v)
 
+                elif self.config.write_info_files:
+                    self.config.infofiles.add_sql('Unknown where Field', table, k, v)
+
             if len(sqllist) == 0:
                 return [sqlstr[:-6]]
 
-            return [sqlstr[:-4], tuple(sqllist)]
-
+            sqlstr = [sqlstr[:-4]]
+            sqlstr.extend(sqllist)
+            return sqlstr
 
         if table == 'icon':
             if item.get('sourceid', None) != None and item.get('chanid', None) != None:
-                pcursor.execute(*make_sql('iconsource', 'icon',
-                        sourceid=item['sourceid'], chanid=item['chanid']))
-                r = pcursor.fetchone()
+                r = self.fetchone(*make_sql('iconsource', 'icon',
+                                sourceid = item['sourceid'],
+                                chanid = item['chanid']))
                 if r == None:
                     return
 
                 return {'sourceid':  item['sourceid'], 'icon': r[0]}
 
             else:
-                pcursor.execute(*make_sql('iconsource', 'chanid', 'sourceid', 'icon'))
-                r = pcursor.fetchall()
+                r = self.fetchall(*make_sql('iconsource', 'chanid', 'sourceid', 'icon'))
                 icons = {}
                 if r != None:
                     for g in r:
@@ -1687,16 +1695,15 @@ class ProgramCache(Thread):
 
         elif table == 'chan_group':
             if item.get('chanid', None) != None:
-                pcursor.execute(*make_sql('channels', 'cgroup', 'name', chanid=item['chanid']))
-                r = pcursor.fetchone()
+                r = self.fetchone(*make_sql('channels', 'cgroup', 'name',
+                                chanid = item['chanid']))
                 if r == None:
                     return
 
                 return {'cgroup':r[0], 'name': r[1]}
 
             else:
-                pcursor.execute(*make_sql('channels', 'chanid', 'cgroup', 'name'))
-                r = pcursor.fetchall()
+                r = self.fetchall(*make_sql('channels', 'chanid', 'cgroup', 'name'))
                 changroups = {}
                 if r != None:
                     for g in r:
@@ -1707,18 +1714,18 @@ class ProgramCache(Thread):
         elif table == 'chan_scid':
             if item.get('sourceid', None) != None:
                 if item.get('chanid', None) != None:
-                    pcursor.execute(*make_sql('channelsource', 'scid', 'fgroup',
-                            sourceid=item['sourceid'], chanid=item['chanid']))
-                    g= pcursor.fetchone()
+                    g = self.fetchone(*make_sql('channelsource', 'scid', 'fgroup',
+                                    sourceid = item['sourceid'],
+                                    chanid = item['chanid']))
                     if g == None:
                         return
 
                     return {'channelid': g[0],'group': g[1]}
 
                 elif item.get('fgroup', None) != None:
-                    pcursor.execute(*make_sql('channelsource', 'scid', 'chanid',
-                            sourceid=item['sourceid'], fgroup=item['fgroup']))
-                    r = pcursor.fetchall()
+                    r = self.fetchall(*make_sql('channelsource', 'scid', 'chanid',
+                                    sourceid = item['sourceid'],
+                                    fgroup = item['fgroup']))
                     fgroup = []
                     if r != None:
                         for g in r:
@@ -1727,9 +1734,8 @@ class ProgramCache(Thread):
                     return fgroup
 
                 else:
-                    pcursor.execute(*make_sql('channelsource', 'scid', 'chanid', 'name',
-                            sourceid=item['sourceid']))
-                    r = pcursor.fetchall()
+                    r = self.fetchall(*make_sql('channelsource', 'scid', 'chanid', 'name',
+                                    sourceid = item['sourceid']))
                     scids = {}
                     if r != None:
                         for g in r:
@@ -1741,17 +1747,15 @@ class ProgramCache(Thread):
                     return scids
 
             elif item.get('chanid', None) != None:
-                pcursor.execute(*make_sql('channelsource', 'sourceid', 'scid', 'fgroup',
-                        chanid=item['chanid']))
-                g= pcursor.fetchone()
+                g = self.fetchone(*make_sql('channelsource', 'sourceid', 'scid', 'fgroup',
+                                        chanid = item['chanid']))
                 if g == None:
                     return
 
                 return {'sourceid': g[0], 'channelid': g[1],'group': g[2]}
 
             else:
-                pcursor.execute(*make_sql('channelsource', 'chanid', 'sourceid', 'scid', 'name', 'hd'))
-                r = pcursor.fetchall()
+                r = self.fetchall(*make_sql('channelsource', 'chanid', 'sourceid', 'scid', 'name', 'hd'))
                 scids = {}
                 if r != None:
                     for g in r:
@@ -1766,8 +1770,8 @@ class ProgramCache(Thread):
             if not 'sourceid'in item.keys():
                 return
 
-            pcursor.execute(*make_sql('sources', 'use_alt_url', sourceid=item['sourceid']))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('sources', 'use_alt_url',
+                            sourceid = item['sourceid']))
             if r == None:
                 return
 
@@ -1777,9 +1781,9 @@ class ProgramCache(Thread):
             if item.get('sourceid', None) == None or item.get('channelid', None) == None:
                 return
 
-            pcursor.execute(*make_sql('fetcheddata',
-                    sourceid=item['sourceid'], channelid=item['channelid']))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('fetcheddata',
+                            sourceid = item['sourceid'],
+                            channelid = item['channelid']))
             if r != None:
                 laststop = r[str('laststop')]
                 if isinstance(laststop, datetime.datetime):
@@ -1795,8 +1799,8 @@ class ProgramCache(Thread):
             if tid == None:
                 return []
 
-            pcursor.execute(*make_sql('ttvdb_alias', 'alias', tid=tid))
-            r = pcursor.fetchall()
+            r = self.fetchall(*make_sql('ttvdb_alias', 'alias',
+                            tid = tid))
             aliasses = []
             if r != None:
                 for a in r:
@@ -1808,8 +1812,8 @@ class ProgramCache(Thread):
             if item.get('alias', None) == None:
                 return False
 
-            pcursor.execute(*make_sql(table, 'tid', 'name', alias=('lower', item[ 'alias'].lower())))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('ttvdb_alias', 'tid', 'name',
+                            alias = ('lower', item[ 'alias'].lower())))
             if r != None:
                 if 'tid' in item.keys():
                     if item['tid'] == r[0]:
@@ -1829,9 +1833,9 @@ class ProgramCache(Thread):
             if tid == None:
                 return []
 
-            pcursor.execute(*make_sql('ttvdbint', 'lang', tid=tid))
             langs = []
-            for r in pcursor.fetchall():
+            for r in self.fetchall(*make_sql('ttvdbint', 'lang',
+                            tid = tid)):
                 langs.append( r[str('lang')])
 
             return langs
@@ -1840,9 +1844,8 @@ class ProgramCache(Thread):
             if item.get('name', None) == None:
                 return []
 
-            pcursor.execute(*make_sql('ttvdb_alias', 'tdate', 'tid', 'name',
-                alias=('lower', item[ 'name'].lower())))
-            tid = pcursor.fetchone()
+            tid = self.fetchone(*make_sql('ttvdb_alias', 'tdate', 'tid', 'name',
+                            alias = ('lower', item[ 'name'].lower())))
             if tid == None:
                 return []
 
@@ -1856,10 +1859,10 @@ class ProgramCache(Thread):
                 return []
 
             tlist = []
-            pcursor.execute(*make_sql('ttvdb JOIN ttvdbint ON ttvdb.tid = ttvdbint.tid', \
+            for r in self.fetchall(*make_sql('ttvdb JOIN ttvdbint ON ttvdb.tid = ttvdbint.tid',
                     ('tid', 'ttvdb'), 'tdate', ('name', 'ttvdbint'), 'lang',
-                    no_validation=True, tid=('', item['tid'], 'ttvdb')))
-            for r in pcursor.fetchall():
+                            no_validation = True,
+                            tid = ('', item['tid'], 'ttvdb'))):
                 tlist.append({'tid': r[0], 'tdate': r[1], 'name': r[2], 'lang': r[3]})
 
             return tlist
@@ -1868,8 +1871,8 @@ class ProgramCache(Thread):
             if item.get('date', None) == None:
                 return
 
-            pcursor.execute(*make_sql('ttvdb', 'tdate', tid=item['date']))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('ttvdb', 'tdate',
+                            tid = item['date']))
             if r == None:
                 return
 
@@ -1890,9 +1893,8 @@ class ProgramCache(Thread):
             if 'lang' in item:
                 qvals['lang'] = item['lang']
 
-            pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+            r = self.fetchall(*make_sql('episodes JOIN episodesint ' + \
                     'ON episodes.tepid = episodesint.tepid', **qvals))
-            r = pcursor.fetchall()
             if len(r) == 0  and data_value(['lang'], item, str) not in ('en', ''):
                 # We try again for english
                 qvals = {'no_validation': True, 'tid': tid, 'lang': 'en'}
@@ -1905,9 +1907,8 @@ class ProgramCache(Thread):
                 if data_value(['abseid'], item, int, -1) >= 0:
                     qvals['abseid'] = item['abseid']
 
-                pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+                r = self.fetchall(*make_sql('episodes JOIN episodesint ' + \
                         'ON episodes.tepid = episodesint.tepid', **qvals))
-                r = pcursor.fetchall()
 
             series = {tid:{}}
             for s in r:
@@ -1939,9 +1940,8 @@ class ProgramCache(Thread):
             tid = data_value('tid', item, int, 0)
             qvals = {'no_validation': True, 'tid': tid,
                 'episode title': ('lower', item['episode title'].lower(), 'episodesint')}
-            pcursor.execute(*make_sql('episodes JOIN episodesint ' + \
+            r = self.fetchall(*make_sql('episodes JOIN episodesint ' + \
                     'ON episodes.tepid = episodesint.tepid', **qvals))
-            r = pcursor.fetchall()
             series = {tid:{}}
             for s in r:
                 tepid = int(s[str('tepid')])
@@ -1973,9 +1973,9 @@ class ProgramCache(Thread):
 
             rval = {}
             if item.get('scandate', None) == None:
-                pcursor.execute(*make_sql(table, 'scandate', 'stored',
-                        sourceid=item['sourceid'], channelid=item['channelid']))
-                for r in pcursor.fetchall():
+                for r in self.fetchall(*make_sql('fetcheddays', 'scandate', 'stored',
+                                sourceid = item['sourceid'],
+                                channelid = item['channelid'])):
                     offset = self.date_to_offset(r[str('scandate')])
                     rval[offset] = r[str('stored')]
 
@@ -1996,9 +1996,10 @@ class ProgramCache(Thread):
                     else:
                         continue
 
-                    pcursor.execute(*make_sql(table, 'stored', scandate=sd,
-                            sourceid=item['sourceid'], channelid=item['channelid']))
-                    r = pcursor.fetchone()
+                    r = self.fetchone(*make_sql('fetcheddays', 'stored',
+                                    scandate = sd,
+                                    sourceid = item['sourceid'],
+                                    channelid = item['channelid']))
                     if r == None:
                         rval[offset] = None
 
@@ -2011,13 +2012,12 @@ class ProgramCache(Thread):
             if item.get('sourceid', None) == None:
                 return
 
-            pcursor.execute(*make_sql(table, sourceid=item['sourceid']))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('sources',
+                            sourceid = item['sourceid']))
             if r == None:
-                self.execute(u"INSERT INTO sources (`sourceid`, `name`) VALUES (?, ? )",
-                    (item['sourceid'], data_value('name', item, str)))
-                pcursor.execute(*make_sql(table, sourceid=item['sourceid']))
-                r = pcursor.fetchone()
+                self.add('sources', item)
+                r = self.fetchone(*make_sql('sources',
+                                sourceid = item['sourceid']))
 
             rv = {}
             for k in r.keys():
@@ -2043,9 +2043,10 @@ class ProgramCache(Thread):
                         elif not isinstance(sd, datetime.date):
                             continue
 
-                        pcursor.execute(*make_sql(table, scandate = sd,
-                                sourceid=item['sourceid'], channelid=item['channelid']))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        scandate = sd,
+                                        sourceid = item['sourceid'],
+                                        channelid = item['channelid'])))
 
             elif "start-time" in item.keys():
                 if isinstance(item["start-time"], datetime.datetime):
@@ -2056,9 +2057,10 @@ class ProgramCache(Thread):
                         if not isinstance(st, datetime.datetime):
                             continue
 
-                        pcursor.execute(*make_sql(table,  **{'start-time': st,
-                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        **{'start-time': st,
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']})))
 
             elif "prog_ID" in item.keys():
                 if isinstance(item["prog_ID"], (str, unicode)):
@@ -2066,9 +2068,10 @@ class ProgramCache(Thread):
 
                 if isinstance(item["prog_ID"], list):
                     for pid in item["prog_ID"]:
-                        pcursor.execute(*make_sql(table, prog_ID=pid,
-                                sourceid=item['sourceid'], channelid=item['channelid']))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        prog_ID = pid,
+                                        sourceid = item['sourceid'],
+                                        channelid = item['channelid'])))
 
             elif "range" in item.keys():
                 if isinstance(item['range'], dict):
@@ -2083,24 +2086,28 @@ class ProgramCache(Thread):
 
                     if 'start' in fr.keys() and isinstance(fr['start'], datetime.datetime) and \
                         'stop' in fr.keys() and  isinstance(fr['stop'], datetime.datetime):
-                        pcursor.execute(*make_sql(table,
-                                **{'start-time': ('le',fr['start']), 'stop-time': ('ge', fr['stop']),
-                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        **{'start-time': ('le',fr['start']),
+                                        'stop-time': ('ge', fr['stop']),
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']})))
 
                     elif 'stop' in fr.keys() and isinstance(fr['stop'], datetime.datetime):
-                        pcursor.execute(*make_sql(table, **{'stop-time': ('ge', fr['stop']),
-                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        **{'stop-time': ('ge', fr['stop']),
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']})))
 
                     elif 'start' in fr.keys() and isinstance(fr['start'], datetime.datetime):
-                        pcursor.execute(*make_sql(table, **{'start-time': ('le', fr['start']),
-                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                        programs.extend(pcursor.fetchall())
+                        programs.extend(self.fetchall(*make_sql('sourceprograms',
+                                        **{'start-time': ('le', fr['start']),
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']})))
 
             else:
-                pcursor.execute(*make_sql(table, sourceid=item['sourceid'], channelid=item['channelid']))
-                programs = pcursor.fetchall()
+                programs = self.fetchall(*make_sql('sourceprograms',
+                                sourceid = item['sourceid'],
+                                channelid = item['channelid']))
 
             programs2 = []
             for p in programs:
@@ -2115,9 +2122,10 @@ class ProgramCache(Thread):
                     else:
                         pp[unicode(key)] = p[key]
 
-                pcursor.execute(*make_sql('credits',  **{'start-time': pp['start-time'],
-                        'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                for r in pcursor.fetchall():
+                for r in self.fetchall(*make_sql('credits',
+                                **{'start-time': pp['start-time'],
+                                'sourceid': item['sourceid'],
+                                'channelid': item['channelid']})):
                     if not r[str('title')] in pp.keys():
                         pp[r[str('title')]] = []
 
@@ -2145,9 +2153,10 @@ class ProgramCache(Thread):
                         if not isinstance(sd, (str, unicode)):
                             continue
 
-                        pcursor.execute(*make_sql(table, prog_ID=sd,
-                                sourceid=item['sourceid'], channelid=item['channelid']))
-                        p = pcursor.fetchone()
+                        p = self.fetchone(*make_sql('programdetails',
+                                        prog_ID = sd,
+                                        sourceid = item['sourceid'],
+                                        channelid = item['channelid']))
                         if p != None:
                             programs.append(p)
 
@@ -2160,15 +2169,17 @@ class ProgramCache(Thread):
                         if not isinstance(st, datetime.datetime):
                             continue
 
-                        pcursor.execute(*make_sql(table,  **{'start-time': st,
-                                'sourceid': item['sourceid'], 'channelid': item['channelid']}))
-                        p = pcursor.fetchone()
+                        p = self.fetchone(*make_sql('programdetails',
+                                        **{'start-time': st,
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']}))
                         if p != None:
                             programs.append(p)
 
             else:
-                pcursor.execute(*make_sql(table,sourceid=item['sourceid'], channelid=item['channelid']))
-                programs = pcursor.fetchall()
+                programs = self.fetchall(*make_sql('programdetails',
+                                sourceid = item['sourceid'],
+                                channelid = item['channelid']))
 
             programs2 = []
             for p in programs:
@@ -2183,9 +2194,10 @@ class ProgramCache(Thread):
                     else:
                         pp[unicode(key)] = p[key]
 
-                pcursor.execute(*make_sql('creditdetails', prog_ID=pp['prog_ID'],
-                        sourceid=item['sourceid'], channelid=item['channelid']))
-                for r in pcursor.fetchall():
+                for r in self.fetchall(*make_sql('creditdetails',
+                                prog_ID = pp['prog_ID'],
+                                sourceid = item['sourceid'],
+                                channelid = item['channelid'])):
 
                     if not r[str('title')] in pp.keys():
                         pp[r[str('title')]] = []
@@ -2204,10 +2216,11 @@ class ProgramCache(Thread):
             if item.get('alias', None) == None:
                 return
 
-            pcursor.execute(*make_sql(table, 'tid', 'name', alias=('lower', item[ 'alias'].lower())))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('ttvdb_alias', 'tid', 'name',
+                            alias = ('lower', item[ 'alias'].lower())))
             if r != None:
-                items = self.query('ttvdbname', tid=r[0])
+                items = self.query('ttvdbname',
+                                tid = r[0])
                 if len(items) == 0:
                     return [{'tid': r[0], 'tdate': None, 'name': r[1], 'lang': None}]
 
@@ -2222,8 +2235,8 @@ class ProgramCache(Thread):
             if tid == None:
                 return []
 
-            pcursor.execute(*make_sql(table, tid=tid))
-            r = pcursor.fetchone()
+            r = self.fetchone(*make_sql('ttvdb',
+                            tid = tid))
             serie = {tid:{}}
             if r != None:
                 for key in r.keys():
@@ -2231,8 +2244,8 @@ class ProgramCache(Thread):
 
                 serie[tid]['name'] = {}
                 serie[tid]['description'] = {}
-                pcursor.execute(*make_sql('ttvdbint', tid=tid))
-                for r in pcursor.fetchall():
+                for r in self.fetchall(*make_sql('ttvdbint',
+                                tid = tid)):
                     lang = r[str('lang')]
                     serie[tid]['name'][lang]  = r[str('name')]
                     serie[tid]['description'][lang]  = r[str('description')]
@@ -2245,8 +2258,7 @@ class ProgramCache(Thread):
         elif table in self.table_definitions.keys():
             select = data_value(['select'], item, list)
             where = data_value(['where'], item, dict)
-            pcursor.execute(*make_sql(table, *select, **where))
-            r = pcursor.fetchall()
+            r = self.fetchall(*make_sql(table, *select, **where))
             retvals = []
             if r != None:
                 for rec in r:
@@ -2282,11 +2294,48 @@ class ProgramCache(Thread):
             return u"%s) %s)" % (sql_flds, sql_cnt)
 
         def make_val_list(tbl, **data):
+            if self.config.write_info_files:
+                invalid = {}
+                for f, v in data.items():
+                    if f not in self.field_list[tbl] and f not in ('genres', 'from cache', 'title', 'source', 'channel'):
+                        invalid[f] = v
+
+                if len(invalid) > 0:
+                    self.config.infofiles.add_sql('Unknown add Fields', tbl, invalid)
+
             sql_vals = []
             for f in self.field_list[tbl]:
                 sql_vals.append(get_value(tbl, f, **data))
 
             return tuple(sql_vals)
+
+        def get_credits(tbl, **values):
+            keyvalues = {}
+            credits = []
+            for k in self.field_list[tbl]:
+                if k in values.keys():
+                    keyvalues[k] = values[k]
+
+            for f in self.config.key_values['credits']:
+                if f in values.keys():
+                    for cr in values[f]:
+                        crd = keyvalues.copy()
+                        crd['title'] = f
+                        crd['role'] = None
+                        if isinstance(cr, (str, unicode)):
+                            crd['name'] = cr
+
+                        elif isinstance(cr, dict):
+                            crd['name'] = cr['name']
+                            if 'role' in cr:
+                                crd['role'] = cr['role']
+
+                        else:
+                            continue
+
+                        credits.append(make_val_list(tbl, **crd))
+
+            return credits
 
         """
         Adds (or updates) a record
@@ -2304,13 +2353,17 @@ class ProgramCache(Thread):
                 or not "laststop" in item.keys() or not isinstance(item['laststop'], datetime.datetime):
                 return
 
-            laststop = self.query(table, sourceid=item['sourceid'], channelid=item['channelid'])
+            laststop = self.query('laststop',
+                            sourceid = item['sourceid'],
+                            channelid = item['channelid'])
             if laststop == None:
                 self.execute(make_add_string('fetcheddata'), make_val_list('fetcheddata', **item))
 
             elif laststop['laststop'] == None or item['laststop'] > laststop['laststop']:
-                self.update('fetcheddata', set={'laststop': item['laststop']},
-                    where={'sourceid': item['sourceid'], 'channelid': item['channelid']})
+                self.update('fetcheddata',
+                        set={'laststop': item['laststop']},
+                        where={'sourceid': item['sourceid'],
+                                'channelid': item['channelid']})
 
         elif table == 'fetcheddays':
             if len(item) == 0:
@@ -2321,7 +2374,9 @@ class ProgramCache(Thread):
                 not "channelid" in item.keys() or not "scandate" in item.keys():
                 return
 
-            sdate = self.query('fetcheddays', sourceid=item['sourceid'], channelid=item['channelid'])
+            sdate = self.query('fetcheddays',
+                            sourceid = item['sourceid'],
+                            channelid = item['channelid'])
             dval = True if not item.get('stored', None) in (True, False) else item['stored']
             if isinstance(item["scandate"], (int, datetime.date)):
                 item["scandate"] = [item["scandate"]]
@@ -2336,14 +2391,15 @@ class ProgramCache(Thread):
 
                     if not sd in sdate.keys() or sdate[sd] == None:
                         values = item.copy()
-                        values.update(scandate=sd, stored=dval)
+                        values.update(scandate = sd, stored = dval)
                         rec.append(make_val_list('fetcheddays', **values))
 
                     elif sdate[item["scandate"]] != dval:
-                        self.update('fetcheddays', set={'stored': dval},
-                            where={'scandate': sd,
-                                'sourceid': item['sourceid'],
-                                'channelid': item['channelid']})
+                        self.update('fetcheddays',
+                                set = {'stored': dval},
+                                where = {'scandate': sd,
+                                        'sourceid': item['sourceid'],
+                                        'channelid': item['channelid']})
 
                 if len(rec) > 0:
                     self.execute(make_add_string('fetcheddays'), *rec)
@@ -2353,28 +2409,11 @@ class ProgramCache(Thread):
                 if not isinstance(p, dict):
                     continue
 
-                rec.append(make_val_list(table, **p))
-                for f in self.config.key_values['credits']:
-                    if f in p.keys():
-                        for cr in p[f]:
-                            crd = {'title': f, 'role': None}
-                            if isinstance(cr, (str, unicode)):
-                                crd['name'] = cr
-
-                            elif isinstance(cr, dict):
-                                crd['name'] = cr['name']
-                                if 'role' in cr:
-                                    crd['role'] = cr['role']
-
-                            else:
-                                continue
-
-                            values = p.copy()
-                            values.update(crd)
-                            rec2.append(make_val_list('credits', **values))
+                rec.append(make_val_list('sourceprograms', **p))
+                rec2.extend(get_credits('credits', **p))
 
             if len(rec) > 0:
-                self.execute(make_add_string(table), *rec)
+                self.execute(make_add_string('sourceprograms'), *rec)
                 if len(rec2) > 0:
                     self.execute(make_add_string('credits'), *rec2)
 
@@ -2383,30 +2422,21 @@ class ProgramCache(Thread):
                 if not isinstance(p, dict):
                     continue
 
-                rec.append(make_val_list(table, **p))
-                for f in self.config.key_values['credits']:
-                    if f in p.keys():
-                        for cr in p[f]:
-                            crd = {'title': f, 'role': None}
-                            if isinstance(cr, (str, unicode)):
-                                crd['name'] = cr
-
-                            elif isinstance(cr, dict):
-                                crd['name'] = cr['name']
-                                if 'role' in cr:
-                                    crd['role'] = cr['role']
-
-                            else:
-                                continue
-
-                            values = p.copy()
-                            values.update(crd)
-                            rec2.append(make_val_list('creditdetails', **values))
+                rec.append(make_val_list('programdetails', **p))
+                rec2.extend(get_credits('creditdetails', **p))
 
             if len(rec) > 0:
-                self.execute(make_add_string(table), *rec)
+                self.execute(make_add_string('programdetails'), *rec)
                 if len(rec2) > 0:
                     self.execute(make_add_string('creditdetails'), *rec2)
+
+        elif table == 'sources':
+            if len(item) == 0:
+                return
+
+            item = item[0]
+            if isinstance(item, dict) and "sourceid" in item.keys():
+                self.execute(make_add_string('sources'), make_val_list('sources', **item))
 
         elif table == 'channel':
             g = self.query('chan_group')
@@ -2418,8 +2448,10 @@ class ProgramCache(Thread):
                 elif g[c['chanid']]['name'].lower() != c['name'].lower() or \
                         g[c['chanid']]['cgroup'] != c['cgroup'] or \
                         (g[c['chanid']]['cgroup'] == 10 and c['cgroup'] not in (-1, 0, 10)):
-                    self.update('channels', where={'chanid': c['chanid']},
-                        set={'cgroup': c['cgroup'], 'name': c['name']})
+                    self.update('channels',
+                            set={'cgroup': c['cgroup'],
+                                    'name': c['name']},
+                            where={'chanid': c['chanid']})
 
             if len(rec) > 0:
                 self.execute(make_add_string('channels'), *rec)
@@ -2432,12 +2464,12 @@ class ProgramCache(Thread):
 
                 if c['chanid'] in scids and c['sourceid'] in scids[c['chanid']]:
                     self.update('channelsource',
-                        set={'scid': c['channelid'],
-                            'fgroup': c['fgroup'],
-                            'name': c['name'],
-                            'hd': c['hd']},
-                        where={'chanid': c['chanid'],
-                            'sourceid': c['sourceid']})
+                            set={'scid': c['channelid'],
+                                    'fgroup': c['fgroup'],
+                                    'name': c['name'],
+                                    'hd': c['hd']},
+                            where={'chanid': c['chanid'],
+                                    'sourceid': c['sourceid']})
 
                 else:
                     rec.append(make_val_list('channelsource', **c))
@@ -2453,8 +2485,10 @@ class ProgramCache(Thread):
                     rec.append(make_val_list('iconsource', **ic))
 
                 elif icon != ic['icon']:
-                    self.update('iconsource', set={'icon': ic['icon']},
-                        where={'chanid': ic['chanid'], 'sourceid': ic['sourceid']})
+                    self.update('iconsource',
+                            set={'icon': ic['icon']},
+                            where={'chanid': ic['chanid'],
+                                    'sourceid': ic['sourceid']})
 
             if len(rec) > 0:
                 self.execute(make_add_string('iconsource'), *rec)
@@ -2462,7 +2496,8 @@ class ProgramCache(Thread):
         elif table == 'ttvdb':
             added_tids = []
             for p in item:
-                if not isinstance(p, dict) or not 'tid' in p.keys() or not 'lang' in p.keys() or not 'name' in p.keys():
+                if not isinstance(p, dict) or not 'tid' in p.keys() or \
+                    not 'lang' in p.keys() or not 'name' in p.keys():
                     continue
 
                 p['tdate'] = datetime.date.today()
@@ -2470,44 +2505,25 @@ class ProgramCache(Thread):
                     added_tids.append(p['tid'])
                     rec.append(make_val_list('ttvdb', **p))
 
+                rec2.extend(get_credits('ttvdbcredits', **p))
                 rec3.append(make_val_list('ttvdbint', **p))
-                for f in self.config.key_values['credits']:
-                    if f in p.keys():
-                        for cr in p[f]:
-                            crd = {'title': f, 'role': None}
-                            if isinstance(cr, (str, unicode)):
-                                crd['name'] = cr
-
-                            elif isinstance(cr, dict):
-                                crd['name'] = cr['name']
-                                if 'role' in cr:
-                                    crd['role'] = cr['role']
-
-                            else:
-                                continue
-
-                            values = p.copy()
-                            values.update(crd)
-                            sql_vals = make_val_list('ttvdbcredits', **values)
-                            if not sql_vals in rec2:
-                                rec2.append(sql_vals)
-
                 for f in self.config.key_values['metadata']:
                     if f in p.keys():
-                        values = p.copy()
-                        values.update(type=f, url=p[f])
-                        sql_vals = make_val_list('ttvdbmetadata', **values)
+                        sql_vals = make_val_list('ttvdbmetadata',
+                                        tid = p['tid'],
+                                        type = f,
+                                        url = p[f])
                         if not sql_vals in rec4:
                             rec4.append(sql_vals)
 
             if len(rec) > 0:
                 self.execute(make_add_string('ttvdb'), *rec)
-            if len(rec2) > 0:
-                self.execute(make_add_string('ttvdbcredits'), *rec2)
-            if len(rec3) > 0:
-                self.execute(make_add_string('ttvdbint'), *rec3)
-            if len(rec4) > 0:
-                self.execute(make_add_string('ttvdbmetadata'), *rec4)
+                if len(rec2) > 0:
+                    self.execute(make_add_string('ttvdbcredits'), *rec2)
+                if len(rec3) > 0:
+                    self.execute(make_add_string('ttvdbint'), *rec3)
+                if len(rec4) > 0:
+                    self.execute(make_add_string('ttvdbmetadata'), *rec4)
 
         elif table == 'ttvdb_alias':
             if len(item) == 0:
@@ -2520,11 +2536,12 @@ class ProgramCache(Thread):
             if not 'tdate' in item.keys() or item[ 'tdate'] == None:
                 item[ 'tdate'] = datetime.date.today()
 
-            aliasses = self.query('ttvdb_aliasses', tid=item['tid'])
+            aliasses = self.query('ttvdb_aliasses',
+                            tid = item['tid'])
             if isinstance(item['alias'], list) and len(item['alias']) > 0:
                 for a in set(item['alias']):
                     values = item.copy()
-                    values.update(alias=a)
+                    values.update(alias = a)
                     rec.append(make_val_list('ttvdb_alias', **values))
 
             else:
@@ -2544,45 +2561,28 @@ class ProgramCache(Thread):
                 if not p['tepid'] in added_tepids:
                     added_tepids.append(p['tepid'])
                     rec.append(make_val_list('episodes', **p))
+
+                rec2.extend(get_credits('ttvdbcredits', **p))
                 rec3.append(make_val_list('episodesint', **p))
-                for f in self.config.key_values['credits']:
-                    if f in p.keys():
-                        for cr in p[f]:
-                            crd = {'title': f, 'role': None}
-                            if isinstance(cr, (str, unicode)):
-                                crd['name'] = cr
-
-                            elif isinstance(cr, dict):
-                                crd['name'] = cr['name']
-                                if 'role' in cr:
-                                    crd['role'] = cr['role']
-
-                            else:
-                                continue
-
-                            values = p.copy()
-                            values.update(crd)
-                            sql_vals = make_val_list('ttvdbcredits', **values)
-                            if not sql_vals in rec2:
-                                rec2.append(sql_vals)
-
                 for f in self.config.key_values['metadata']:
                     if f in p.keys():
-                        values = p.copy()
-                        values.update(type=f, url=p[f])
-                        sql_vals = make_val_list('ttvdbmetadata', **values)
+                        sql_vals = make_val_list('ttvdbmetadata',
+                                        tid = p['tid'],
+                                        sid = p['sid'],
+                                        eid = p['eid'],
+                                        type = f,
+                                        url = p[f])
                         if not sql_vals in rec4:
                             rec4.append(sql_vals)
 
-
             if len(rec) > 0:
                 self.execute(make_add_string('episodes'), *rec)
-            if len(rec2) > 0:
-                self.execute(make_add_string('ttvdbcredits'), *rec2)
-            if len(rec3) > 0:
-                self.execute(make_add_string('episodesint'), *rec3)
-            if len(rec4) > 0:
-                self.execute(make_add_string('ttvdbmetadata'), *rec4)
+                if len(rec2) > 0:
+                    self.execute(make_add_string('ttvdbcredits'), *rec2)
+                if len(rec3) > 0:
+                    self.execute(make_add_string('episodesint'), *rec3)
+                if len(rec4) > 0:
+                    self.execute(make_add_string('ttvdbmetadata'), *rec4)
 
         elif table == 'epcount':
             for p in item:
@@ -2595,13 +2595,15 @@ class ProgramCache(Thread):
                 self.execute(make_add_string('epcount'), *rec)
 
     def update(self, table, **item):
-        pcursor = self.pconn.cursor()
         if table == 'toggle_alt_url':
             if not 'sourceid'in item.keys():
                 return
 
-            uau=self.query('use_alt_url', sourceid=item['sourceid'])
-            self.update('sources', set={'use_alt_url': not uau}, where={'sourceid': item['sourceid']})
+            uau=self.query('use_alt_url',
+                            sourceid = item['sourceid'])
+            self.update('sources',
+                            set = {'use_alt_url': not uau},
+                            where = {'sourceid': item['sourceid']})
 
         else:
             wfields = item.get('where', None)
@@ -2690,7 +2692,8 @@ class ProgramCache(Thread):
 
             if "chanid" in item.keys():
                 rec = []
-                for channelid in self.query('chan_scid', chanid = item["chanid"]):
+                for channelid in self.query('chan_scid',
+                                chanid = item["chanid"]):
                     rec.append((channelid['sourceid'], channelid['channelid']))
 
                 if len(rec) > 0:
@@ -2781,8 +2784,11 @@ class ProgramCache(Thread):
         self.execute(u"VACUUM")
 
     def execute(self, qstring, *parameters):
+        if self.config.write_info_files:
+            self.config.infofiles.add_sql('executing', qstring, parameters)
+
         try:
-            if len(parameters) == 0 or parameters == None:
+            if len(parameters) == 0:
                 with self.pconn:
                     self.pconn.execute(qstring)
 
@@ -2790,9 +2796,43 @@ class ProgramCache(Thread):
                 with self.pconn:
                     self.pconn.execute(qstring, parameters[0])
 
-            elif len(parameters) > 1:
+            else:
                 with self.pconn:
                     self.pconn.executemany(qstring, parameters)
+
+        except:
+            self.config.log([self.config.text('IO', 26), traceback.format_exc(), qstring + '\n'])
+
+    def fetchone(self, qstring, *parameters):
+        if self.config.write_info_files:
+            self.config.infofiles.add_sql('fetching one', qstring, parameters)
+
+        try:
+            pcursor = self.pconn.cursor()
+            if len(parameters) == 0:
+                pcursor.execute(qstring)
+
+            else:
+                pcursor.execute(qstring, parameters)
+
+            return pcursor.fetchone()
+
+        except:
+            self.config.log([self.config.text('IO', 26), traceback.format_exc(), qstring + '\n'])
+
+    def fetchall(self, qstring, *parameters):
+        if self.config.write_info_files:
+            self.config.infofiles.add_sql('fetching all', qstring, parameters)
+
+        try:
+            pcursor = self.pconn.cursor()
+            if len(parameters) == 0:
+                pcursor.execute(qstring)
+
+            else:
+                pcursor.execute(qstring, parameters)
+
+            return pcursor.fetchall()
 
         except:
             self.config.log([self.config.text('IO', 26), traceback.format_exc(), qstring + '\n'])
@@ -2814,9 +2854,11 @@ class InfoFiles():
         self.fetch_strings = {}
         self.lineup_changes = []
         self.url_failure = []
+        self.sql_data = {}
         if self.write_info_files:
             self.fetch_list = self.functions.open_file(self.config.opt_dict['xmltv_dir'] + '/fetched-programs3','w')
             self.raw_output =  self.functions.open_file(self.config.opt_dict['xmltv_dir']+'/raw_output3', 'w')
+            self.sqllog = self.functions.open_file('%s/sql.log' % self.config.opt_dict['xmltv_dir'], 'w')
 
     def check_new_channels(self, source, source_channels):
         if not self.write_info_files or self.config.opt_dict['only_cache'] \
@@ -2839,6 +2881,25 @@ class InfoFiles():
                 self.lineup_changes.append( u"Empty channelID %s on %s doesn't exist\n" % (channelid, source.source))
 
         self.lineup_changes.extend(source.lineup_changes)
+
+    def add_sql(self, stype, *data):
+        if stype == 'executing':
+             if data[0][:6] == 'INSERT':
+                 stype = 'insert'
+
+             if data[0][:6] == 'UPDATE':
+                 stype = 'update'
+
+             if data[0][:6] == 'DELETE':
+                 stype = 'delete'
+
+             #~ if data[0][:] == '':
+                 #~ stype = ''
+
+        if not stype in self.sql_data.keys():
+            self.sql_data[stype] = []
+
+        self.sql_data[stype].append(data)
 
     def add_url_failure(self, string):
         self.url_failure.append(string)
@@ -3053,6 +3114,98 @@ class InfoFiles():
 
         if self.raw_output != None:
             self.raw_output.close()
+
+        if self.sqllog != None:
+            if 'Unknown request' in self.sql_data.keys():
+                data = self.sql_data['Unknown request']
+                data.sort()
+                self.sqllog.write('Unknown requests\n')
+                for d in data:
+                    self.sqllog.write('    "%s": "%s": %s\n' % d)
+
+            if 'Unknown select Field' in self.sql_data.keys():
+                data = self.sql_data['Unknown select Field']
+                data.sort()
+                self.sqllog.write('Unknown select Field\n')
+                for d in data:
+                    self.sqllog.write('    "%s".%s\n' % d)
+
+            if 'Unknown where Field' in self.sql_data.keys():
+                data = self.sql_data['Unknown where Field']
+                data.sort()
+                self.sqllog.write('Unknown where Field\n')
+                for d in data:
+                    self.sqllog.write('    "%s"."%s" = %s\n' % d)
+
+            if 'Unknown add Fields' in self.sql_data.keys():
+                data = self.sql_data['Unknown add Fields']
+                data.sort()
+                self.sqllog.write('Unknown add Fields\n')
+                for d in data:
+                    for f, v in d[1].items():
+                        self.sqllog.write('    "%s"."%s" = %s\n' % (d[0], f, v))
+
+            if 'fetching one' in self.sql_data.keys():
+                data = self.sql_data['fetching one']
+                data.sort()
+                self.sqllog.write('Query Single Records\n')
+                for d in data:
+                    self.sqllog.write('    "%s"\n        %s\n' % d)
+
+            if 'fetching all' in self.sql_data.keys():
+                data = self.sql_data['fetching all']
+                data.sort()
+                self.sqllog.write('Query All Record\n')
+                for d in data:
+                    self.sqllog.write('    "%s"\n        %s\n' % d)
+
+            if 'insert' in self.sql_data.keys():
+                data = self.sql_data['insert']
+                data.sort()
+                self.sqllog.write('Inserting Record\'s\n')
+                for d in data:
+                    try:
+                        self.sqllog.write('    "%s"\n' % d[0])
+                        for v in d[1]:
+                            self.sqllog.write('        %s\n' % (v, ))
+
+                    except:
+                        self.sqllog.write('%s\n' % (traceback.format_exc(), ))
+
+            if 'update' in self.sql_data.keys():
+                data = self.sql_data['update']
+                data.sort()
+                self.sqllog.write('Updating Record\n')
+                for d in data:
+                    try:
+                        self.sqllog.write('    "%s"\n' % d[0])
+                        for v in d[1]:
+                            self.sqllog.write('        %s\n' % (v, ))
+
+                    except:
+                        self.sqllog.write('%s\n' % (traceback.format_exc(), ))
+
+            if 'delete' in self.sql_data.keys():
+                data = self.sql_data['delete']
+                data.sort()
+                self.sqllog.write('Deleting Record(s)\'s\n')
+                for d in data:
+                    try:
+                        self.sqllog.write('    "%s"\n' % d[0])
+                        for v in d[1]:
+                            self.sqllog.write('        %s\n' % (v, ))
+
+                    except:
+                        self.sqllog.write('%s\n' % (traceback.format_exc(), ))
+
+            if 'executing' in self.sql_data.keys():
+                data = self.sql_data['executing']
+                data.sort()
+                self.sqllog.write('Executing\n')
+                for d in data:
+                    self.sqllog.write('    "%s"\n        %s\n' % d)
+
+            self.sqllog.close()
 
         if len(self.detail_list) > 0:
             f = self.functions.open_file(self.config.opt_dict['xmltv_dir']+'/detail_output3')
