@@ -2459,12 +2459,12 @@ class ProgramCache(Thread):
         elif table == 'channelsource':
             scids = self.query('chan_scid')
             for c in item:
-                if c['channelid'] == '':
+                if c['scid'] == '':
                     continue
 
                 if c['chanid'] in scids and c['sourceid'] in scids[c['chanid']]:
                     self.update('channelsource',
-                            set={'scid': c['channelid'],
+                            set={'scid': c['scid'],
                                     'fgroup': c['fgroup'],
                                     'name': c['name'],
                                     'hd': c['hd']},
@@ -2680,7 +2680,7 @@ class ProgramCache(Thread):
                     self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ? AND channelid = ?",
                         (item['sourceid'], item['channelid']))
 
-            if "sourceid" in item.keys():
+            elif "sourceid" in item.keys():
                     self.execute(u"DELETE FROM fetcheddata WHERE sourceid = ?",
                         (item['sourceid'], ))
                     self.execute(u"DELETE FROM fetcheddays WHERE sourceid = ?",
@@ -2690,7 +2690,7 @@ class ProgramCache(Thread):
                     self.execute(u"DELETE FROM sourceprograms WHERE sourceid = ?",
                         (item['sourceid'], ))
 
-            if "chanid" in item.keys():
+            elif "chanid" in item.keys():
                 rec = []
                 for channelid in self.query('chan_scid',
                                 chanid = item["chanid"]):

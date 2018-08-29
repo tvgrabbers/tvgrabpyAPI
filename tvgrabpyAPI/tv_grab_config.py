@@ -125,7 +125,7 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 9
-api_patchdate = u'20180827'
+api_patchdate = u'20180829'
 api_alfa = False
 api_beta = True
 
@@ -2572,7 +2572,7 @@ class Configure:
                 chan ={}
                 chan['chanid'] = chanid
                 chan['sourceid'] = index
-                chan['channelid'] = channelid
+                chan['scid'] = channelid
                 chan['cgroup'] = data_value('group', channel, int, 99)
                 chan['name'] = channel['name']
                 chan['fgroup'] = data_value('fetch_grp', channel, None, None)
@@ -2582,7 +2582,7 @@ class Configure:
 
                 # These channels are for show, but we like the icons from source 2, 6 and 5!
                 if (channelid in self.channelsource[index].source_data['empty_channels']):
-                    chan['channelid'] = ''
+                    chan['scid'] = ''
                     channelid = ''
 
                 if not chanid in self.channels:

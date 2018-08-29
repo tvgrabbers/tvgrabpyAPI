@@ -207,6 +207,7 @@ class Functions():
     def get_json_data(self, name, **data):
         source = data.get('source', self.json_id)
         fpath = data.get('fpath', None)
+        ctype = data.get('ctype', None)
         conv_dd = DD_Convert(self.config,
                         warngoal = self.config.logging.log_queue,
                         caller_id = source)
@@ -215,7 +216,6 @@ class Functions():
 
         else:
             version = data.get('version', 0)
-            ctype = data.get('ctype', None)
             local_name = '%s.%s' % (name, version)
 
         self.raw_json[name] = ''

@@ -215,12 +215,14 @@ class Channel_Config(Thread):
                     if not is_data_value(channelid, self.config.channelsource[index].program_data, list, True):
                         # Nothing was returned. We log unless it is a virtual source
                         if not self.config.channelsource[index].is_virtual:
-                            self.config.log(self.config.text('fetch', 51, (self.config.channelsource[index].source, self.chan_descr)))
+                            self.config.log(self.config.text('fetch', 51,
+                                (self.config.channelsource[index].source, self.chan_descr)))
 
                         continue
 
                     with self.config.channelsource[index].source_lock:
-                        if self.is_virtual_sub and isinstance(self.virtual_start, datetime.time) and isinstance(self.virtual_end, datetime.time):
+                        if self.is_virtual_sub and isinstance(self.virtual_start, datetime.time) and \
+                            isinstance(self.virtual_end, datetime.time):
                             programs = []
                             for tdict in self.config.channelsource[index].program_data[channelid][:]:
                                 pstart = copy(tdict['start-time'])
