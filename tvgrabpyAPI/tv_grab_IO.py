@@ -2594,6 +2594,13 @@ class ProgramCache(Thread):
             if len(rec) > 0:
                 self.execute(make_add_string('epcount'), *rec)
 
+        elif table in self.table_definitions.keys():
+            for c in item:
+                rec.append(make_val_list(table, **c))
+
+            if len(rec) > 0:
+                self.execute(make_add_string(table), *rec)
+
     def update(self, table, **item):
         if table == 'toggle_alt_url':
             if not 'sourceid'in item.keys():
@@ -2605,7 +2612,7 @@ class ProgramCache(Thread):
                             set = {'use_alt_url': not uau},
                             where = {'sourceid': item['sourceid']})
 
-        else:
+        elif table in self.table_definitions.keys():
             wfields = item.get('where', None)
             sfields = item.get('set', None)
             if not (table in self.table_definitions.keys() and isinstance(wfields, dict) and isinstance(wfields, dict)):
@@ -2741,7 +2748,7 @@ class ProgramCache(Thread):
                 self.execute(u"DELETE FROM programdetails WHERE sourceid = ? AND channelid = ?",
                     (item['sourceid'], item['channelid']))
 
-        elif table == 'ttvdb':
+        elif table == 'ttvdb' and 'tid' in item.keys():
             with self.pconn:
                 self.pconn.execute(u"DELETE FROM ttvdb_alias WHERE tid = ?",  (int(item['tid']), ))
                 self.pconn.execute(u"DELETE FROM ttvdb WHERE tid = ?",  (int(item['tid']), ))
