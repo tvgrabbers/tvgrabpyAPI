@@ -2000,24 +2000,25 @@ class FetchData(URLtypes, Thread):
                 if self.proc_id not in self.config.detail_sources:
                     self.detail_processor = False
 
-                self.config.detail_keys[self.proc_id] = {}
-                self.detail_processor = False
-                if 'detail' in self.source_data["detail_defs"]:
-                    self.detail_processor = True
-                    self.update_base = self.source_data["detail"].get("update-base", [])
-                    self.detail_keys = self.source_data['detail']['provides']
-                    self.config.detail_keys[self.proc_id]['detail'] = self.detail_keys
-                    for k in self.detail_keys:
-                        if k not in self.config.detail_keys['all']:
-                            self.config.detail_keys['all'].append(k)
+                else:
+                    self.config.detail_keys[self.proc_id] = {}
+                    self.detail_processor = False
+                    if 'detail' in self.source_data["detail_defs"]:
+                        self.detail_processor = True
+                        self.update_base = self.source_data["detail"].get("update-base", [])
+                        self.detail_keys = self.source_data['detail']['provides']
+                        self.config.detail_keys[self.proc_id]['detail'] = self.detail_keys
+                        for k in self.detail_keys:
+                            if k not in self.config.detail_keys['all']:
+                                self.config.detail_keys['all'].append(k)
 
-                if 'detail2' in self.source_data["detail_defs"]:
-                    self.detail_processor = True
-                    self.detail2_keys = self.source_data['detail2']['provides']
-                    self.config.detail_keys[self.proc_id]['detail2'] = self.detail2_keys
-                    for k in self.detail2_keys:
-                        if k not in self.config.detail_keys['all']:
-                            self.config.detail_keys['all'].append(k)
+                    if 'detail2' in self.source_data["detail_defs"]:
+                        self.detail_processor = True
+                        self.detail2_keys = self.source_data['detail2']['provides']
+                        self.config.detail_keys[self.proc_id]['detail2'] = self.detail2_keys
+                        for k in self.detail2_keys:
+                            if k not in self.config.detail_keys['all']:
+                                self.config.detail_keys['all'].append(k)
 
             if self.proc_id in self.config.detail_sources and not self.detail_processor:
                 self.config.detail_sources.remove(self.proc_id)
