@@ -3272,6 +3272,7 @@ class DD_Convert(DataDef_Convert):
                 self.csource_data["site-tz"] = pytz.utc
 
             self.csource_data["version"] = data_value("version", source_data, int)
+            self.csource_data["alt_useragent"] = data_value("alt_useragent", source_data, bool, False)
             self.csource_data["api-version"] = tuple(data_value("api-version", source_data, list, [1,0,0]))
             if self.csource_data["name"] in ("thetvdb.v1", "thetvdb.v2"):
                 for ptype in self.config.data_def_names[self.csource_data["name"]]:

@@ -2125,6 +2125,7 @@ class Configure:
             self.coutrytrans = gitdata_dict("coutrytrans")
             self.notitlesplit = gitdata_value("notitlesplit", list)
             self.user_agents = gitdata_value("user_agents", list, self.user_agents)
+            self.user_agents2 = gitdata_value("user_agents2", list, self.user_agents)
             self.ttvdb_json = gitdata_dict("ttvdb")
             for k in self.xml_output.logo_provider.keys():
                 if k not in self.xml_output.logo_source_preference:
