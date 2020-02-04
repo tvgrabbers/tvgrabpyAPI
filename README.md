@@ -1,6 +1,6 @@
 # tvgrabpyAPI
 
-Due to some issues with one of our Vlamish sources, we advice our Dutch/Vlamish users to install our latest [beta](https://github.com/tvgrabbers/tvgrabpyAPI/releases/tag/beta-1.0.10-p20200202)
+Due to some issues with one of our Flemish sources, we advice our Dutch/Flemish users to install our latest [beta](https://github.com/tvgrabbers/tvgrabpyAPI/releases/tag/beta-1.0.10-p20200202)
 
 [Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
 
