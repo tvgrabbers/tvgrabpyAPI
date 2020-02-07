@@ -3249,7 +3249,7 @@ class DD_Convert(DataDef_Convert):
             self.empty_values = data_value("empty-values", source_data, list, [None, "", "-"])
             self.csource_data = {}
             self.csource_data["dtversion"] = self.dtversion()
-            self.csource_data["tvgversion"] = tuple(self.config.version(False, True)[1:4])
+            self.csource_data["tvgversion"] = tuple(self.config.version(False, True)[1:5])
             efa = data_value("enable for api", source_data, list)
             self.csource_data["enable for api"] = []
             for av in efa:

@@ -168,33 +168,29 @@ class Functions():
         timeout exception
         """
         try:
-            encoding = None if len(args) < 1 else args[0]
+            data = {
+            'encoding': None if len(args) < 1 else args[0],
+            'txtdata': None if len(args) < 3 else args[2],
+            'is_json': None if len(args) < 4 else args[3]}
             accept_header = None if len(args) < 2 else args[1]
-            txtdata = None if len(args) < 3 else args[2]
-            is_json = None if len(args) < 4 else args[3]
-            cookiejar = {} if len(args) < 5 else args[4]
             if isinstance(accept_header, dict):
-                txtheaders = accept_header
+                data['headers'] = accept_header
 
             elif isinstance(accept_header, (str,unicode)) and accept_header!= '':
-                txtheaders = {'Accept': accept_header}
+                data['headers'] = {'Accept': accept_header}
 
             else:
-                txtheaders = {}
+                data['headers'] = {}
 
-            txtheaders['Keep-Alive']  = '300'
-            if not 'User-Agent'in txtheaders.keys():
-                txtheaders['User-Agent'] = self.config.user_agents[random.randint(0, len(self.config.user_agents)-1)]
+            data['headers']['Keep-Alive']  = '300'
+            if not 'User-Agent'in data['headers'].keys():
+                data['headers']['User-Agent'] = self.config.user_agents[random.randint(0, len(self.config.user_agents)-1)]
 
+            cookiejar = None if len(args) < 5 else args[4]
             if isinstance(cookiejar, dict) and len(cookiejar) > 0:
-                pass
+                data['cookiejar'] = cookiejar
 
-            fu = FetchURL(self.config, url,
-                    txtdata = txtdata,
-                    txtheader = txtheaders,
-                    encoding = encoding,
-                    is_json = is_json,
-                    cookiejar = cookiejar)
+            fu = FetchURL(self.config, url, **data)
             self.max_fetches.acquire()
             fu.start()
             fu.join(self.config.opt_dict['global_timeout']+1)
@@ -263,7 +259,7 @@ class Functions():
                         fle = self.config.IO_func.read_pickle(fn)
                         if fle != None and data_value(["dtversion"], fle, tuple) == conv_dd.dtversion() \
                             and data_value(["tvgversion"], fle, tuple, None) == \
-                                tuple(self.config.version(False, True)[1:4]):
+                                tuple(self.config.version(False, True)[1:5]):
                             return fle
 
             except:
@@ -272,13 +268,13 @@ class Functions():
         # We try to download unless the only_local_sourcefiles flag is set
         if not self.config.only_local_sourcefiles:
             try:
-                txtheaders = {'Keep-Alive' : '300',
+                headers = {'Keep-Alive' : '300',
                               'User-Agent' : self.config.user_agents[random.randint(0, len(self.config.user_agents)-1)] }
 
                 url = '%s/%s.json' % (data.get('url', self.config.api_source_url), name)
                 self.config.log(self.config.text('fetch', 1,(name, ), 'other'), 1)
                 fu = FetchURL(self.config, url,
-                        txtheaders = txtheaders,
+                        headers = headers,
                         enoding = 'utf-8',
                         is_json = True)
                 self.max_fetches.acquire()
@@ -405,11 +401,17 @@ class FetchURL(Thread):
         self.config = config
         self.func = self.config.fetch_func
         self.url = url
-        self.txtdata = kwargs.get('txtdata', None)
-        self.txtheaders = kwargs.get('txtheaders', None)
+        self.url_data = {
+            'params': kwargs.get('txtdata', None),
+            'headers': kwargs.get('headers', None),
+            'timeout': self.config.opt_dict['global_timeout']/2,
+            'stream': True}
+        cookiejar = kwargs.get('cookiejar', None)
+        if isinstance(cookiejar, dict) and len(cookiejar) > 0:
+            self.url_data['cookies'] = cookiejar
+
         self.encoding = kwargs.get('encoding',None )
         self.is_json = kwargs.get('is_json', False)
-        self.cookiejar = kwargs.get('cookiejar', {})
         self.raw = ''
         self.result = None
         self.page_status = dte.dtDataOK
@@ -434,12 +436,7 @@ class FetchURL(Thread):
         the specified number of timeout seconds.
         """
         try:
-            self.url_request = requests.get(self.url,
-                            headers = self.txtheaders,
-                            params = self.txtdata,
-                            timeout=self.config.opt_dict['global_timeout']/2,
-                            stream=True,
-                            cookies = self.cookiejar)
+            self.url_request = requests.get(self.url, **self.url_data)
             self.status_code = self.url_request.status_code
             if self.url_request.status_code != requests.codes.ok:
                 if self.status_code == 500 and len(self.url_request.text) > 0 and \
