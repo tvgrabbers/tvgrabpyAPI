@@ -352,6 +352,7 @@ class Configure:
         self.opt_dict['use_utc'] = False
         self.opt_dict['use_split_episodes'] = True
         self.opt_dict['ratingstyle'] = 'short'
+        self.disable_list = []
 
         self.detail_keys = {}
         self.detail_keys['all'] = []
@@ -666,6 +667,9 @@ class Configure:
         x = self.get_json_datafiles(self.datafile, self.configure, True)
         if x != None:
             return(x)
+
+        for dl in self.disable_list:
+            self.validate_option(*dl)
 
         self.init_sources()
         #check for cache
@@ -1616,8 +1620,11 @@ class Configure:
                                 self.opt_dict[cfg_option] = None
 
                         else:
-                            if cfg_option in ('disable_source', 'disable_detail_source'):
-                                self.validate_option(cfg_option, value = cfg_value)
+                            if cfg_option == 'disable_source':
+                                self.args.disable_source.append(cfg_value)
+
+                            elif cfg_option == 'disable_detail_source':
+                                self.args.disable_detail_source.append(cfg_value)
 
                             else:
                                 if cfg_option == 'ttvdb_lookup_level' and not (0 <= cfg_value <= self.max_ttv_level):
@@ -1807,7 +1814,7 @@ class Configure:
                     cfg_value = a[1].lower().strip()
                     if cfg_option == 'use_npo':
                         if cfg_value in ('false', '0' , 'off'):
-                            self.validate_option('disable_source', self.channels[chanid], 4)
+                            self.disable_list.append(('disable_source', self.channels[chanid], 4))
 
                     # String values
                     elif cfg_option in ('xmltvid_alias', ):
@@ -1850,7 +1857,7 @@ class Configure:
                                 self.channels[chanid].prevalidate_opt[cfg_option] = cfg_value
 
                             elif cfg_option in ('disable_source', 'disable_detail_source'):
-                                self.validate_option(cfg_option, self.channels[chanid], cfg_value)
+                                self.disable_list.append((cfg_option, self.channels[chanid], cfg_value))
 
                             else:
                                 self.channels[chanid].opt_dict[cfg_option] = cfg_value
