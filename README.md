@@ -1,5 +1,7 @@
 # tvgrabpyAPI
 
+Due to some issues with one of our Flemish sources, we advice our Dutch/Flemish users to install our latest [beta](https://github.com/tvgrabbers/tvgrabpyAPI/releases/tag/beta-1.0.10-p20200202)
+
 [Goto the WIKI](https://github.com/tvgrabbers/tvgrabpyAPI/wiki)
 
 ## Sometime after October 1st 2017 TheTVDB API V1 will stop working.
