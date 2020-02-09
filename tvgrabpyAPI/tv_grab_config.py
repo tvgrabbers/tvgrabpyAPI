@@ -125,7 +125,7 @@ api_name = u'tv_grab_py_API'
 api_major = 1
 api_minor = 0
 api_patch = 10
-api_patchdate = u'20200206'
+api_patchdate = u'20200209'
 api_alfa = False
 api_beta = True
 
