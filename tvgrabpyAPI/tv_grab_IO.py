@@ -2971,7 +2971,7 @@ class InfoFiles():
                 return '---'
 
             if vname == 'from cache':
-                if 'from cache' in tdict and tdict['from cache']:
+                if tdict.get('from cache', False):
                     return '*'
 
                 return ''

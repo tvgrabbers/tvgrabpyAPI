@@ -3799,7 +3799,12 @@ class FetchData(URLtypes, Thread):
 
     # Helper functions
     def print_result(self, tdict, channelid):
-        start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
+        try:
+            start = self.config.in_output_tz(tdict['start-time']).strftime('%d %b %H:%M')
+
+        except:
+            start = '? ??? ?:??'
+
         if self.data_output == sys.stdout:
             self.data_output.write('%s: %s' % (channelid, start))
             for k, v in tdict.items():
