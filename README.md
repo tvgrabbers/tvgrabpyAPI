@@ -22,6 +22,17 @@ tv_grab_py_API is an API for creating xmltv compatible tv grabbers. It is the su
  * The [DataTreeGrab module](https://github.com/tvgrabbers/DataTree/)
  * Connection with the Internet
 
+#### Ubuntu Focal 20.04 Users ONLY ###
+
+* The latest version of Ubuntu no longer provides the python2 versions of python-requests or its dependency python-urllib3
+* You can download compatible .deb packages [here](https://github.com/tvgrabbers/tvgrabpyAPI/files/4534005/python-requests.zip)
+* To install unpack the zip file into a directory
+* Run the following commands from that directory
+  * `sudo dpkg -i python-urllib3_1.25.8-1_all.deb`
+  * `sudo dpkg -i python-requests_2.22.0-2build1_all.deb`
+  * If you get an error about missing dependencies run the following command:
+    * `sudo apt-get install python2 python2-dev python-tz python-certifi python-chardet python-idna python-cryptography python-socks python-six python-ipaddress ca-certificates`
+
 ### Installation
 
 * Especially under Windows, make sure Python 2.7.9 or higher is installed 
